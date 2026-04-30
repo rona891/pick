@@ -37,9 +37,22 @@ async function request(method, path, body = null) {
 }
 
 const api = {
+  // Auth
   login: (email, password) => request('POST', '/api/auth/login', { email, password }),
   logout: () => request('POST', '/api/auth/logout'),
+
+  // Picks
   getStats: () => request('GET', '/api/picks/stats'),
+  getResumen: () => request('GET', '/api/picks/resumen'),
   getByBarcode: (cod_bar) => request('GET', `/api/picks/barcode/${encodeURIComponent(cod_bar)}`),
   updateQuantity: (id, cantidad_pickeada) => request('PUT', `/api/picks/${id}/quantity`, { cantidad_pickeada }),
+
+  // Clientes
+  getClientes: () => request('GET', '/api/clientes/'),
+  createCliente: (data) => request('POST', '/api/clientes/', data),
+  updateCliente: (id, data) => request('PUT', `/api/clientes/${id}`, data),
+  deleteCliente: (id) => request('DELETE', `/api/clientes/${id}`),
+
+  // Admin
+  verifyAdmin: (password) => request('POST', '/api/admin/verify', { password }),
 };

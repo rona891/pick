@@ -54,23 +54,97 @@
       </div>
     </div>
 
-    <!-- Search -->
-    <form id="search-form">
-      <div class="search-row">
-        <input type="text" id="barcode-input" placeholder="Código de barras..." autocomplete="off" />
-        <button type="button" id="scan-btn" class="btn-icon">Escanear</button>
-        <button type="submit" class="btn-search">Buscar</button>
-      </div>
-    </form>
-
-    <!-- Camera scanner -->
-    <div id="scanner-container" class="hidden">
-      <video id="scanner-video" autoplay muted playsinline></video>
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="pick">Pick</button>
+      <button class="tab-btn" data-tab="clientes">Clientes</button>
+      <button class="tab-btn" data-tab="admin">Admin</button>
     </div>
 
-    <!-- Results -->
-    <div id="results"></div>
+    <!-- ── Panel: Pick ──────────────────────────────────────────────── -->
+    <div class="tab-panel" data-panel="pick">
+      <form id="search-form">
+        <div class="search-row">
+          <input type="text" id="barcode-input" placeholder="Código de barras..." autocomplete="off" />
+          <button type="button" id="scan-btn" class="btn-icon">Escanear</button>
+          <button type="submit" class="btn-search">Buscar</button>
+        </div>
+      </form>
 
+      <div id="scanner-container" class="hidden">
+        <video id="scanner-video" autoplay muted playsinline></video>
+      </div>
+
+      <div id="results"></div>
+    </div>
+
+    <!-- ── Panel: Clientes ──────────────────────────────────────────── -->
+    <div class="tab-panel hidden" data-panel="clientes">
+      <div class="filter-bar">
+        <button class="filter-btn active" data-filter="todos">Todos</button>
+        <button class="filter-btn" data-filter="completo">Completo</button>
+        <button class="filter-btn" data-filter="incompleto">Incompleto</button>
+        <button class="filter-btn" data-filter="pendiente">Pendiente</button>
+      </div>
+      <div id="resumen-list"></div>
+    </div>
+
+    <!-- ── Panel: Admin ─────────────────────────────────────────────── -->
+    <div class="tab-panel hidden" data-panel="admin">
+
+      <!-- Lock screen -->
+      <div id="admin-lock">
+        <form id="admin-unlock-form" class="admin-lock-form">
+          <label>Contraseña de administrador</label>
+          <input type="password" id="admin-password" placeholder="••••••••" required />
+          <button type="submit" class="btn-primary">Acceder</button>
+        </form>
+      </div>
+
+      <!-- Admin panel -->
+      <div id="admin-panel" class="hidden">
+        <div class="admin-header">
+          <span class="section-title">Clientes</span>
+          <button id="btn-nuevo-cliente" class="btn-search">+ Nuevo</button>
+        </div>
+        <div class="table-wrap">
+          <table class="clientes-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Localidad</th>
+                <th>Teléfono</th>
+                <th>Contacto</th>
+                <th>Vendedor</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="clientes-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ── Modal cliente ─────────────────────────────────────────────────── -->
+  <div id="cliente-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <span id="modal-title">Nuevo cliente</span>
+        <button id="modal-close" class="modal-close">✕</button>
+      </div>
+      <form id="cliente-form">
+        <div class="form-group"><label>Nombre</label><input type="text" id="cf-nombre" required /></div>
+        <div class="form-group"><label>Localidad</label><input type="text" id="cf-localidad" /></div>
+        <div class="form-group"><label>Dirección</label><input type="text" id="cf-direccion" /></div>
+        <div class="form-group"><label>Teléfono</label><input type="text" id="cf-telefono" /></div>
+        <div class="form-group"><label>Contacto</label><input type="text" id="cf-contacto" /></div>
+        <div class="form-group"><label>Vendedor</label><input type="text" id="cf-vendedor" /></div>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </form>
+    </div>
   </div>
 
   <!-- Toast -->
