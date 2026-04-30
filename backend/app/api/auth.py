@@ -1,32 +1,26 @@
 from fastapi import APIRouter, HTTPException
 from app.models.schemas import LoginRequest, LoginResponse
-from app.db.supabase import get_client
+from app.db.database import get_db
+from app.auth.jwt import verify_password, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=LoginResponse)
-async def login(request: LoginRequest):
-    client = get_client()
-    try:
-        result = client.auth.sign_in_with_password({
-            "email": request.email,
-            "password": request.password,
-        })
-        if not result.session:
-            raise HTTPException(status_code=401, detail="Credenciales inválidas")
-        return {"access_token": result.session.access_token}
-    except HTTPException:
-        raise
-    except Exception:
+def login(request: LoginRequest):
+    with get_db() as cur:
+        cur.execute(
+            "SELECT id, email, password_hash FROM users WHERE email = %s",
+            (request.email,),
+        )
+        user = cur.fetchone()
+
+    if not user or not verify_password(request.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
+
+    return {"access_token": create_access_token(user["id"], user["email"])}
 
 
 @router.post("/logout")
-async def logout():
-    client = get_client()
-    try:
-        client.auth.sign_out()
-    except Exception:
-        pass
+def logout():
     return {"message": "Sesión cerrada"}
