@@ -123,6 +123,8 @@ input:focus { border-color: var(--accent); }
   color: var(--accent);
 }
 
+.topbar-actions { display: flex; gap: 8px; }
+
 .btn-logout {
   background: none;
   border: 1px solid var(--border);

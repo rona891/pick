@@ -35,7 +35,10 @@
 
     <div class="topbar">
       <div class="app-title">PICKING</div>
-      <button id="logout-btn" class="btn-logout">Salir</button>
+      <div class="topbar-actions">
+        <button id="change-pw-btn" class="btn-logout">Contraseña</button>
+        <button id="logout-btn" class="btn-logout">Salir</button>
+      </div>
     </div>
 
     <!-- Stats -->
@@ -126,6 +129,31 @@
 
     </div>
 
+  </div>
+
+  <!-- ── Modal cambiar contraseña ─────────────────────────────────────── -->
+  <div id="pw-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Cambiar contraseña</span>
+        <button id="pw-modal-close" class="modal-close">✕</button>
+      </div>
+      <form id="pw-form" style="padding:20px;display:flex;flex-direction:column;gap:0">
+        <div class="form-group">
+          <label>Contraseña actual</label>
+          <input type="password" id="pw-current" required />
+        </div>
+        <div class="form-group">
+          <label>Contraseña nueva</label>
+          <input type="password" id="pw-new" required minlength="8" />
+        </div>
+        <div class="form-group">
+          <label>Repetir contraseña nueva</label>
+          <input type="password" id="pw-confirm" required minlength="8" />
+        </div>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </form>
+    </div>
   </div>
 
   <!-- ── Modal cliente ─────────────────────────────────────────────────── -->
