@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from app.models.schemas import Pick, QuantityUpdate, StatsResponse
+from app.models.schemas import Pick, QuantityUpdate, StatsResponse, PickResumen
 from app.db.database import get_db
 from datetime import datetime, timezone
 from typing import List
@@ -20,6 +20,42 @@ def get_stats():
         total = row["total"]
         completed = row["completed"]
         return {"total": total, "completed": completed, "pending": total - completed}
+
+
+@router.get("/resumen", response_model=List[PickResumen])
+def get_resumen():
+    with get_db() as cur:
+        cur.execute("""
+            SELECT
+                nombre,
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE estado LIKE 'completado%') AS completados
+            FROM pick
+            WHERE nombre IS NOT NULL
+            GROUP BY nombre
+            ORDER BY nombre
+        """)
+        rows = cur.fetchall()
+
+    resumen = []
+    for row in rows:
+        total = row["total"]
+        completados = row["completados"]
+        pendientes = total - completados
+        if completados == 0:
+            estado_general = "pendiente"
+        elif completados == total:
+            estado_general = "completo"
+        else:
+            estado_general = "incompleto"
+        resumen.append({
+            "nombre": row["nombre"],
+            "total": total,
+            "completados": completados,
+            "pendientes": pendientes,
+            "estado_general": estado_general,
+        })
+    return resumen
 
 
 @router.get("/barcode/{cod_bar}", response_model=List[Pick])
