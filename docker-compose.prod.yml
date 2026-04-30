@@ -1,0 +1,11 @@
+services:
+  backend:
+    env_file:
+      - ./backend/.env.prod
+    environment:
+      - ENVIRONMENT=production
+      - DEBUG=False
+    restart: always
+
+  frontend:
+    restart: always

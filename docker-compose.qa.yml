@@ -1,0 +1,11 @@
+services:
+  backend:
+    env_file:
+      - ./backend/.env.qa
+    environment:
+      - ENVIRONMENT=qa
+      - DEBUG=False
+
+  frontend:
+    environment:
+      - NGINX_HOST=qa.picking.local

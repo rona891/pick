@@ -1,0 +1,18 @@
+# Env files (nunca al repo)
+backend/.env
+backend/.env.qa
+backend/.env.prod
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+
+# macOS
+.DS_Store
+
+# Docker
+.docker/
