@@ -55,4 +55,8 @@ const api = {
 
   // Admin
   verifyAdmin: (password) => request('POST', '/api/admin/verify', { password }),
+
+  // Password
+  changePassword: (current_password, new_password) =>
+    request('PUT', '/api/auth/password', { current_password, new_password }),
 };

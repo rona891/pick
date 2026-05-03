@@ -66,3 +66,8 @@ class ClienteCreate(BaseModel):
 
 class AdminVerify(BaseModel):
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str

@@ -352,6 +352,36 @@ async function deleteCliente(id) {
   }
 }
 
+// ── Cambiar contraseña ─────────────────────────────────────────────────────
+document.getElementById('change-pw-btn').addEventListener('click', () => {
+  document.getElementById('pw-form').reset();
+  document.getElementById('pw-modal').classList.remove('hidden');
+});
+
+document.getElementById('pw-modal-close').addEventListener('click', () => {
+  document.getElementById('pw-modal').classList.add('hidden');
+});
+
+document.getElementById('pw-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const current = document.getElementById('pw-current').value;
+  const newPw = document.getElementById('pw-new').value;
+  const confirm = document.getElementById('pw-confirm').value;
+
+  if (newPw !== confirm) {
+    showToast('Las contraseñas nuevas no coinciden', 'error');
+    return;
+  }
+
+  try {
+    await api.changePassword(current, newPw);
+    document.getElementById('pw-modal').classList.add('hidden');
+    showToast('Contraseña actualizada', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
+
 // ── Toast ──────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info') {
   const toast = document.getElementById('toast');
