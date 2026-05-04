@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
 
 
 class Pick(BaseModel):
@@ -68,6 +69,17 @@ class ClienteCreate(BaseModel):
 
 class AdminVerify(BaseModel):
     password: str
+
+
+class UserCreate(BaseModel):
+    email: str
+    password: str
+
+
+class UserOut(BaseModel):
+    id: int
+    email: str
+    created_at: Optional[datetime] = None
 
 
 class ChangePasswordRequest(BaseModel):
