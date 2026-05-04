@@ -3,11 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Picking</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=8" />
 </head>
 <body>
 
@@ -39,6 +42,14 @@
         <button id="change-pw-btn" class="btn-logout">Contraseña</button>
         <button id="logout-btn" class="btn-logout">Salir</button>
       </div>
+    </div>
+
+    <!-- Selector de semana -->
+    <div class="semana-row">
+      <label for="semana-select">Semana</label>
+      <select id="semana-select" class="semana-select">
+        <option value="">Sin semanas cargadas</option>
+      </select>
     </div>
 
     <!-- Stats -->
@@ -74,8 +85,18 @@
         </div>
       </form>
 
+      <div class="descrip-search-wrap">
+        <input type="text" id="descrip-input" placeholder="Buscar por descripción..." autocomplete="off" />
+        <div id="descrip-results" class="descrip-results hidden"></div>
+      </div>
+
       <div id="scanner-container" class="hidden">
         <video id="scanner-video" autoplay muted playsinline></video>
+        <button class="btn-scanner-close" onclick="stopScanner()">✕</button>
+        <div class="scanner-controls">
+          <button id="switch-camera-btn" class="btn-switch-camera hidden" onclick="switchCamera()">⟳ Cambiar cámara</button>
+        </div>
+        <div id="focus-indicator" class="focus-indicator hidden"></div>
       </div>
 
       <div id="results"></div>
@@ -106,25 +127,63 @@
 
       <!-- Admin panel -->
       <div id="admin-panel" class="hidden">
-        <div class="admin-header">
-          <span class="section-title">Clientes</span>
-          <button id="btn-nuevo-cliente" class="btn-search">+ Nuevo</button>
+
+        <!-- Sub-tabs -->
+        <div class="admin-tabs">
+          <button class="admin-tab-btn active" data-admin-tab="clientes">Clientes</button>
+          <button class="admin-tab-btn" data-admin-tab="nueva-semana">Nueva Semana</button>
         </div>
-        <div class="table-wrap">
-          <table class="clientes-table">
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Localidad</th>
-                <th>Teléfono</th>
-                <th>Contacto</th>
-                <th>Vendedor</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="clientes-tbody"></tbody>
-          </table>
+
+        <!-- Sub-panel: Clientes -->
+        <div class="admin-tab-panel" data-admin-panel="clientes">
+          <div class="admin-header">
+            <button id="btn-nuevo-cliente" class="btn-search">+ Nuevo cliente</button>
+          </div>
+          <div class="table-wrap">
+            <table class="clientes-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Localidad</th>
+                  <th>Teléfono</th>
+                  <th>Contacto</th>
+                  <th>Vendedor</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="clientes-tbody"></tbody>
+            </table>
+          </div>
         </div>
+
+        <!-- Sub-panel: Nueva Semana -->
+        <div class="admin-tab-panel hidden" data-admin-panel="nueva-semana">
+          <div class="form-group">
+            <label>Nombre del pick</label>
+            <input type="text" id="semana-nombre" placeholder="Ej: PICK 30-04-2026" autocomplete="off" />
+          </div>
+          <div class="fecha-row">
+            <div class="form-group">
+              <label>Fecha desde</label>
+              <input type="date" id="semana-fecha-desde" />
+            </div>
+            <div class="form-group">
+              <label>Fecha hasta</label>
+              <input type="date" id="semana-fecha-hasta" />
+            </div>
+          </div>
+          <p class="admin-section-desc">
+            Seleccioná los archivos <strong>.db</strong> exportados de la app Yaguar (uno por vendedor).
+          </p>
+          <input type="file" id="db-file-input" accept=".db" multiple class="hidden" />
+          <label for="db-file-input" class="btn-upload">Seleccionar archivos .db</label>
+          <div id="upload-file-list" class="upload-file-list"></div>
+          <button id="btn-importar-semana" class="btn-primary" style="margin-top:16px" disabled>
+            Importar picks
+          </button>
+          <div id="import-result" class="import-result hidden"></div>
+        </div>
+
       </div>
 
     </div>
@@ -175,11 +234,22 @@
     </div>
   </div>
 
+  <!-- ── Bottom sheet: picks de un cliente ───────────────────────────────── -->
+  <div id="cliente-picks-overlay" class="modal-overlay hidden cliente-picks-overlay">
+    <div class="cliente-picks-sheet">
+      <div class="modal-header">
+        <span id="cliente-picks-title"></span>
+        <button id="cliente-picks-close" class="modal-close">✕</button>
+      </div>
+      <div id="cliente-picks-content" class="cliente-picks-content"></div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/api.js?v=8"></script>
+  <script src="js/app.js?v=8"></script>
 </body>
 </html>
