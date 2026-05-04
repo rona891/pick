@@ -5,5 +5,4 @@ python-dotenv==1.0.1
 psycopg2-binary==2.9.10
 python-jose[cryptography]==3.3.0
 bcrypt==4.2.1
-# Solo necesario para el script de migración — se puede eliminar después:
-supabase==2.10.0
+python-multipart==0.0.20
