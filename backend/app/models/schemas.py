@@ -54,6 +54,7 @@ class Cliente(BaseModel):
     telefono: Optional[str] = None
     contacto: Optional[str] = None
     vendedor: Optional[str] = None
+    id_yaguar: Optional[str] = None
 
 
 class ClienteCreate(BaseModel):
