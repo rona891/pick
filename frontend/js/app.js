@@ -3,6 +3,7 @@ let codeReader = null;
 let scannerActive = false;
 let adminUnlocked = false;
 let editingClienteId = null;
+let semanaActual = '';
 
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -11,6 +12,14 @@ document.addEventListener('DOMContentLoaded', () => {
   } else {
     showLogin();
   }
+
+  document.querySelectorAll('.admin-tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.adminTab;
+      document.querySelectorAll('.admin-tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.adminTab === target));
+      document.querySelectorAll('.admin-tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.adminPanel !== target));
+    });
+  });
 });
 
 // ── Views ──────────────────────────────────────────────────────────────────
@@ -22,7 +31,7 @@ function showLogin() {
 function showApp() {
   document.getElementById('login-view').classList.add('hidden');
   document.getElementById('app-view').classList.remove('hidden');
-  loadStats();
+  loadSemanas().then(() => loadStats());
   switchTab('pick');
 }
 
@@ -57,10 +66,34 @@ document.getElementById('logout-btn').addEventListener('click', async () => {
   showLogin();
 });
 
+// ── Semanas ────────────────────────────────────────────────────────────────
+async function loadSemanas() {
+  try {
+    const semanas = await api.getSemanas();
+    const select = document.getElementById('semana-select');
+    if (semanas.length === 0) {
+      select.innerHTML = '<option value="">Sin semanas cargadas</option>';
+      semanaActual = '';
+    } else {
+      select.innerHTML = semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('');
+      semanaActual = semanas[0].nombre;
+      select.value = semanaActual;
+    }
+  } catch (_) {}
+}
+
+document.getElementById('semana-select').addEventListener('change', (e) => {
+  semanaActual = e.target.value;
+  loadStats();
+  if (document.querySelector('.tab-btn[data-tab="clientes"]').classList.contains('active')) {
+    loadResumen();
+  }
+});
+
 // ── Stats ──────────────────────────────────────────────────────────────────
 async function loadStats() {
   try {
-    const stats = await api.getStats();
+    const stats = await api.getStats(semanaActual);
     document.getElementById('stat-total').textContent = stats.total;
     document.getElementById('stat-completed').textContent = stats.completed;
     document.getElementById('stat-pending').textContent = stats.pending;
@@ -76,7 +109,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== tab));
 
-  if (tab === 'clientes') loadResumen();
+  if (tab === 'clientes') loadResumen(semanaActual);
   if (tab === 'admin') initAdmin();
 }
 
@@ -92,16 +125,25 @@ async function searchBarcode(codBar) {
   results.innerHTML = '<p class="loading">Buscando...</p>';
 
   try {
-    const picks = await api.getByBarcode(codBar);
+    const picks = await api.getByBarcode(codBar, semanaActual);
     renderPicks(picks);
   } catch (err) {
     results.innerHTML = `<p class="error-msg">${err.message}</p>`;
   }
 }
 
-function renderPicks(picks) {
-  const results = document.getElementById('results');
-  results.innerHTML = '';
+function formatCantidad(uni, bul, uxb) {
+  uni = uni || 0;
+  bul = bul || 0;
+  uxb = uxb || 0;
+  if (uxb > 1 && bul > 0 && uni === bul * uxb) {
+    return { main: `${bul} bulto${bul !== 1 ? 's' : ''}`, sub: `×${uxb} uni/bulto` };
+  }
+  return { main: `${uni} uni`, sub: uxb > 1 ? `×${uxb} uni/bulto` : null };
+}
+
+function renderPicks(picks, container = document.getElementById('results')) {
+  container.innerHTML = '';
 
   picks.forEach((pick) => {
     const card = document.createElement('div');
@@ -113,6 +155,7 @@ function renderPicks(picks) {
 
     const cantidad = pick.cantidad_pickeada ?? 0;
     const uni = pick.uni ?? 0;
+    const qty = formatCantidad(uni, pick.bul, pick.uxb);
 
     card.innerHTML = `
       <div class="pick-header">
@@ -124,14 +167,15 @@ function renderPicks(picks) {
         <span>${pick.nombre ?? pick.cliente ?? ''}</span>
         <span class="pick-loc">${pick.localidad ?? ''}</span>
       </div>
+      <div class="pick-qty-info">
+        <span class="qty-main">${qty.main}</span>
+        ${qty.sub ? `<span class="qty-sub">${qty.sub}</span>` : ''}
+      </div>
       <div class="pick-estado ${isCompleted ? 'estado-ok' : 'estado-pend'}">${pick.estado ?? 'sin estado'}</div>
       <div class="pick-controls">
-        <div class="stepper">
-          <button class="step-btn" data-action="dec">−</button>
+        ${!isCompleted ? `<button class="btn-entregado">✓ Entregado</button>` : ''}
+        <div class="pick-qty-row">
           <input class="step-input" type="number" min="0" max="${uni}" value="${cantidad}" />
-          <button class="step-btn" data-action="inc">+</button>
-        </div>
-        <div class="pick-actions">
           <button class="btn-save">Guardar</button>
           <button class="btn-undo">Desmarcar</button>
         </div>
@@ -139,16 +183,13 @@ function renderPicks(picks) {
     `;
 
     const input = card.querySelector('.step-input');
-    card.querySelector('[data-action="dec"]').addEventListener('click', () => {
-      input.value = Math.max(0, parseInt(input.value || 0) - 1);
-    });
-    card.querySelector('[data-action="inc"]').addEventListener('click', () => {
-      input.value = Math.min(uni, parseInt(input.value || 0) + 1);
-    });
+    if (!isCompleted) {
+      card.querySelector('.btn-entregado').addEventListener('click', () => saveQuantity(pick.id, uni, card));
+    }
     card.querySelector('.btn-save').addEventListener('click', () => saveQuantity(pick.id, parseInt(input.value || 0), card));
     card.querySelector('.btn-undo').addEventListener('click', () => saveQuantity(pick.id, 0, card));
 
-    results.appendChild(card);
+    container.appendChild(card);
   });
 }
 
@@ -160,6 +201,9 @@ async function saveQuantity(id, cantidad, card) {
     card.querySelector('.pick-estado').textContent = res.estado;
     card.querySelector('.pick-estado').className = `pick-estado ${isCompleted ? 'estado-ok' : 'estado-pend'}`;
     card.querySelector('.step-input').value = cantidad;
+    // Ocultar/mostrar botón Entregado según estado
+    const btnEnt = card.querySelector('.btn-entregado');
+    if (btnEnt) btnEnt.style.display = isCompleted ? 'none' : '';
     showToast(isCompleted ? '✓ Completado' : 'Actualizado', isCompleted ? 'success' : 'info');
     loadStats();
   } catch (err) {
@@ -167,32 +211,158 @@ async function saveQuantity(id, cantidad, card) {
   }
 }
 
-// ── Camera scanner ─────────────────────────────────────────────────────────
-document.getElementById('scan-btn').addEventListener('click', () => {
-  scannerActive ? stopScanner() : startScanner();
+// ── Búsqueda por descripción ───────────────────────────────────────────────
+let descripTimer = null;
+
+document.getElementById('descrip-input').addEventListener('input', (e) => {
+  clearTimeout(descripTimer);
+  const q = e.target.value.trim();
+  if (q.length < 2) { hideDescripResults(); return; }
+  descripTimer = setTimeout(() => buscarPorDescrip(q), 300);
 });
 
-function startScanner() {
-  document.getElementById('scanner-container').classList.remove('hidden');
+document.getElementById('descrip-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hideDescripResults();
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.descrip-search-wrap')) hideDescripResults();
+});
+
+async function buscarPorDescrip(q) {
+  try {
+    const items = await api.buscarPorDescrip(q, semanaActual);
+    const container = document.getElementById('descrip-results');
+    if (!items.length) {
+      container.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
+    } else {
+      container.innerHTML = items.map((item) => `
+        <div class="descrip-item" data-codbar="${item.cod_bar}">
+          <span class="descrip-item-name">${item.descrip ?? ''}</span>
+          <span class="descrip-item-code">${item.cod_art ?? ''}</span>
+        </div>
+      `).join('');
+      container.querySelectorAll('.descrip-item').forEach((el) => {
+        el.addEventListener('click', () => {
+          const codBar = el.dataset.codbar;
+          const descrip = el.querySelector('.descrip-item-name').textContent;
+          document.getElementById('descrip-input').value = descrip;
+          document.getElementById('barcode-input').value = codBar;
+          hideDescripResults();
+          searchBarcode(codBar);
+        });
+      });
+    }
+    container.classList.remove('hidden');
+  } catch (_) {}
+}
+
+function hideDescripResults() {
+  document.getElementById('descrip-results').classList.add('hidden');
+}
+
+// ── Camera scanner ─────────────────────────────────────────────────────────
+let cameras = [];
+let currentCameraIndex = 0;
+
+document.getElementById('scan-btn').addEventListener('click', async () => {
+  if (scannerActive) stopScanner();
+  else await startScanner();
+});
+
+function onScanResult(result) {
+  if (!result) return;
+  const code = result.getText();
+  document.getElementById('barcode-input').value = code;
+  stopScanner();
+  searchBarcode(code);
+}
+
+async function startScanner(deviceId = null) {
+  const container = document.getElementById('scanner-container');
+  container.classList.remove('hidden');
   document.getElementById('scan-btn').textContent = 'Detener';
   scannerActive = true;
 
-  codeReader = new ZXing.BrowserMultiFormatReader();
-  codeReader.decodeFromVideoDevice(null, 'scanner-video', (result) => {
-    if (result) {
-      const code = result.getText();
-      document.getElementById('barcode-input').value = code;
-      stopScanner();
-      searchBarcode(code);
+  // Última cámara guardada, o null (ZXing usa facingMode:environment con null)
+  const targetId = deviceId ?? localStorage.getItem('pick_last_camera') ?? null;
+
+  const hints = new Map([[3, true]]); // TRY_HARDER
+  codeReader = new ZXing.BrowserMultiFormatReader(hints, 300);
+  await codeReader.decodeFromVideoDevice(targetId, 'scanner-video', onScanResult);
+
+  container.classList.add('scanner-open');
+
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  cameras = devices.filter((d) => d.kind === 'videoinput');
+  document.getElementById('switch-camera-btn').classList.toggle('hidden', cameras.length <= 1);
+
+  const video = document.getElementById('scanner-video');
+  if (video.srcObject) {
+    const track = video.srcObject.getVideoTracks()[0];
+    if (track) {
+      const settings = track.getSettings();
+      localStorage.setItem('pick_last_camera', settings.deviceId);
+      const idx = cameras.findIndex((c) => c.deviceId === settings.deviceId);
+      if (idx !== -1) currentCameraIndex = idx;
+      const caps = track.getCapabilities?.() || {};
+      if ((caps.focusMode || []).includes('continuous')) {
+        track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+      }
     }
-  });
+  }
+}
+
+// Tap para enfocar en el punto tocado
+document.getElementById('scanner-video').addEventListener('click', async (e) => {
+  const video = e.currentTarget;
+  if (!video.srcObject || !scannerActive) return;
+
+  const rect = video.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / rect.width;
+  const y = (e.clientY - rect.top) / rect.height;
+
+  // Indicador visual
+  const ind = document.getElementById('focus-indicator');
+  ind.style.left = (e.clientX - rect.left) + 'px';
+  ind.style.top  = (e.clientY - rect.top)  + 'px';
+  ind.classList.remove('hidden', 'fading');
+  setTimeout(() => ind.classList.add('fading'), 700);
+  setTimeout(() => ind.classList.add('hidden'), 1200);
+
+  const track = video.srcObject.getVideoTracks()[0];
+  if (!track) return;
+  try {
+    await track.applyConstraints({ advanced: [{ focusMode: 'manual', pointsOfInterest: [{ x, y }] }] });
+    setTimeout(() => track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}), 1500);
+  } catch {}
+});
+
+
+async function switchCamera() {
+  if (cameras.length <= 1) return;
+  currentCameraIndex = (currentCameraIndex + 1) % cameras.length;
+  if (codeReader) { codeReader.reset(); codeReader = null; }
+  const video = document.getElementById('scanner-video');
+  if (video.srcObject) { video.srcObject.getTracks().forEach((t) => t.stop()); video.srcObject = null; }
+  await startScanner(cameras[currentCameraIndex].deviceId);
 }
 
 function stopScanner() {
-  if (codeReader) { codeReader.reset(); codeReader = null; }
+  if (!scannerActive) return;
   scannerActive = false;
+
+  document.getElementById('scanner-container').classList.remove('scanner-open');
+
+  if (codeReader) { codeReader.reset(); codeReader = null; }
+  const video = document.getElementById('scanner-video');
+  if (video.srcObject) { video.srcObject.getTracks().forEach((t) => t.stop()); video.srcObject = null; }
+
+  cameras = [];
+  currentCameraIndex = 0;
   document.getElementById('scanner-container').classList.add('hidden');
   document.getElementById('scan-btn').textContent = 'Escanear';
+  document.getElementById('switch-camera-btn').classList.add('hidden');
 }
 
 // ── Tab: Clientes ──────────────────────────────────────────────────────────
@@ -203,7 +373,7 @@ async function loadResumen() {
   const container = document.getElementById('resumen-list');
   container.innerHTML = '<p class="loading">Cargando...</p>';
   try {
-    resumenData = await api.getResumen();
+    resumenData = await api.getResumen(semanaActual);
     renderResumen();
   } catch (err) {
     container.innerHTML = `<p class="error-msg">${err.message}</p>`;
@@ -230,7 +400,7 @@ function renderResumen() {
   }
 
   container.innerHTML = filtered.map((r) => `
-    <div class="resumen-card estado-${r.estado_general}">
+    <div class="resumen-card estado-${r.estado_general}" data-nombre="${encodeURIComponent(r.nombre)}">
       <div class="resumen-nombre">${r.nombre}</div>
       <div class="resumen-stats">
         <span class="tag-ok">${r.completados} ✓</span>
@@ -238,9 +408,49 @@ function renderResumen() {
         <span class="tag-total">${r.total} total</span>
       </div>
       <div class="resumen-badge badge-${r.estado_general}">${r.estado_general}</div>
+      <button class="btn-ver-picks">›</button>
     </div>
   `).join('');
+
+  container.querySelectorAll('.resumen-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      const nombre = decodeURIComponent(card.dataset.nombre);
+      abrirPicksCliente(nombre);
+    });
+  });
 }
+
+// ── Picks por cliente (bottom-sheet) ──────────────────────────────────────
+async function abrirPicksCliente(nombre) {
+  document.getElementById('cliente-picks-title').textContent = nombre;
+  const content = document.getElementById('cliente-picks-content');
+  content.innerHTML = '<p class="loading">Cargando...</p>';
+  document.getElementById('cliente-picks-overlay').classList.remove('hidden');
+
+  try {
+    const picks = await api.getPicksPorCliente(nombre, semanaActual);
+    if (!picks.length) {
+      content.innerHTML = '<p class="loading">Sin items</p>';
+    } else {
+      renderPicks(picks, content);
+    }
+  } catch (err) {
+    content.innerHTML = `<p class="error-msg">${err.message}</p>`;
+  }
+}
+
+document.getElementById('cliente-picks-close').addEventListener('click', () => {
+  document.getElementById('cliente-picks-overlay').classList.add('hidden');
+  // Recargar resumen por si cambió algún estado
+  loadResumen();
+});
+
+document.getElementById('cliente-picks-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) {
+    document.getElementById('cliente-picks-overlay').classList.add('hidden');
+    loadResumen();
+  }
+});
 
 // ── Tab: Admin ─────────────────────────────────────────────────────────────
 function initAdmin() {
@@ -351,6 +561,75 @@ async function deleteCliente(id) {
     showToast(err.message, 'error');
   }
 }
+
+// ── Admin: Nueva Semana ────────────────────────────────────────────────────
+document.getElementById('db-file-input').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files);
+  const list = document.getElementById('upload-file-list');
+  list.innerHTML = files.map((f) => `
+    <div class="upload-file-item">
+      <span class="upload-file-name">${f.name}</span>
+      <span class="upload-file-size">${(f.size / 1024).toFixed(1)} KB</span>
+    </div>
+  `).join('');
+  document.getElementById('btn-importar-semana').disabled = files.length === 0;
+});
+
+document.getElementById('btn-importar-semana').addEventListener('click', async () => {
+  const nombre = document.getElementById('semana-nombre').value.trim();
+  const fechaDesde = document.getElementById('semana-fecha-desde').value.replace(/-/g, '');
+  const fechaHasta = document.getElementById('semana-fecha-hasta').value.replace(/-/g, '');
+  const files = document.getElementById('db-file-input').files;
+
+  if (!nombre) { showToast('Ingresá un nombre para el pick', 'error'); return; }
+  if (!fechaDesde || !fechaHasta) { showToast('Seleccioná las fechas', 'error'); return; }
+  if (files.length === 0) { showToast('Seleccioná al menos un archivo .db', 'error'); return; }
+
+  const formData = new FormData();
+  formData.append('nombre', nombre);
+  formData.append('fecha_desde', fechaDesde);
+  formData.append('fecha_hasta', fechaHasta);
+  for (const file of files) formData.append('archivos', file);
+
+  const btn = document.getElementById('btn-importar-semana');
+  btn.disabled = true;
+  btn.textContent = 'Importando...';
+
+  const resultPanel = document.getElementById('import-result');
+
+  try {
+    const res = await api.importarSemana(formData);
+    await loadSemanas();
+    loadStats();
+
+    if (res.clientes_no_encontrados.length === 0) {
+      resultPanel.className = 'import-result result-ok';
+      resultPanel.innerHTML = `
+        <div class="import-result-title ok">Importación exitosa</div>
+        ${res.picks_importados} picks cargados para <strong>${res.semana}</strong>. Todos los clientes fueron encontrados.
+      `;
+    } else {
+      const tags = res.clientes_no_encontrados
+        .map((id) => `<span class="import-missing-tag">${id}</span>`)
+        .join('');
+      resultPanel.className = 'import-result result-warn';
+      resultPanel.innerHTML = `
+        <div class="import-result-title warn">
+          ${res.picks_importados} picks importados — ${res.clientes_no_encontrados.length} cliente${res.clientes_no_encontrados.length > 1 ? 's' : ''} sin datos
+        </div>
+        Los siguientes IDs de cliente no están registrados en la tabla de clientes.
+        Anotalos y andá a la tab <strong>Clientes</strong> para agregarlos con su nombre y localidad:
+        <div class="import-missing-list">${tags}</div>
+      `;
+    }
+  } catch (err) {
+    resultPanel.className = 'import-result result-warn';
+    resultPanel.innerHTML = `<div class="import-result-title warn">Error</div>${err.message}`;
+  } finally {
+    btn.disabled = files.length === 0;
+    btn.textContent = 'Importar picks';
+  }
+});
 
 // ── Cambiar contraseña ─────────────────────────────────────────────────────
 document.getElementById('change-pw-btn').addEventListener('click', () => {

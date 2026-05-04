@@ -12,6 +12,7 @@ class Pick(BaseModel):
     localidad: Optional[str] = None
     uni: Optional[int] = None
     bul: Optional[int] = None
+    uxb: Optional[int] = None
     cantidad_pickeada: Optional[int] = 0
     estado: Optional[str] = None
     semana: Optional[str] = None

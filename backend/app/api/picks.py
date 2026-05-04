@@ -1,21 +1,29 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from app.models.schemas import Pick, QuantityUpdate, StatsResponse, PickResumen
 from app.db.database import get_db
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 router = APIRouter(prefix="/picks", tags=["picks"])
 
 
 @router.get("/stats", response_model=StatsResponse)
-def get_stats():
+def get_stats(semana: Optional[str] = Query(None)):
     with get_db() as cur:
-        cur.execute("""
-            SELECT
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE estado LIKE 'completado%') AS completed
-            FROM pick
-        """)
+        if semana:
+            cur.execute("""
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completed
+                FROM pick WHERE semana = %s
+            """, (semana,))
+        else:
+            cur.execute("""
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completed
+                FROM pick
+            """)
         row = cur.fetchone()
         total = row["total"]
         completed = row["completed"]
@@ -23,18 +31,30 @@ def get_stats():
 
 
 @router.get("/resumen", response_model=List[PickResumen])
-def get_resumen():
+def get_resumen(semana: Optional[str] = Query(None)):
     with get_db() as cur:
-        cur.execute("""
-            SELECT
-                nombre,
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE estado LIKE 'completado%') AS completados
-            FROM pick
-            WHERE nombre IS NOT NULL
-            GROUP BY nombre
-            ORDER BY nombre
-        """)
+        if semana:
+            cur.execute("""
+                SELECT
+                    nombre,
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completados
+                FROM pick
+                WHERE nombre IS NOT NULL AND semana = %s
+                GROUP BY nombre
+                ORDER BY nombre
+            """, (semana,))
+        else:
+            cur.execute("""
+                SELECT
+                    nombre,
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completados
+                FROM pick
+                WHERE nombre IS NOT NULL
+                GROUP BY nombre
+                ORDER BY nombre
+            """)
         rows = cur.fetchall()
 
     resumen = []
@@ -58,10 +78,52 @@ def get_resumen():
     return resumen
 
 
-@router.get("/barcode/{cod_bar}", response_model=List[Pick])
-def get_picks_by_barcode(cod_bar: str):
+@router.get("/por-cliente")
+def get_picks_por_cliente(nombre: str = Query(...), semana: Optional[str] = Query(None)):
     with get_db() as cur:
-        cur.execute("SELECT * FROM pick WHERE cod_bar = %s", (cod_bar,))
+        if semana:
+            cur.execute(
+                "SELECT * FROM pick WHERE nombre = %s AND semana = %s ORDER BY descrip",
+                (nombre, semana),
+            )
+        else:
+            cur.execute(
+                "SELECT * FROM pick WHERE nombre = %s ORDER BY descrip",
+                (nombre,),
+            )
+        return [dict(r) for r in cur.fetchall()]
+
+
+@router.get("/buscar")
+def buscar_por_descripcion(q: str = Query(..., min_length=2), semana: Optional[str] = Query(None)):
+    with get_db() as cur:
+        pattern = f"%{q}%"
+        if semana:
+            cur.execute("""
+                SELECT DISTINCT cod_bar, cod_art, descrip
+                FROM pick
+                WHERE descrip ILIKE %s AND semana = %s AND cod_bar IS NOT NULL
+                ORDER BY descrip
+                LIMIT 25
+            """, (pattern, semana))
+        else:
+            cur.execute("""
+                SELECT DISTINCT cod_bar, cod_art, descrip
+                FROM pick
+                WHERE descrip ILIKE %s AND cod_bar IS NOT NULL
+                ORDER BY descrip
+                LIMIT 25
+            """, (pattern,))
+        return [dict(r) for r in cur.fetchall()]
+
+
+@router.get("/barcode/{cod_bar}", response_model=List[Pick])
+def get_picks_by_barcode(cod_bar: str, semana: Optional[str] = Query(None)):
+    with get_db() as cur:
+        if semana:
+            cur.execute("SELECT * FROM pick WHERE cod_bar = %s AND semana = %s", (cod_bar, semana))
+        else:
+            cur.execute("SELECT * FROM pick WHERE cod_bar = %s", (cod_bar,))
         rows = cur.fetchall()
     if not rows:
         raise HTTPException(status_code=404, detail="No se encontraron picks para este código")
@@ -89,7 +151,10 @@ def update_quantity(id: int, update: QuantityUpdate):
 
 
 @router.get("/", response_model=List[Pick])
-def list_picks():
+def list_picks(semana: Optional[str] = Query(None)):
     with get_db() as cur:
-        cur.execute("SELECT * FROM pick LIMIT 200")
+        if semana:
+            cur.execute("SELECT * FROM pick WHERE semana = %s LIMIT 200", (semana,))
+        else:
+            cur.execute("SELECT * FROM pick LIMIT 200")
         return [dict(r) for r in cur.fetchall()]

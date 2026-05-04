@@ -1,6 +1,4 @@
-const API_BASE = window.location.hostname === 'localhost'
-  ? 'http://localhost:8000'
-  : `${window.location.protocol}//${window.location.hostname}:8000`;
+const API_BASE = '';
 
 function getToken() {
   return localStorage.getItem('token');
@@ -36,15 +34,21 @@ async function request(method, path, body = null) {
   return data;
 }
 
+function semanaParam(semana) {
+  return semana ? `?semana=${encodeURIComponent(semana)}` : '';
+}
+
 const api = {
   // Auth
   login: (email, password) => request('POST', '/api/auth/login', { email, password }),
   logout: () => request('POST', '/api/auth/logout'),
 
-  // Picks
-  getStats: () => request('GET', '/api/picks/stats'),
-  getResumen: () => request('GET', '/api/picks/resumen'),
-  getByBarcode: (cod_bar) => request('GET', `/api/picks/barcode/${encodeURIComponent(cod_bar)}`),
+  // Picks (todos aceptan semana opcional)
+  getStats: (semana) => request('GET', `/api/picks/stats${semanaParam(semana)}`),
+  getResumen: (semana) => request('GET', `/api/picks/resumen${semanaParam(semana)}`),
+  getByBarcode: (cod_bar, semana) => request('GET', `/api/picks/barcode/${encodeURIComponent(cod_bar)}${semanaParam(semana)}`),
+  buscarPorDescrip: (q, semana) => request('GET', `/api/picks/buscar?q=${encodeURIComponent(q)}${semana ? `&semana=${encodeURIComponent(semana)}` : ''}`),
+  getPicksPorCliente: (nombre, semana) => request('GET', `/api/picks/por-cliente?nombre=${encodeURIComponent(nombre)}${semana ? `&semana=${encodeURIComponent(semana)}` : ''}`),
   updateQuantity: (id, cantidad_pickeada) => request('PUT', `/api/picks/${id}/quantity`, { cantidad_pickeada }),
 
   // Clientes
@@ -59,4 +63,18 @@ const api = {
   // Password
   changePassword: (current_password, new_password) =>
     request('PUT', '/api/auth/password', { current_password, new_password }),
+
+  // Semanas
+  getSemanas: () => request('GET', '/api/semanas/'),
+  importarSemana: async (formData) => {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/api/semanas/importar`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error del servidor');
+    return data;
+  },
 };
