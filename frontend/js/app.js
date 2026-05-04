@@ -394,6 +394,41 @@ function playCompletionSound() {
   setTimeout(() => playBeep(1100, 160), 130);
 }
 
+// ── Loop de decodificación rotada (90°) ───────────────────────────────────
+const _rotCanvas = document.createElement('canvas');
+const _rotCtx = _rotCanvas.getContext('2d', { willReadFrequently: true });
+
+async function runRotatedDecodeLoop(video) {
+  while (scannerActive) {
+    await new Promise((r) => requestAnimationFrame(r));
+    if (!scannerActive || video.videoWidth === 0 || video.readyState < 2) continue;
+
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+
+    // Frame rotado 90° — convierte barcodes verticales en horizontales para ZXing
+    _rotCanvas.width = vh;
+    _rotCanvas.height = vw;
+    _rotCtx.save();
+    _rotCtx.translate(vh / 2, vw / 2);
+    _rotCtx.rotate(Math.PI / 2);
+    _rotCtx.drawImage(video, -vw / 2, -vh / 2, vw, vh);
+    _rotCtx.restore();
+
+    try {
+      const lum = new ZXing.HTMLCanvasElementLuminanceSource(_rotCanvas);
+      const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      const result = codeReader.reader.decode(bmp);
+      if (scannerActive && result) {
+        onScanResult(result);
+        return;
+      }
+    } catch (_) {
+      // NotFoundException en este frame — continuar
+    }
+  }
+}
+
 // ── Wake Lock ──────────────────────────────────────────────────────────────
 async function requestWakeLock() {
   if ('wakeLock' in navigator) {
@@ -406,11 +441,12 @@ function releaseWakeLock() {
 }
 
 // ── Precalentar cámara ─────────────────────────────────────────────────────
+// Solo solicita el permiso sin abrir stream (evita conflictos con ZXing)
 async function prewarmCamera() {
-  if (!navigator.mediaDevices?.getUserMedia) return;
+  if (!navigator.mediaDevices?.enumerateDevices) return;
   try {
-    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    s.getTracks().forEach((t) => t.stop());
+    // enumerateDevices dispara el diálogo de permiso sin abrir stream
+    await navigator.mediaDevices.enumerateDevices();
   } catch (_) {}
 }
 
@@ -480,20 +516,31 @@ function onScanResult(result) {
 async function startScanner(deviceId = null) {
   const container = document.getElementById('scanner-container');
   container.classList.remove('hidden');
-  container.classList.add('scanner-open');
   document.getElementById('scan-btn').textContent = 'Detener';
   scannerActive = true;
 
   await requestWakeLock();
 
   const targetId = deviceId ?? localStorage.getItem('pick_last_camera') ?? null;
-  const hints = new Map([[3, true]]);
-
-  if (!codeReader) {
-    codeReader = new ZXing.BrowserMultiFormatReader(hints, 300);
-  }
+  const hints = new Map([
+    [2, [                          // POSSIBLE_FORMATS — solo códigos de barra lineales
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.UPC_E,
+    ]],
+    [3, true],                     // TRY_HARDER
+  ]);
+  codeReader = new ZXing.BrowserMultiFormatReader(hints, 0); // 0ms = decodifica cada frame
 
   await codeReader.decodeFromVideoDevice(targetId, 'scanner-video', onScanResult);
+
+  container.classList.add('scanner-open');
+
+  // Loop paralelo que decodifica el frame rotado 90° — cubre cualquier orientación del código
+  runRotatedDecodeLoop(document.getElementById('scanner-video'));
 
   const devices = await navigator.mediaDevices.enumerateDevices();
   cameras = devices.filter((d) => d.kind === 'videoinput');
@@ -552,7 +599,7 @@ function stopScanner() {
   scannerActive = false;
   releaseWakeLock();
 
-  if (codeReader) { codeReader.reset(); }
+  if (codeReader) { codeReader.reset(); codeReader = null; }
   const video = document.getElementById('scanner-video');
   if (video.srcObject) { video.srcObject.getTracks().forEach((t) => t.stop()); video.srcObject = null; }
 
