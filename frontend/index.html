@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=8" />
+  <link rel="stylesheet" href="css/styles.css?v=9" />
 </head>
 <body>
 
@@ -50,6 +50,11 @@
       <select id="semana-select" class="semana-select">
         <option value="">Sin semanas cargadas</option>
       </select>
+    </div>
+
+    <!-- Barra de progreso -->
+    <div class="progress-bar-wrap">
+      <div id="progress-bar-fill" class="progress-bar-fill"></div>
     </div>
 
     <!-- Stats -->
@@ -93,10 +98,23 @@
       <div id="scanner-container" class="hidden">
         <video id="scanner-video" autoplay muted playsinline></video>
         <button class="btn-scanner-close" onclick="stopScanner()">✕</button>
+        <div class="scanner-guide-overlay">
+          <div class="scanner-guide-rect"></div>
+          <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
+        </div>
         <div class="scanner-controls">
           <button id="switch-camera-btn" class="btn-switch-camera hidden" onclick="switchCamera()">⟳ Cambiar cámara</button>
         </div>
         <div id="focus-indicator" class="focus-indicator hidden"></div>
+      </div>
+
+      <div id="historial-wrap" class="historial-wrap hidden">
+        <span class="historial-label">Recientes:</span>
+        <div id="historial-chips" class="historial-chips"></div>
+      </div>
+
+      <div class="pick-filters-row">
+        <button id="solo-pendientes-btn" class="btn-solo-pend">Solo pendientes</button>
       </div>
 
       <div id="results"></div>
@@ -104,6 +122,7 @@
 
     <!-- ── Panel: Clientes ──────────────────────────────────────────── -->
     <div class="tab-panel hidden" data-panel="clientes">
+      <input type="text" id="clientes-search" class="clientes-search-input" placeholder="Buscar cliente..." autocomplete="off" />
       <div class="filter-bar">
         <button class="filter-btn active" data-filter="todos">Todos</button>
         <button class="filter-btn" data-filter="completo">Completo</button>
@@ -131,13 +150,15 @@
         <!-- Sub-tabs -->
         <div class="admin-tabs">
           <button class="admin-tab-btn active" data-admin-tab="clientes">Clientes</button>
-          <button class="admin-tab-btn" data-admin-tab="nueva-semana">Nueva Semana</button>
+          <button class="admin-tab-btn" data-admin-tab="nueva-semana">Semanas</button>
+          <button class="admin-tab-btn" data-admin-tab="usuarios">Usuarios</button>
         </div>
 
         <!-- Sub-panel: Clientes -->
         <div class="admin-tab-panel" data-admin-panel="clientes">
           <div class="admin-header">
-            <button id="btn-nuevo-cliente" class="btn-search">+ Nuevo cliente</button>
+            <input type="text" id="admin-clientes-search" class="clientes-search-input" placeholder="Buscar cliente..." autocomplete="off" style="flex:1; margin-right:8px" />
+            <button id="btn-nuevo-cliente" class="btn-search">+ Nuevo</button>
           </div>
           <div class="table-wrap">
             <table class="clientes-table">
@@ -156,8 +177,17 @@
           </div>
         </div>
 
-        <!-- Sub-panel: Nueva Semana -->
+        <!-- Sub-panel: Semanas -->
         <div class="admin-tab-panel hidden" data-admin-panel="nueva-semana">
+
+          <!-- Semanas cargadas -->
+          <div class="admin-section-title">Semanas cargadas</div>
+          <div id="semanas-admin-list" class="semanas-admin-list"></div>
+
+          <div class="admin-divider"></div>
+
+          <!-- Importar nueva semana -->
+          <div class="admin-section-title">Importar nueva semana</div>
           <div class="form-group">
             <label>Nombre del pick</label>
             <input type="text" id="semana-nombre" placeholder="Ej: PICK 30-04-2026" autocomplete="off" />
@@ -182,6 +212,36 @@
             Importar picks
           </button>
           <div id="import-result" class="import-result hidden"></div>
+        </div>
+
+        <!-- Sub-panel: Usuarios -->
+        <div class="admin-tab-panel hidden" data-admin-panel="usuarios">
+          <div class="admin-section-title" style="margin-bottom:16px">Usuarios activos</div>
+          <div class="table-wrap" style="margin-bottom:24px">
+            <table class="clientes-table">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Creado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody"></tbody>
+            </table>
+          </div>
+
+          <div class="admin-section-title" style="margin-bottom:12px">Nuevo usuario</div>
+          <form id="nuevo-usuario-form">
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="nu-email" required autocomplete="off" />
+            </div>
+            <div class="form-group">
+              <label>Contraseña</label>
+              <input type="password" id="nu-password" required minlength="6" />
+            </div>
+            <button type="submit" class="btn-primary">Crear usuario</button>
+          </form>
         </div>
 
       </div>
@@ -237,9 +297,15 @@
   <!-- ── Bottom sheet: picks de un cliente ───────────────────────────────── -->
   <div id="cliente-picks-overlay" class="modal-overlay hidden cliente-picks-overlay">
     <div class="cliente-picks-sheet">
-      <div class="modal-header">
-        <span id="cliente-picks-title"></span>
-        <button id="cliente-picks-close" class="modal-close">✕</button>
+      <div class="modal-header sheet-header">
+        <div class="sheet-header-info">
+          <span id="cliente-picks-title"></span>
+          <span id="cliente-picks-progress" class="sheet-progress"></span>
+        </div>
+        <div class="sheet-header-actions">
+          <button id="btn-completar-todo" class="btn-completar-todo">✓ Todo</button>
+          <button id="cliente-picks-close" class="modal-close">✕</button>
+        </div>
       </div>
       <div id="cliente-picks-content" class="cliente-picks-content"></div>
     </div>
@@ -249,7 +315,7 @@
   <div id="toast" class="toast"></div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=8"></script>
-  <script src="js/app.js?v=8"></script>
+  <script src="js/api.js?v=9"></script>
+  <script src="js/app.js?v=9"></script>
 </body>
 </html>

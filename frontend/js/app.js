@@ -4,6 +4,13 @@ let scannerActive = false;
 let adminUnlocked = false;
 let editingClienteId = null;
 let semanaActual = '';
+let soloPendientes = false;
+let wakeLock = null;
+let resumenData = [];
+let filtroActivo = 'todos';
+let descripTimer = null;
+let cameras = [];
+let currentCameraIndex = 0;
 
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -18,6 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const target = btn.dataset.adminTab;
       document.querySelectorAll('.admin-tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.adminTab === target));
       document.querySelectorAll('.admin-tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.adminPanel !== target));
+      if (target === 'usuarios') loadUsers();
+      if (target === 'nueva-semana') loadSemanasAdmin();
     });
   });
 });
@@ -33,6 +42,9 @@ function showApp() {
   document.getElementById('app-view').classList.remove('hidden');
   loadSemanas().then(() => loadStats());
   switchTab('pick');
+  prewarmCamera();
+  renderHistorial();
+  setTimeout(() => document.getElementById('barcode-input').focus(), 200);
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────
@@ -84,6 +96,10 @@ async function loadSemanas() {
 
 document.getElementById('semana-select').addEventListener('change', (e) => {
   semanaActual = e.target.value;
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('barcode-input').value = '';
+  document.getElementById('descrip-input').value = '';
+  hideDescripResults();
   loadStats();
   if (document.querySelector('.tab-btn[data-tab="clientes"]').classList.contains('active')) {
     loadResumen();
@@ -97,7 +113,16 @@ async function loadStats() {
     document.getElementById('stat-total').textContent = stats.total;
     document.getElementById('stat-completed').textContent = stats.completed;
     document.getElementById('stat-pending').textContent = stats.pending;
+    updateProgressBar(stats.completed, stats.total);
   } catch (_) {}
+}
+
+function updateProgressBar(completed, total) {
+  const fill = document.getElementById('progress-bar-fill');
+  if (!fill) return;
+  const pct = total > 0 ? Math.round(completed / total * 100) : 0;
+  fill.style.width = pct + '%';
+  fill.style.background = pct >= 100 ? 'var(--green)' : 'var(--accent)';
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
@@ -109,7 +134,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== tab));
 
-  if (tab === 'clientes') loadResumen(semanaActual);
+  if (tab === 'clientes') loadResumen();
   if (tab === 'admin') initAdmin();
 }
 
@@ -120,35 +145,106 @@ document.getElementById('search-form').addEventListener('submit', async (e) => {
   if (val) await searchBarcode(val);
 });
 
+document.getElementById('barcode-input').addEventListener('focus', () => {
+  renderHistorial();
+  const wrap = document.getElementById('historial-wrap');
+  const hist = JSON.parse(localStorage.getItem('pick_historial') || '[]');
+  if (hist.length > 0) wrap.classList.remove('hidden');
+});
+
+document.getElementById('barcode-input').addEventListener('blur', () => {
+  setTimeout(() => document.getElementById('historial-wrap').classList.add('hidden'), 200);
+});
+
 async function searchBarcode(codBar) {
   const results = document.getElementById('results');
   results.innerHTML = '<p class="loading">Buscando...</p>';
 
   try {
     const picks = await api.getByBarcode(codBar, semanaActual);
+    addToHistorial(codBar);
     renderPicks(picks);
   } catch (err) {
     results.innerHTML = `<p class="error-msg">${err.message}</p>`;
   }
 }
 
-function formatCantidad(uni, bul, uxb) {
-  uni = uni || 0;
-  bul = bul || 0;
-  uxb = uxb || 0;
-  if (uxb > 1 && bul > 0 && uni === bul * uxb) {
-    return { main: `${bul} bulto${bul !== 1 ? 's' : ''}`, sub: `×${uxb} uni/bulto` };
-  }
-  return { main: `${uni} uni`, sub: uxb > 1 ? `×${uxb} uni/bulto` : null };
+// ── Historial ──────────────────────────────────────────────────────────────
+function addToHistorial(codBar) {
+  let hist = JSON.parse(localStorage.getItem('pick_historial') || '[]');
+  hist = [codBar, ...hist.filter((c) => c !== codBar)].slice(0, 5);
+  localStorage.setItem('pick_historial', JSON.stringify(hist));
+  renderHistorial();
 }
 
+function renderHistorial() {
+  const hist = JSON.parse(localStorage.getItem('pick_historial') || '[]');
+  const chips = document.getElementById('historial-chips');
+  const wrap = document.getElementById('historial-wrap');
+  if (!chips) return;
+  if (hist.length === 0) { wrap.classList.add('hidden'); return; }
+  chips.innerHTML = hist.map((c) => `<span class="hist-chip" data-cod="${c}">${c}</span>`).join('');
+  chips.querySelectorAll('.hist-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      document.getElementById('barcode-input').value = chip.dataset.cod;
+      document.getElementById('historial-wrap').classList.add('hidden');
+      searchBarcode(chip.dataset.cod);
+    });
+  });
+}
+
+// ── Solo pendientes ────────────────────────────────────────────────────────
+document.getElementById('solo-pendientes-btn').addEventListener('click', () => {
+  soloPendientes = !soloPendientes;
+  const btn = document.getElementById('solo-pendientes-btn');
+  btn.classList.toggle('active', soloPendientes);
+  btn.textContent = soloPendientes ? 'Ver todos' : 'Solo pendientes';
+  aplicarFiltroPendientes(document.getElementById('results'));
+});
+
+function aplicarFiltroPendientes(container) {
+  container.querySelectorAll('.pick-card').forEach((card) => {
+    const completado = card.classList.contains('completed');
+    card.style.display = (soloPendientes && completado) ? 'none' : '';
+  });
+}
+
+// ── Formato cantidad ───────────────────────────────────────────────────────
+function formatCantidad(uni, bul, uxb) {
+  uni = uni || 0; bul = bul || 0; uxb = uxb || 0;
+  if (uxb > 1 && bul > 0 && uni === bul * uxb) {
+    return { main: `${bul} bulto${bul !== 1 ? 's' : ''}`, sub: `× ${uxb} uni/bulto` };
+  }
+  return { main: `${uni} uni`, sub: uxb > 1 ? `× ${uxb} uni/bulto` : null };
+}
+
+function getEntregadoLabel(uni, bul, uxb) {
+  uni = uni || 0; bul = bul || 0; uxb = uxb || 0;
+  if (uxb > 1 && bul > 0 && uni === bul * uxb) {
+    return `✓ ENTREGADO — ${bul} BUL`;
+  }
+  return `✓ ENTREGADO — ${uni} UNI`;
+}
+
+// ── Render picks ───────────────────────────────────────────────────────────
 function renderPicks(picks, container = document.getElementById('results')) {
   container.innerHTML = '';
 
-  picks.forEach((pick) => {
+  // Pendientes primero
+  const sorted = [...picks].sort((a, b) => {
+    const ac = (a.estado || '').startsWith('completado') ? 1 : 0;
+    const bc = (b.estado || '').startsWith('completado') ? 1 : 0;
+    return ac - bc;
+  });
+
+  sorted.forEach((pick) => {
     const card = document.createElement('div');
     card.className = 'pick-card';
-    card.dataset.id = pick.id;
+    card.dataset.pickId = pick.id;
+    card.dataset.nombre = pick.nombre || '';
+    card.dataset.uni = pick.uni || 0;
+    card.dataset.bul = pick.bul || 0;
+    card.dataset.uxb = pick.uxb || 0;
 
     const isCompleted = (pick.estado || '').startsWith('completado');
     if (isCompleted) card.classList.add('completed');
@@ -160,7 +256,6 @@ function renderPicks(picks, container = document.getElementById('results')) {
     card.innerHTML = `
       <div class="pick-header">
         <span class="pick-art">${pick.cod_art ?? ''}</span>
-        <span class="pick-semana">${pick.semana ?? ''}</span>
       </div>
       <div class="pick-descrip">${pick.descrip ?? ''}</div>
       <div class="pick-meta">
@@ -172,27 +267,65 @@ function renderPicks(picks, container = document.getElementById('results')) {
         ${qty.sub ? `<span class="qty-sub">${qty.sub}</span>` : ''}
       </div>
       <div class="pick-estado ${isCompleted ? 'estado-ok' : 'estado-pend'}">${pick.estado ?? 'sin estado'}</div>
-      <div class="pick-controls">
-        ${!isCompleted ? `<button class="btn-entregado">✓ Entregado</button>` : ''}
-        <div class="pick-qty-row">
-          <input class="step-input" type="number" min="0" max="${uni}" value="${cantidad}" />
-          <button class="btn-save">Guardar</button>
-          <button class="btn-undo">Desmarcar</button>
-        </div>
+      <div class="pick-controls"></div>
+    `;
+
+    renderControls(card, cantidad, isCompleted);
+    container.appendChild(card);
+  });
+
+  aplicarFiltroPendientes(container);
+
+  // Actualizar progreso en el sheet si aplica
+  updateSheetProgress();
+}
+
+// ── Render controles de pick ───────────────────────────────────────────────
+function renderControls(card, cantidad, isCompleted) {
+  const ctrl = card.querySelector('.pick-controls');
+  const uni = parseInt(card.dataset.uni) || 0;
+  const bul = parseInt(card.dataset.bul) || 0;
+  const uxb = parseInt(card.dataset.uxb) || 0;
+  const id = parseInt(card.dataset.pickId);
+  const entLabel = getEntregadoLabel(uni, bul, uxb);
+
+  if (isCompleted) {
+    ctrl.innerHTML = `<button class="btn-undo">Desmarcar</button>`;
+    ctrl.querySelector('.btn-undo').addEventListener('click', async () => {
+      if (!confirm('¿Desmarcar este pick y volver a 0?')) return;
+      await saveQuantity(id, 0, card);
+    });
+  } else {
+    let current = cantidad;
+    ctrl.innerHTML = `
+      <button class="btn-entregado">${entLabel}</button>
+      <div class="pick-stepper">
+        <button class="btn-step-minus">−</button>
+        <span class="step-value">${current}</span>
+        <button class="btn-step-plus">+</button>
+        <button class="btn-save">Guardar</button>
       </div>
     `;
 
-    const input = card.querySelector('.step-input');
-    if (!isCompleted) {
-      card.querySelector('.btn-entregado').addEventListener('click', () => saveQuantity(pick.id, uni, card));
-    }
-    card.querySelector('.btn-save').addEventListener('click', () => saveQuantity(pick.id, parseInt(input.value || 0), card));
-    card.querySelector('.btn-undo').addEventListener('click', () => saveQuantity(pick.id, 0, card));
+    const valueEl = ctrl.querySelector('.step-value');
 
-    container.appendChild(card);
-  });
+    ctrl.querySelector('.btn-entregado').addEventListener('click', () => saveQuantity(id, uni, card));
+
+    ctrl.querySelector('.btn-step-minus').addEventListener('click', () => {
+      current = Math.max(0, current - 1);
+      valueEl.textContent = current;
+    });
+
+    ctrl.querySelector('.btn-step-plus').addEventListener('click', () => {
+      current = Math.min(uni, current + 1);
+      valueEl.textContent = current;
+    });
+
+    ctrl.querySelector('.btn-save').addEventListener('click', () => saveQuantity(id, current, card));
+  }
 }
 
+// ── Guardar cantidad ───────────────────────────────────────────────────────
 async function saveQuantity(id, cantidad, card) {
   try {
     const res = await api.updateQuantity(id, cantidad);
@@ -200,20 +333,124 @@ async function saveQuantity(id, cantidad, card) {
     card.classList.toggle('completed', isCompleted);
     card.querySelector('.pick-estado').textContent = res.estado;
     card.querySelector('.pick-estado').className = `pick-estado ${isCompleted ? 'estado-ok' : 'estado-pend'}`;
-    card.querySelector('.step-input').value = cantidad;
-    // Ocultar/mostrar botón Entregado según estado
-    const btnEnt = card.querySelector('.btn-entregado');
-    if (btnEnt) btnEnt.style.display = isCompleted ? 'none' : '';
+
+    renderControls(card, cantidad, isCompleted);
+    aplicarFiltroPendientes(card.closest('#results, .cliente-picks-content') || document.getElementById('results'));
+
+    if (navigator.vibrate) navigator.vibrate(isCompleted ? [60, 40, 60] : 40);
+    if (isCompleted) playBeep(880, 80);
+
     showToast(isCompleted ? '✓ Completado' : 'Actualizado', isCompleted ? 'success' : 'info');
+
+    if (isCompleted) checkClienteCompleto(card.dataset.nombre);
+
+    updateSheetProgress();
     loadStats();
   } catch (err) {
     showToast(err.message, 'error');
   }
 }
 
-// ── Búsqueda por descripción ───────────────────────────────────────────────
-let descripTimer = null;
+// ── Chequeo cliente completo ───────────────────────────────────────────────
+function checkClienteCompleto(nombre) {
+  if (!nombre) return;
+  const allCards = Array.from(document.querySelectorAll('.pick-card[data-nombre]'));
+  const clientCards = allCards.filter((c) => c.dataset.nombre === nombre);
+  if (clientCards.length > 0 && clientCards.every((c) => c.classList.contains('completed'))) {
+    playCompletionSound();
+    showToast(`🎉 ${nombre} — ¡listo para despacho!`, 'success');
+  }
+}
 
+// ── Progreso en bottom-sheet ───────────────────────────────────────────────
+function updateSheetProgress() {
+  const content = document.getElementById('cliente-picks-content');
+  const el = document.getElementById('cliente-picks-progress');
+  if (!el || !content) return;
+  const all = content.querySelectorAll('.pick-card').length;
+  const done = content.querySelectorAll('.pick-card.completed').length;
+  el.textContent = all > 0 ? `${done} / ${all} completados` : '';
+}
+
+// ── Sonido ─────────────────────────────────────────────────────────────────
+function playBeep(freq = 880, ms = 80) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + ms / 1000);
+    osc.start();
+    osc.stop(ctx.currentTime + ms / 1000);
+    setTimeout(() => ctx.close(), ms + 50);
+  } catch (_) {}
+}
+
+function playCompletionSound() {
+  playBeep(880, 100);
+  setTimeout(() => playBeep(1100, 160), 130);
+}
+
+// ── Loop de decodificación rotada (90°) ───────────────────────────────────
+const _rotCanvas = document.createElement('canvas');
+const _rotCtx = _rotCanvas.getContext('2d', { willReadFrequently: true });
+
+async function runRotatedDecodeLoop(video) {
+  while (scannerActive) {
+    await new Promise((r) => requestAnimationFrame(r));
+    if (!scannerActive || video.videoWidth === 0 || video.readyState < 2) continue;
+
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+
+    // Frame rotado 90° — convierte barcodes verticales en horizontales para ZXing
+    _rotCanvas.width = vh;
+    _rotCanvas.height = vw;
+    _rotCtx.save();
+    _rotCtx.translate(vh / 2, vw / 2);
+    _rotCtx.rotate(Math.PI / 2);
+    _rotCtx.drawImage(video, -vw / 2, -vh / 2, vw, vh);
+    _rotCtx.restore();
+
+    try {
+      const lum = new ZXing.HTMLCanvasElementLuminanceSource(_rotCanvas);
+      const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+      const result = codeReader.reader.decode(bmp);
+      if (scannerActive && result) {
+        onScanResult(result);
+        return;
+      }
+    } catch (_) {
+      // NotFoundException en este frame — continuar
+    }
+  }
+}
+
+// ── Wake Lock ──────────────────────────────────────────────────────────────
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try { wakeLock = await navigator.wakeLock.request('screen'); } catch (_) {}
+  }
+}
+
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+}
+
+// ── Precalentar cámara ─────────────────────────────────────────────────────
+// Solo solicita el permiso sin abrir stream (evita conflictos con ZXing)
+async function prewarmCamera() {
+  if (!navigator.mediaDevices?.enumerateDevices) return;
+  try {
+    // enumerateDevices dispara el diálogo de permiso sin abrir stream
+    await navigator.mediaDevices.enumerateDevices();
+  } catch (_) {}
+}
+
+// ── Búsqueda por descripción ───────────────────────────────────────────────
 document.getElementById('descrip-input').addEventListener('input', (e) => {
   clearTimeout(descripTimer);
   const q = e.target.value.trim();
@@ -262,9 +499,6 @@ function hideDescripResults() {
 }
 
 // ── Camera scanner ─────────────────────────────────────────────────────────
-let cameras = [];
-let currentCameraIndex = 0;
-
 document.getElementById('scan-btn').addEventListener('click', async () => {
   if (scannerActive) stopScanner();
   else await startScanner();
@@ -274,6 +508,7 @@ function onScanResult(result) {
   if (!result) return;
   const code = result.getText();
   document.getElementById('barcode-input').value = code;
+  if (navigator.vibrate) navigator.vibrate(80);
   stopScanner();
   searchBarcode(code);
 }
@@ -284,14 +519,28 @@ async function startScanner(deviceId = null) {
   document.getElementById('scan-btn').textContent = 'Detener';
   scannerActive = true;
 
-  // Última cámara guardada, o null (ZXing usa facingMode:environment con null)
-  const targetId = deviceId ?? localStorage.getItem('pick_last_camera') ?? null;
+  await requestWakeLock();
 
-  const hints = new Map([[3, true]]); // TRY_HARDER
-  codeReader = new ZXing.BrowserMultiFormatReader(hints, 300);
+  const targetId = deviceId ?? localStorage.getItem('pick_last_camera') ?? null;
+  const hints = new Map([
+    [2, [                          // POSSIBLE_FORMATS — solo códigos de barra lineales
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.UPC_E,
+    ]],
+    [3, true],                     // TRY_HARDER
+  ]);
+  codeReader = new ZXing.BrowserMultiFormatReader(hints, 0); // 0ms = decodifica cada frame
+
   await codeReader.decodeFromVideoDevice(targetId, 'scanner-video', onScanResult);
 
   container.classList.add('scanner-open');
+
+  // Loop paralelo que decodifica el frame rotado 90° — cubre cualquier orientación del código
+  runRotatedDecodeLoop(document.getElementById('scanner-video'));
 
   const devices = await navigator.mediaDevices.enumerateDevices();
   cameras = devices.filter((d) => d.kind === 'videoinput');
@@ -313,7 +562,6 @@ async function startScanner(deviceId = null) {
   }
 }
 
-// Tap para enfocar en el punto tocado
 document.getElementById('scanner-video').addEventListener('click', async (e) => {
   const video = e.currentTarget;
   if (!video.srcObject || !scannerActive) return;
@@ -322,7 +570,6 @@ document.getElementById('scanner-video').addEventListener('click', async (e) => 
   const x = (e.clientX - rect.left) / rect.width;
   const y = (e.clientY - rect.top) / rect.height;
 
-  // Indicador visual
   const ind = document.getElementById('focus-indicator');
   ind.style.left = (e.clientX - rect.left) + 'px';
   ind.style.top  = (e.clientY - rect.top)  + 'px';
@@ -335,14 +582,13 @@ document.getElementById('scanner-video').addEventListener('click', async (e) => 
   try {
     await track.applyConstraints({ advanced: [{ focusMode: 'manual', pointsOfInterest: [{ x, y }] }] });
     setTimeout(() => track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}), 1500);
-  } catch {}
+  } catch (_) {}
 });
-
 
 async function switchCamera() {
   if (cameras.length <= 1) return;
   currentCameraIndex = (currentCameraIndex + 1) % cameras.length;
-  if (codeReader) { codeReader.reset(); codeReader = null; }
+  if (codeReader) { codeReader.reset(); }
   const video = document.getElementById('scanner-video');
   if (video.srcObject) { video.srcObject.getTracks().forEach((t) => t.stop()); video.srcObject = null; }
   await startScanner(cameras[currentCameraIndex].deviceId);
@@ -351,8 +597,7 @@ async function switchCamera() {
 function stopScanner() {
   if (!scannerActive) return;
   scannerActive = false;
-
-  document.getElementById('scanner-container').classList.remove('scanner-open');
+  releaseWakeLock();
 
   if (codeReader) { codeReader.reset(); codeReader = null; }
   const video = document.getElementById('scanner-video');
@@ -360,15 +605,13 @@ function stopScanner() {
 
   cameras = [];
   currentCameraIndex = 0;
+  document.getElementById('scanner-container').classList.remove('scanner-open');
   document.getElementById('scanner-container').classList.add('hidden');
   document.getElementById('scan-btn').textContent = 'Escanear';
   document.getElementById('switch-camera-btn').classList.add('hidden');
 }
 
 // ── Tab: Clientes ──────────────────────────────────────────────────────────
-let resumenData = [];
-let filtroActivo = 'todos';
-
 async function loadResumen() {
   const container = document.getElementById('resumen-list');
   container.innerHTML = '<p class="loading">Cargando...</p>';
@@ -388,11 +631,19 @@ document.querySelectorAll('.filter-btn').forEach((btn) => {
   });
 });
 
-function renderResumen() {
+document.getElementById('clientes-search').addEventListener('input', (e) => {
+  renderResumen(e.target.value.trim().toLowerCase());
+});
+
+function renderResumen(searchQ = '') {
   const container = document.getElementById('resumen-list');
-  const filtered = filtroActivo === 'todos'
+  let filtered = filtroActivo === 'todos'
     ? resumenData
     : resumenData.filter((r) => r.estado_general === filtroActivo);
+
+  if (searchQ) {
+    filtered = filtered.filter((r) => r.nombre.toLowerCase().includes(searchQ));
+  }
 
   if (!filtered.length) {
     container.innerHTML = '<p class="loading">Sin resultados</p>';
@@ -414,8 +665,7 @@ function renderResumen() {
 
   container.querySelectorAll('.resumen-card').forEach((card) => {
     card.addEventListener('click', () => {
-      const nombre = decodeURIComponent(card.dataset.nombre);
-      abrirPicksCliente(nombre);
+      abrirPicksCliente(decodeURIComponent(card.dataset.nombre));
     });
   });
 }
@@ -423,6 +673,7 @@ function renderResumen() {
 // ── Picks por cliente (bottom-sheet) ──────────────────────────────────────
 async function abrirPicksCliente(nombre) {
   document.getElementById('cliente-picks-title').textContent = nombre;
+  document.getElementById('cliente-picks-progress').textContent = '';
   const content = document.getElementById('cliente-picks-content');
   content.innerHTML = '<p class="loading">Cargando...</p>';
   document.getElementById('cliente-picks-overlay').classList.remove('hidden');
@@ -433,6 +684,7 @@ async function abrirPicksCliente(nombre) {
       content.innerHTML = '<p class="loading">Sin items</p>';
     } else {
       renderPicks(picks, content);
+      updateSheetProgress();
     }
   } catch (err) {
     content.innerHTML = `<p class="error-msg">${err.message}</p>`;
@@ -441,7 +693,6 @@ async function abrirPicksCliente(nombre) {
 
 document.getElementById('cliente-picks-close').addEventListener('click', () => {
   document.getElementById('cliente-picks-overlay').classList.add('hidden');
-  // Recargar resumen por si cambió algún estado
   loadResumen();
 });
 
@@ -450,6 +701,24 @@ document.getElementById('cliente-picks-overlay').addEventListener('click', (e) =
     document.getElementById('cliente-picks-overlay').classList.add('hidden');
     loadResumen();
   }
+});
+
+document.getElementById('btn-completar-todo').addEventListener('click', async () => {
+  const content = document.getElementById('cliente-picks-content');
+  const pendientes = Array.from(content.querySelectorAll('.pick-card:not(.completed)'));
+  if (pendientes.length === 0) { showToast('No hay items pendientes', 'info'); return; }
+
+  const btn = document.getElementById('btn-completar-todo');
+  btn.disabled = true;
+
+  for (const card of pendientes) {
+    const id = parseInt(card.dataset.pickId);
+    const uni = parseInt(card.dataset.uni) || 0;
+    await saveQuantity(id, uni, card);
+  }
+
+  btn.disabled = false;
+  loadResumen();
 });
 
 // ── Tab: Admin ─────────────────────────────────────────────────────────────
@@ -478,13 +747,21 @@ document.getElementById('admin-unlock-form').addEventListener('submit', async (e
 
 document.getElementById('btn-nuevo-cliente').addEventListener('click', () => openClienteForm(null));
 
+// ── Admin búsqueda de clientes ─────────────────────────────────────────────
+document.getElementById('admin-clientes-search').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  document.querySelectorAll('#clientes-tbody tr').forEach((row) => {
+    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+
 async function loadClientes() {
   const tbody = document.getElementById('clientes-tbody');
   tbody.innerHTML = '<tr><td colspan="6" class="loading">Cargando...</td></tr>';
   try {
     const clientes = await api.getClientes();
     tbody.innerHTML = clientes.map((c) => `
-      <tr>
+      <tr data-id="${c.id}">
         <td>${c.nombre ?? ''}</td>
         <td>${c.localidad ?? ''}</td>
         <td>${c.telefono ?? ''}</td>
@@ -496,6 +773,13 @@ async function loadClientes() {
         </td>
       </tr>
     `).join('');
+    // Reaplicar filtro de búsqueda si hay texto
+    const q = document.getElementById('admin-clientes-search').value.toLowerCase();
+    if (q) {
+      document.querySelectorAll('#clientes-tbody tr').forEach((row) => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    }
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="6" class="error-msg">${err.message}</td></tr>`;
   }
@@ -503,26 +787,28 @@ async function loadClientes() {
 
 function openClienteForm(id) {
   editingClienteId = id;
-  const modal = document.getElementById('cliente-modal');
-  const title = document.getElementById('modal-title');
-  title.textContent = id ? 'Editar cliente' : 'Nuevo cliente';
+  document.getElementById('modal-title').textContent = id ? 'Editar cliente' : 'Nuevo cliente';
 
-  ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'].forEach((f) => {
-    document.getElementById(`cf-${f}`).value = '';
-  });
+  const fields = ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'];
+  fields.forEach((f) => { document.getElementById(`cf-${f}`).value = ''; });
 
   if (id) {
+    // Buscar en las filas ya cargadas en la tabla en lugar de llamar API de nuevo
+    const row = document.querySelector(`#clientes-tbody tr[data-id="${id}"]`);
+    if (row) {
+      const cells = row.querySelectorAll('td');
+      const mapping = ['nombre', 'localidad', null, 'telefono', 'contacto', 'vendedor'];
+      // La tabla no tiene dirección, necesitamos la API solo para ese campo
+    }
     api.getClientes().then((list) => {
       const c = list.find((x) => x.id === id);
       if (c) {
-        ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'].forEach((f) => {
-          document.getElementById(`cf-${f}`).value = c[f] ?? '';
-        });
+        fields.forEach((f) => { document.getElementById(`cf-${f}`).value = c[f] ?? ''; });
       }
     });
   }
 
-  modal.classList.remove('hidden');
+  document.getElementById('cliente-modal').classList.remove('hidden');
 }
 
 document.getElementById('modal-close').addEventListener('click', () => {
@@ -561,6 +847,89 @@ async function deleteCliente(id) {
     showToast(err.message, 'error');
   }
 }
+
+// ── Admin: Semanas ─────────────────────────────────────────────────────────
+async function loadSemanasAdmin() {
+  const list = document.getElementById('semanas-admin-list');
+  if (!list) return;
+  try {
+    const semanas = await api.getSemanas();
+    if (semanas.length === 0) {
+      list.innerHTML = '<p class="semana-admin-empty">No hay semanas cargadas</p>';
+      return;
+    }
+    list.innerHTML = semanas.map((s) => `
+      <div class="semana-admin-item">
+        <span class="semana-nombre-tag">${s.nombre}</span>
+        <button class="btn-del" onclick="deleteSemana(${s.id}, '${s.nombre.replace(/'/g, "\\'")}')">Eliminar</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    list.innerHTML = `<p class="error-msg">${err.message}</p>`;
+  }
+}
+
+async function deleteSemana(id, nombre) {
+  if (!confirm(`¿Eliminar "${nombre}" del selector?\n\nLos picks quedan guardados para análisis futuro.`)) return;
+  try {
+    await api.deleteSemana(id);
+    showToast(`Semana ${nombre} eliminada`, 'info');
+    await loadSemanas();
+    loadSemanasAdmin();
+    if (semanaActual === nombre) {
+      semanaActual = document.getElementById('semana-select').value;
+      loadStats();
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ── Admin: Usuarios ────────────────────────────────────────────────────────
+async function loadUsers() {
+  const tbody = document.getElementById('users-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="3" class="loading">Cargando...</td></tr>';
+  try {
+    const users = await api.getUsers();
+    tbody.innerHTML = users.map((u) => `
+      <tr>
+        <td>${u.email}</td>
+        <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
+        <td class="td-actions">
+          <button class="btn-del" onclick="deleteUser(${u.id})">Eliminar</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
+  }
+}
+
+async function deleteUser(id) {
+  if (!confirm('¿Eliminar este usuario?')) return;
+  try {
+    await api.deleteUser(id);
+    showToast('Usuario eliminado', 'info');
+    loadUsers();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+document.getElementById('nuevo-usuario-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = document.getElementById('nu-email').value.trim();
+  const password = document.getElementById('nu-password').value;
+  try {
+    await api.createUser(email, password);
+    showToast(`Usuario ${email} creado`, 'success');
+    document.getElementById('nuevo-usuario-form').reset();
+    loadUsers();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
 
 // ── Admin: Nueva Semana ────────────────────────────────────────────────────
 document.getElementById('db-file-input').addEventListener('change', (e) => {
@@ -601,6 +970,7 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
     const res = await api.importarSemana(formData);
     await loadSemanas();
     loadStats();
+    loadSemanasAdmin();
 
     if (res.clientes_no_encontrados.length === 0) {
       resultPanel.className = 'import-result result-ok';
@@ -617,14 +987,15 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
         <div class="import-result-title warn">
           ${res.picks_importados} picks importados — ${res.clientes_no_encontrados.length} cliente${res.clientes_no_encontrados.length > 1 ? 's' : ''} sin datos
         </div>
-        Los siguientes IDs de cliente no están registrados en la tabla de clientes.
-        Anotalos y andá a la tab <strong>Clientes</strong> para agregarlos con su nombre y localidad:
+        Los siguientes IDs no están en la tabla de clientes. Andá a Admin → Clientes para agregarlos:
         <div class="import-missing-list">${tags}</div>
       `;
     }
+    resultPanel.classList.remove('hidden');
   } catch (err) {
     resultPanel.className = 'import-result result-warn';
     resultPanel.innerHTML = `<div class="import-result-title warn">Error</div>${err.message}`;
+    resultPanel.classList.remove('hidden');
   } finally {
     btn.disabled = files.length === 0;
     btn.textContent = 'Importar picks';
