@@ -1,5 +1,4 @@
-# Env files (nunca al repo)
-backend/.env
+# Env files de entornos no-dev (tienen credenciales reales)
 backend/.env.qa
 backend/.env.prod
 
@@ -10,6 +9,7 @@ __pycache__/
 .venv/
 venv/
 .env
+!backend/.env
 
 # macOS
 .DS_Store

@@ -64,8 +64,14 @@ const api = {
   changePassword: (current_password, new_password) =>
     request('PUT', '/api/auth/password', { current_password, new_password }),
 
+  // Usuarios (admin)
+  getUsers: () => request('GET', '/api/auth/users'),
+  createUser: (email, password) => request('POST', '/api/auth/users', { email, password }),
+  deleteUser: (id) => request('DELETE', `/api/auth/users/${id}`),
+
   // Semanas
   getSemanas: () => request('GET', '/api/semanas/'),
+  deleteSemana: (id) => request('DELETE', `/api/semanas/${id}`),
   importarSemana: async (formData) => {
     const token = getToken();
     const res = await fetch(`${API_BASE}/api/semanas/importar`, {

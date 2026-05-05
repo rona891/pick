@@ -143,3 +143,13 @@ async def importar_semana(
         "semana": nombre,
         "clientes_no_encontrados": sorted(no_encontrados),
     }
+
+
+@router.delete("/{id}")
+def delete_semana(id: int):
+    with get_db() as cur:
+        cur.execute("DELETE FROM semanas WHERE id = %s RETURNING nombre", (id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Semana no encontrada")
+    return {"message": f"Semana eliminada", "nombre": row["nombre"]}

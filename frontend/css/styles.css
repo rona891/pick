@@ -354,7 +354,7 @@ input:focus { border-color: var(--accent); }
   cursor: pointer;
 }
 
-/* Modo pantalla completa sin fullscreen API */
+/* Pantalla completa */
 #scanner-container.scanner-open {
   position: fixed;
   top: 0;
@@ -922,4 +922,319 @@ input[type="date"]:focus { border-color: var(--accent); }
   .pick-actions { width: 100%; }
   .btn-save { flex: 1; }
   .resumen-card { flex-wrap: wrap; }
+}
+
+/* ── Progress bar ─────────────────────────────────────────────────────────── */
+.progress-bar-wrap {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width .4s ease, background .4s;
+}
+
+/* ── Scanner: mantiene fullscreen, guía visual sobre el video ─────────────── */
+
+/* ── Scanner guide overlay ────────────────────────────────────────────────── */
+.scanner-guide-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.scanner-guide-rect {
+  width: 70%;
+  height: 45%;
+  border: 2px solid transparent;
+  position: relative;
+}
+
+/* Esquinas en accent color */
+.scanner-guide-rect::before,
+.scanner-guide-rect::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: var(--accent);
+  border-style: solid;
+}
+.scanner-guide-rect::before {
+  top: -2px; left: -2px;
+  border-width: 3px 0 0 3px;
+}
+.scanner-guide-rect::after {
+  bottom: -2px; right: -2px;
+  border-width: 0 3px 3px 0;
+}
+
+/* Esquinas adicionales via box-shadow trick: usamos pseudo en un hijo */
+.scanner-guide-rect .corner-tr,
+.scanner-guide-rect .corner-bl {
+  display: none; /* usamos outline en el rect */
+}
+
+/* Extra corners */
+.scanner-guide-overlay::before {
+  content: '';
+  position: absolute;
+  width: calc(70% + 4px);
+  height: calc(45% + 4px);
+  pointer-events: none;
+}
+
+.scanner-guide-hint {
+  color: rgba(255,255,255,.85);
+  font-family: var(--font);
+  font-size: 11px;
+  text-align: center;
+  margin-top: 12px;
+  letter-spacing: .5px;
+  text-shadow: 0 1px 4px rgba(0,0,0,.8);
+}
+
+/* ── Historial de búsquedas ───────────────────────────────────────────────── */
+.historial-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.historial-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  white-space: nowrap;
+}
+
+.historial-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.hist-chip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: color .2s, border-color .2s;
+  white-space: nowrap;
+}
+
+.hist-chip:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ── Solo pendientes ──────────────────────────────────────────────────────── */
+.pick-filters-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.btn-solo-pend {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: color .2s, border-color .2s;
+}
+
+.btn-solo-pend:hover { color: var(--text); border-color: var(--muted); }
+.btn-solo-pend.active { color: var(--accent); border-color: var(--accent); }
+
+/* ── Pick card: nuevo stepper ─────────────────────────────────────────────── */
+.btn-entregado {
+  /* Heredado — solo actualiza el label via JS */
+  letter-spacing: .3px;
+  font-size: 14px;
+}
+
+.pick-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.btn-step-minus,
+.btn-step-plus {
+  width: 40px;
+  height: 40px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 20px;
+  font-family: var(--font);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color .2s, color .2s;
+  line-height: 1;
+  padding-bottom: 2px;
+}
+
+.btn-step-minus:active { color: var(--red); border-color: var(--red); }
+.btn-step-plus:active  { color: var(--green); border-color: var(--green); }
+
+.step-value {
+  min-width: 36px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.btn-save {
+  flex: 1;
+  height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.btn-undo {
+  width: 100%;
+  height: 36px;
+  font-size: 12px;
+}
+
+/* ── Búsqueda en clientes ─────────────────────────────────────────────────── */
+.clientes-search-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color .2s;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.clientes-search-input:focus { border-color: var(--accent); }
+
+/* ── Bottom sheet mejorado ────────────────────────────────────────────────── */
+.sheet-header {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sheet-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.sheet-header-info > span:first-child {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sheet-progress {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: .3px;
+}
+
+.sheet-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-completar-todo {
+  background: none;
+  border: 1px solid var(--green);
+  border-radius: var(--radius);
+  color: var(--green);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .2s;
+}
+
+.btn-completar-todo:active { background: #1e3a2a; }
+
+/* ── Admin: secciones nuevas ──────────────────────────────────────────────── */
+.admin-section-title {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.admin-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 24px 0;
+}
+
+.semanas-admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.semana-admin-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.semana-admin-item .semana-nombre-tag {
+  flex: 1;
+  color: var(--text);
+}
+
+.semana-admin-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 8px 0;
+  text-align: center;
 }

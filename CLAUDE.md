@@ -47,22 +47,21 @@ pick/
 │   ├── .env.example            # Variables de entorno requeridas
 │   ├── app/
 │   │   ├── api/
-│   │   │   ├── auth.py         # POST /api/auth/login, /logout
+│   │   │   ├── auth.py         # POST /api/auth/login, /logout, PUT /password
 │   │   │   ├── picks.py        # GET /api/picks/stats, /resumen, /barcode/{cod}, PUT /{id}/quantity
-│   │   │   ├── clientes.py     # CRUD /api/clientes/ — ⚠️ usa Supabase, no PostgreSQL (ver deuda técnica)
+│   │   │   ├── clientes.py     # CRUD /api/clientes/ (PostgreSQL)
+│   │   │   ├── semanas.py      # GET /api/semanas/, POST /importar (importa .db de Yaguar)
 │   │   │   ├── admin.py        # POST /api/admin/verify (verifica contraseña de admin)
 │   │   │   └── health.py       # GET /health
 │   │   ├── auth/
 │   │   │   └── jwt.py          # hash_password, verify_password, create_access_token, verify_token
 │   │   ├── db/
-│   │   │   ├── database.py     # Pool psycopg2 (ThreadedConnectionPool 1–10), context manager get_db()
-│   │   │   └── supabase.py     # Cliente Supabase (legacy, solo usado por clientes.py)
+│   │   │   └── database.py     # Pool psycopg2 (ThreadedConnectionPool 1–10), context manager get_db()
 │   │   └── models/
 │   │       └── schemas.py      # Modelos Pydantic: Pick, QuantityUpdate, LoginRequest/Response, etc.
-│   └── scripts/
-│       └── migrate_from_supabase.py  # Script one-shot de migración (ya ejecutado)
 ├── database/
-│   └── init.sql                # DDL: crea tablas users, pick, clientes_yaguar
+│   ├── init.sql                # DDL: crea tablas users, pick, semanas, clientes_yaguar
+│   └── seed.sql                # Datos iniciales: clientes, picks de ejemplo, usuario admin
 ├── docker-compose.yml          # Entorno dev (db + backend + frontend)
 ├── docker-compose.qa.yml       # Overrides para QA (extiende docker-compose.yml)
 ├── docker-compose.prod.yml     # Overrides para producción
@@ -97,11 +96,12 @@ Cada fila es un artículo que debe ser pickeado para un cliente.
 | `cod_bar` | Código de barras del artículo (llave de búsqueda) |
 | `cod_art` | Código interno del artículo |
 | `descrip` | Descripción del artículo |
-| `nombre` | Nombre del operario asignado |
-| `cliente` | Nombre del cliente destino |
+| `nombre` | Nombre del cliente (display name, ej: "SUPER EL MORENO 619464") |
+| `cliente` | ID del cliente en Yaguar (ej: "619464") |
 | `localidad` | Localidad del cliente |
 | `uni` | Unidades requeridas (objetivo) |
 | `bul` | Bultos |
+| `uxb` | Unidades por bulto (ART_UNI_BULTO de Yaguar) |
 | `cantidad_pickeada` | Unidades ya pickeadas (actualizado por operario) |
 | `estado` | Calculado: `completado: X/Y UNI` o `pendiente: X/Y UNI` |
 | `semana` | Semana de despacho |
@@ -114,7 +114,7 @@ Cada fila es un artículo que debe ser pickeado para un cliente.
 5. El frontend actualiza la card y recarga las stats del header.
 
 ### Resumen (tab "Clientes")
-- `GET /api/picks/resumen` agrupa por `nombre` (operario) y calcula cuántos items tiene completos/pendientes.
+- `GET /api/picks/resumen` agrupa por `nombre` (cliente) y calcula cuántos items tiene completos/pendientes.
 - Estados posibles: `completo`, `incompleto`, `pendiente`.
 - Filtrable por estado en el frontend.
 
@@ -144,8 +144,6 @@ Cada fila es un artículo que debe ser pickeado para un cliente.
 1. **Rutas sin autenticación**: `verify_token()` existe en `jwt.py` pero **no se usa como dependencia** en ninguna ruta. Todos los endpoints de picks, stats y resumen son públicos (el cliente envía el JWT pero el backend no lo valida).
 
 2. **Límite duro de 200 filas**: `list_picks()` usa `LIMIT 200` sin paginación.
-
-3. **Modal de edición de cliente ineficiente**: al abrir el modal de edición, llama a `api.getClientes()` nuevamente para buscar el cliente por id en lugar de reusar los datos ya cargados.
 
 ---
 
@@ -193,75 +191,33 @@ gh pr create --base qa --title "..." --body "..."
 
 ### Pasos
 
-**1. Clonar el repo (si no está clonado)**
+**1. Clonar el repo y pararse en la branch correcta**
 ```bash
 git clone https://github.com/mia-m64/pick.git
 cd pick
+git checkout qa          # o la branch de feature en la que vas a trabajar
 ```
 
-**2. Crear el archivo de variables de entorno**
-```bash
-cp backend/.env.example backend/.env
-```
-
-Editar `backend/.env` con los valores reales:
-```env
-DATABASE_URL=postgresql://picking:picking_secret@db:5432/picking
-SECRET_KEY=<generar con: python -c "import secrets; print(secrets.token_hex(32))">
-ENVIRONMENT=development
-DEBUG=True
-API_PORT=8000
-FRONTEND_URL=https://localhost:3000
-ADMIN_PASSWORD=<contraseña-de-admin>
-ACCESS_TOKEN_EXPIRE_MINUTES=1440
-```
-
-> **Nota:** ya no se necesitan variables de Supabase. La app usa solo PostgreSQL.
-
-**3. Levantar el proyecto**
+**2. Levantar el proyecto**
 ```bash
 docker compose up --build
 ```
 
-El primer arranque descarga imágenes, instala dependencias y crea el schema de la DB. Puede tardar un par de minutos.
+El primer arranque descarga imágenes, instala dependencias, crea el schema y carga los datos de seed. Puede tardar un par de minutos.
 
-**4. Verificar que todo funciona**
-- Frontend: **https://localhost:3000** (acepta el certificado autofirmado la primera vez)
+**3. Verificar que todo funciona**
+- Frontend: **https://localhost:3000** (aceptar el certificado autofirmado la primera vez)
 - Backend API docs: http://localhost:8000/docs
 - Health check: https://localhost:3000/health
 
 > **Desde celular** usar `https://<IP-local>:3000`. Aceptar el aviso de certificado autofirmado la primera vez.
 
-**5. Crear un usuario para poder hacer login**
+El seed ya incluye:
+- Usuario de acceso: `admin@picking.local` / `admin123`
+- Directorio completo de clientes de Yaguar
+- Semana de ejemplo: "PICK 28-04-2026" con picks reales
 
-El schema no incluye usuarios por defecto. Guardá el siguiente script en un archivo y ejecutalo:
-
-```bash
-# Crear archivo temporal
-cat > /tmp/create_user.py << 'EOF'
-from app.auth.jwt import hash_password
-import psycopg2
-from config import settings
-conn = psycopg2.connect(settings.DATABASE_URL)
-cur = conn.cursor()
-cur.execute(
-    "INSERT INTO users (email, password_hash) VALUES (%s, %s) ON CONFLICT (email) DO NOTHING",
-    ('admin@picking.local', hash_password('admin123'))
-)
-conn.commit(); cur.close(); conn.close()
-print('Usuario creado: admin@picking.local / admin123')
-EOF
-
-docker compose cp /tmp/create_user.py backend:/app/create_user.py
-docker compose exec backend python create_user.py
-docker compose exec backend rm create_user.py
-```
-
-**6. Importar clientes de Yaguar (necesario para que los picks muestren nombres)**
-
-La tabla `clientes_yaguar` necesita estar cargada con los clientes reales (columna `id_yaguar` es la clave de match). Hacerlo desde Admin → Clientes usando el CRUD, o bien importar masivamente desde el Excel de Yaguar (ver sección de importación más abajo).
-
-**7. Importar picks (primera semana)**
+**4. Importar una semana nueva (cuando sea necesario)**
 
 Desde Admin → Nueva Semana: subir los archivos `.db` de cada vendedor, completar nombre y fechas, y presionar "Importar picks".
 
@@ -315,11 +271,10 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
 | `ENVIRONMENT` | No | `development` / `qa` / `production` |
 | `DEBUG` | No | `True` / `False` |
 | `API_PORT` | No | Puerto del backend (default: 8000) |
-| `FRONTEND_URL` | Sí | URL del frontend para CORS |
 | `ADMIN_PASSWORD` | Sí | Contraseña del panel admin |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | No | Expiración JWT (default: 1440) |
-| `SUPABASE_URL` | Temporal | Solo mientras clientes.py use Supabase |
-| `SUPABASE_KEY` | Temporal | Solo mientras clientes.py use Supabase |
+
+> El archivo `backend/.env` está versionado con valores de desarrollo. Solo `backend/.env.qa` y `backend/.env.prod` son gitignoreados (tienen credenciales reales).
 
 ---
 
@@ -327,7 +282,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
 
 ### Código Python (backend)
 - Sin type hints explícitos en funciones simples; sí en las que los tienen actualmente.
-- Endpoints sincrónicos (`def`) para queries a PostgreSQL, asíncronos (`async def`) para llamadas a Supabase.
+- Endpoints sincrónicos (`def`) — toda la DB es psycopg2 síncrono.
 - El context manager `get_db()` maneja automáticamente commit/rollback.
 - Los schemas Pydantic van todos en `models/schemas.py`.
 - Sin comentarios excepto cuando el `por qué` no es obvio.
@@ -345,7 +300,9 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
 - Mobile-first. Sin media queries complejos — la app es para celular.
 
 ### Base de datos
-- Migraciones: por ahora se hacen manualmente editando `database/init.sql` y recreando el contenedor con `docker compose down -v && docker compose up`.
+- `database/init.sql` define el schema completo para setups frescos.
+- `main.py` (`lifespan`) también aplica las migraciones con `ALTER TABLE IF NOT EXISTS` al arrancar, lo que permite actualizar volúmenes existentes sin necesidad de `down -v`.
+- Para agregar una columna nueva: actualizá `init.sql` Y agregá el `ALTER TABLE` en el lifespan de `main.py`.
 - No hay ORM — todas las queries son SQL directo con psycopg2.
 
 ---
