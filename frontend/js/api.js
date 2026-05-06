@@ -25,7 +25,7 @@ async function request(method, path, body = null) {
 
   if (res.status === 401) {
     clearToken();
-    window.location.reload();
+    window.location.href = '/';
     return;
   }
 
