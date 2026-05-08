@@ -664,7 +664,7 @@ INSERT INTO public.semanas VALUES (1, 'PICK 28-04-2026', '2026-05-04 01:27:51.05
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: picking
 --
 
-INSERT INTO public.users VALUES (1, 'admin@picking.local', '$2b$12$mxuYF6RS7KKSZCWq8rqMoeIvWfMByfVIPGD/2kx5OFBfte/rZ.mVO', '2026-05-03 20:24:30.230815+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.users (id, username, password_hash, created_at) VALUES (1, 'admin@picking.local', '$2b$12$mxuYF6RS7KKSZCWq8rqMoeIvWfMByfVIPGD/2kx5OFBfte/rZ.mVO', '2026-05-03 20:24:30.230815+00') ON CONFLICT DO NOTHING;
 
 
 --

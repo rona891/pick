@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
@@ -21,8 +24,8 @@
       <div class="login-sub">Sistema de gestión de almacén</div>
       <form id="login-form">
         <div class="form-group">
-          <label for="email">Email</label>
-          <input type="email" id="email" autocomplete="email" required />
+          <label for="email">Usuario</label>
+          <input type="text" id="email" autocomplete="username" required />
         </div>
         <div class="form-group">
           <label for="password">Contraseña</label>
@@ -39,7 +42,8 @@
     <div class="topbar">
       <div class="app-title">PICKING</div>
       <div class="topbar-actions">
-        <button id="change-pw-btn" class="btn-logout">Contraseña</button>
+        <button id="btn-fullscreen" class="btn-logout btn-fullscreen-mobile" title="Pantalla completa">⛶</button>
+        <button id="change-pw-btn" class="btn-logout">Cuenta</button>
         <button id="logout-btn" class="btn-logout">Salir</button>
       </div>
     </div>
@@ -54,7 +58,10 @@
 
     <!-- Barra de progreso -->
     <div class="progress-bar-wrap">
-      <div id="progress-bar-fill" class="progress-bar-fill"></div>
+      <div class="progress-bar-track">
+        <div id="progress-bar-fill" class="progress-bar-fill"></div>
+      </div>
+      <span id="progress-pct" class="progress-pct">0%</span>
     </div>
 
     <!-- Stats -->
@@ -221,7 +228,7 @@
             <table class="clientes-table">
               <thead>
                 <tr>
-                  <th>Email</th>
+                  <th>Usuario</th>
                   <th>Creado</th>
                   <th></th>
                 </tr>
@@ -233,8 +240,8 @@
           <div class="admin-section-title" style="margin-bottom:12px">Nuevo usuario</div>
           <form id="nuevo-usuario-form">
             <div class="form-group">
-              <label>Email</label>
-              <input type="email" id="nu-email" required autocomplete="off" />
+              <label>Usuario</label>
+              <input type="text" id="nu-email" required autocomplete="off" />
             </div>
             <div class="form-group">
               <label>Contraseña</label>
@@ -250,28 +257,53 @@
 
   </div>
 
-  <!-- ── Modal cambiar contraseña ─────────────────────────────────────── -->
+  <!-- ── Modal mi cuenta ───────────────────────────────────────────────── -->
   <div id="pw-modal" class="modal-overlay hidden">
-    <div class="modal">
+    <div class="modal cuenta-modal">
       <div class="modal-header">
-        <span>Cambiar contraseña</span>
+        <span>Mi cuenta</span>
         <button id="pw-modal-close" class="modal-close">✕</button>
       </div>
-      <form id="pw-form" style="padding:20px;display:flex;flex-direction:column;gap:0">
-        <div class="form-group">
-          <label>Contraseña actual</label>
-          <input type="password" id="pw-current" required />
-        </div>
-        <div class="form-group">
-          <label>Contraseña nueva</label>
-          <input type="password" id="pw-new" required minlength="8" />
-        </div>
-        <div class="form-group">
-          <label>Repetir contraseña nueva</label>
-          <input type="password" id="pw-confirm" required minlength="8" />
-        </div>
-        <button type="submit" class="btn-primary">Guardar</button>
-      </form>
+
+      <div class="cuenta-section">
+        <div class="cuenta-section-label">Contraseña</div>
+        <form id="pw-form" class="cuenta-form">
+          <div class="cuenta-field">
+            <label>Actual</label>
+            <input type="password" id="pw-current" required />
+          </div>
+          <div class="cuenta-field">
+            <label>Nueva</label>
+            <input type="password" id="pw-new" required minlength="8" />
+          </div>
+          <div class="cuenta-field">
+            <label>Repetir nueva</label>
+            <input type="password" id="pw-confirm" required minlength="8" />
+          </div>
+          <div class="cuenta-form-footer">
+            <button type="submit" class="btn-cuenta">Guardar</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="cuenta-divider"></div>
+
+      <div class="cuenta-section">
+        <div class="cuenta-section-label">Nombre de usuario</div>
+        <form id="username-form" class="cuenta-form">
+          <div class="cuenta-field">
+            <label>Nuevo nombre</label>
+            <input type="text" id="un-new" required autocomplete="off" />
+          </div>
+          <div class="cuenta-field">
+            <label>Contraseña actual</label>
+            <input type="password" id="un-password" required />
+          </div>
+          <div class="cuenta-form-footer">
+            <button type="submit" class="btn-cuenta">Guardar</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -303,7 +335,6 @@
           <span id="cliente-picks-progress" class="sheet-progress"></span>
         </div>
         <div class="sheet-header-actions">
-          <button id="btn-completar-todo" class="btn-completar-todo">✓ Todo</button>
           <button id="cliente-picks-close" class="modal-close">✕</button>
         </div>
       </div>

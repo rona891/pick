@@ -40,7 +40,7 @@ function semanaParam(semana) {
 
 const api = {
   // Auth
-  login: (email, password) => request('POST', '/api/auth/login', { email, password }),
+  login: (username, password) => request('POST', '/api/auth/login', { username, password }),
   logout: () => request('POST', '/api/auth/logout'),
 
   // Picks (todos aceptan semana opcional)
@@ -63,10 +63,12 @@ const api = {
   // Password
   changePassword: (current_password, new_password) =>
     request('PUT', '/api/auth/password', { current_password, new_password }),
+  changeUsername: (current_password, new_username) =>
+    request('PUT', '/api/auth/username', { current_password, new_username }),
 
   // Usuarios (admin)
   getUsers: () => request('GET', '/api/auth/users'),
-  createUser: (email, password) => request('POST', '/api/auth/users', { email, password }),
+  createUser: (username, password) => request('POST', '/api/auth/users', { username, password }),
   deleteUser: (id) => request('DELETE', `/api/auth/users/${id}`),
 
   // Semanas

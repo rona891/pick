@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS users (
     id bigserial PRIMARY KEY,
-    email varchar UNIQUE NOT NULL,
+    username varchar UNIQUE NOT NULL,
     password_hash varchar NOT NULL,
     created_at timestamptz DEFAULT now()
 );

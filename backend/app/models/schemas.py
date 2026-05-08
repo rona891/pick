@@ -17,7 +17,7 @@ class Pick(BaseModel):
     cantidad_pickeada: Optional[int] = 0
     estado: Optional[str] = None
     semana: Optional[str] = None
-    updated_at: Optional[str] = None
+    updated_at: Optional[datetime] = None
 
 
 class QuantityUpdate(BaseModel):
@@ -25,7 +25,7 @@ class QuantityUpdate(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: str
+    username: str
     password: str
 
 
@@ -72,16 +72,21 @@ class AdminVerify(BaseModel):
 
 
 class UserCreate(BaseModel):
-    email: str
+    username: str
     password: str
 
 
 class UserOut(BaseModel):
     id: int
-    email: str
+    username: str
     created_at: Optional[datetime] = None
 
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+
+class ChangeUsernameRequest(BaseModel):
+    current_password: str
+    new_username: str

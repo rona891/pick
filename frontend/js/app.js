@@ -50,7 +50,7 @@ function showApp() {
 // ── Auth ───────────────────────────────────────────────────────────────────
 document.getElementById('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = document.getElementById('email').value.trim();
+  const username = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
   const btn = document.getElementById('login-btn');
 
@@ -58,7 +58,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   btn.textContent = 'Entrando...';
 
   try {
-    const res = await api.login(email, password);
+    const res = await api.login(username, password);
     setToken(res.access_token);
     showApp();
   } catch (err) {
@@ -119,10 +119,12 @@ async function loadStats() {
 
 function updateProgressBar(completed, total) {
   const fill = document.getElementById('progress-bar-fill');
+  const label = document.getElementById('progress-pct');
   if (!fill) return;
   const pct = total > 0 ? Math.round(completed / total * 100) : 0;
   fill.style.width = pct + '%';
   fill.style.background = pct >= 100 ? 'var(--green)' : 'var(--accent)';
+  if (label) { label.textContent = pct + '%'; label.style.color = pct >= 100 ? 'var(--green)' : ''; }
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
@@ -145,16 +147,6 @@ document.getElementById('search-form').addEventListener('submit', async (e) => {
   if (val) await searchBarcode(val);
 });
 
-document.getElementById('barcode-input').addEventListener('focus', () => {
-  renderHistorial();
-  const wrap = document.getElementById('historial-wrap');
-  const hist = JSON.parse(localStorage.getItem('pick_historial') || '[]');
-  if (hist.length > 0) wrap.classList.remove('hidden');
-});
-
-document.getElementById('barcode-input').addEventListener('blur', () => {
-  setTimeout(() => document.getElementById('historial-wrap').classList.add('hidden'), 200);
-});
 
 async function searchBarcode(codBar) {
   const results = document.getElementById('results');
@@ -162,32 +154,56 @@ async function searchBarcode(codBar) {
 
   try {
     const picks = await api.getByBarcode(codBar, semanaActual);
-    addToHistorial(codBar);
-    renderPicks(picks);
+    addToHistorial(codBar, picks[0]?.descrip || codBar);
+
+    const todosEntregados = picks.length > 0 && picks.every(p => (p.estado || '').startsWith('completado'));
+
+    if (todosEntregados) {
+      results.innerHTML = `
+        <div class="entregado-banner">
+          <span>✓ Este producto ya fue entregado a todos los clientes</span>
+          <button class="btn-ver-entregados" id="toggle-entregados">Ver items</button>
+        </div>
+        <div id="entregados-container" class="hidden"></div>
+      `;
+      const container = document.getElementById('entregados-container');
+      renderPicks(picks, container);
+      document.getElementById('toggle-entregados').addEventListener('click', function () {
+        const isHidden = container.classList.toggle('hidden');
+        this.textContent = isHidden ? 'Ver items' : 'Ocultar items';
+      });
+    } else {
+      renderPicks(picks);
+      aplicarFiltroPendientes(results);
+    }
   } catch (err) {
-    results.innerHTML = `<p class="error-msg">${err.message}</p>`;
+    const noEncontrado = err.message.includes('No se encontraron picks');
+    results.innerHTML = `<p class="error-msg">${noEncontrado ? 'Producto no encontrado' : err.message}</p>`;
   }
 }
 
 // ── Historial ──────────────────────────────────────────────────────────────
-function addToHistorial(codBar) {
+function addToHistorial(codBar, descrip) {
   let hist = JSON.parse(localStorage.getItem('pick_historial') || '[]');
-  hist = [codBar, ...hist.filter((c) => c !== codBar)].slice(0, 5);
+  // normalizar entradas viejas (strings) a objetos
+  hist = hist.map(e => typeof e === 'string' ? { cod: e, descrip: e } : e);
+  hist = [{ cod: codBar, descrip }, ...hist.filter(e => e.cod !== codBar)].slice(0, 5);
   localStorage.setItem('pick_historial', JSON.stringify(hist));
   renderHistorial();
 }
 
 function renderHistorial() {
-  const hist = JSON.parse(localStorage.getItem('pick_historial') || '[]');
+  let hist = JSON.parse(localStorage.getItem('pick_historial') || '[]');
+  hist = hist.map(e => typeof e === 'string' ? { cod: e, descrip: e } : e);
   const chips = document.getElementById('historial-chips');
   const wrap = document.getElementById('historial-wrap');
   if (!chips) return;
   if (hist.length === 0) { wrap.classList.add('hidden'); return; }
-  chips.innerHTML = hist.map((c) => `<span class="hist-chip" data-cod="${c}">${c}</span>`).join('');
+  wrap.classList.remove('hidden');
+  chips.innerHTML = hist.map(e => `<span class="hist-chip" data-cod="${e.cod}">${e.descrip}</span>`).join('');
   chips.querySelectorAll('.hist-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       document.getElementById('barcode-input').value = chip.dataset.cod;
-      document.getElementById('historial-wrap').classList.add('hidden');
       searchBarcode(chip.dataset.cod);
     });
   });
@@ -703,23 +719,6 @@ document.getElementById('cliente-picks-overlay').addEventListener('click', (e) =
   }
 });
 
-document.getElementById('btn-completar-todo').addEventListener('click', async () => {
-  const content = document.getElementById('cliente-picks-content');
-  const pendientes = Array.from(content.querySelectorAll('.pick-card:not(.completed)'));
-  if (pendientes.length === 0) { showToast('No hay items pendientes', 'info'); return; }
-
-  const btn = document.getElementById('btn-completar-todo');
-  btn.disabled = true;
-
-  for (const card of pendientes) {
-    const id = parseInt(card.dataset.pickId);
-    const uni = parseInt(card.dataset.uni) || 0;
-    await saveQuantity(id, uni, card);
-  }
-
-  btn.disabled = false;
-  loadResumen();
-});
 
 // ── Tab: Admin ─────────────────────────────────────────────────────────────
 function initAdmin() {
@@ -894,7 +893,7 @@ async function loadUsers() {
     const users = await api.getUsers();
     tbody.innerHTML = users.map((u) => `
       <tr>
-        <td>${u.email}</td>
+        <td>${u.username}</td>
         <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
         <td class="td-actions">
           <button class="btn-del" onclick="deleteUser(${u.id})">Eliminar</button>
@@ -919,11 +918,11 @@ async function deleteUser(id) {
 
 document.getElementById('nuevo-usuario-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = document.getElementById('nu-email').value.trim();
+  const username = document.getElementById('nu-email').value.trim();
   const password = document.getElementById('nu-password').value;
   try {
-    await api.createUser(email, password);
-    showToast(`Usuario ${email} creado`, 'success');
+    await api.createUser(username, password);
+    showToast(`Usuario ${username} creado`, 'success');
     document.getElementById('nuevo-usuario-form').reset();
     loadUsers();
   } catch (err) {
@@ -1005,6 +1004,7 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
 // ── Cambiar contraseña ─────────────────────────────────────────────────────
 document.getElementById('change-pw-btn').addEventListener('click', () => {
   document.getElementById('pw-form').reset();
+  document.getElementById('username-form').reset();
   document.getElementById('pw-modal').classList.remove('hidden');
 });
 
@@ -1031,6 +1031,63 @@ document.getElementById('pw-form').addEventListener('submit', async (e) => {
     showToast(err.message, 'error');
   }
 });
+
+document.getElementById('username-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const newUsername = document.getElementById('un-new').value.trim();
+  const password = document.getElementById('un-password').value;
+
+  try {
+    await api.changeUsername(password, newUsername);
+    document.getElementById('pw-modal').classList.add('hidden');
+    clearToken();
+    showLogin();
+    showToast(`Nombre cambiado a "${newUsername}". Ingresá de nuevo.`, 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
+
+// ── Pantalla completa (solo mobile) ────────────────────────────────────────
+(function () {
+  const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (!MOBILE) return;
+
+  const btn = document.getElementById('btn-fullscreen');
+
+  function enterFullscreen() {
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  }
+
+  function exitFullscreen() {
+    if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  }
+
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function updateBtn() {
+    if (!btn) return;
+    btn.textContent = isFullscreen() ? '⊡' : '⛶';
+    btn.title = isFullscreen() ? 'Salir de pantalla completa' : 'Pantalla completa';
+  }
+
+  document.addEventListener('fullscreenchange', updateBtn);
+  document.addEventListener('webkitfullscreenchange', updateBtn);
+
+  if (btn) btn.addEventListener('click', () => {
+    if (isFullscreen()) exitFullscreen(); else enterFullscreen();
+  });
+
+  // Auto-entrar en pantalla completa al hacer login (Android)
+  document.getElementById('login-form').addEventListener('submit', () => {
+    setTimeout(() => { if (!isFullscreen()) enterFullscreen(); }, 300);
+  });
+})();
 
 // ── Toast ──────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info') {
