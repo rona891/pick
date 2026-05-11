@@ -14,6 +14,20 @@ function clearToken() {
   localStorage.removeItem('username');
 }
 
+function getMayorista() {
+  return localStorage.getItem('mayorista') || 'yaguar';
+}
+
+function setMayorista(m) {
+  localStorage.setItem('mayorista', m);
+  localStorage.setItem('mayorista_ts', Date.now().toString());
+}
+
+function mayoristaCaducado() {
+  const ts = parseInt(localStorage.getItem('mayorista_ts') || '0');
+  return Date.now() - ts > 30 * 60 * 1000;
+}
+
 function getRol() {
   return localStorage.getItem('rol') || 'operario';
 }
@@ -67,8 +81,8 @@ const api = {
   updateQuantity: (id, cantidad_pickeada) => request('PUT', `/api/picks/${id}/quantity`, { cantidad_pickeada }),
 
   // Clientes
-  getClientes: () => request('GET', '/api/clientes/'),
-  createCliente: (data) => request('POST', '/api/clientes/', data),
+  getClientes: () => request('GET', `/api/clientes/?mayorista=${getMayorista()}`),
+  createCliente: (data) => request('POST', '/api/clientes/', { ...data, mayorista: getMayorista() }),
   updateCliente: (id, data) => request('PUT', `/api/clientes/${id}`, data),
   deleteCliente: (id) => request('DELETE', `/api/clientes/${id}`),
 
@@ -88,18 +102,18 @@ const api = {
   updateRol: (id, rol) => request('PUT', `/api/auth/users/${id}/rol`, { rol }),
 
   // Zonas
-  getZonas: () => request('GET', '/api/zonas/'),
-  getRepartos: () => request('GET', '/api/zonas/repartos'),
+  getZonas: () => request('GET', `/api/zonas/?mayorista=${getMayorista()}`),
+  getRepartos: () => request('GET', `/api/zonas/repartos?mayorista=${getMayorista()}`),
   moverReparto: (id, direccion) => request('PUT', `/api/zonas/repartos/${id}/orden?direccion=${direccion}`),
   createZona: (nombre, reparto) => request('POST', '/api/zonas/', { nombre, reparto }),
   updateZona: (id, nombre, reparto) => request('PUT', `/api/zonas/${id}`, { nombre, reparto }),
   deleteZona: (id) => request('DELETE', `/api/zonas/${id}`),
 
   // Export
-  exportPicksUrl: (semana) => `/api/export/picks?semana=${encodeURIComponent(semana)}`,
+  exportPicksUrl: (semana) => `/api/export/picks?semana=${encodeURIComponent(semana)}&mayorista=${getMayorista()}`,
 
   // Semanas
-  getSemanas: () => request('GET', '/api/semanas/'),
+  getSemanas: () => request('GET', `/api/semanas/?mayorista=${getMayorista()}`),
   deleteSemana: (id) => request('DELETE', `/api/semanas/${id}`),
   importarSemana: async (formData) => {
     const token = getToken();

@@ -67,6 +67,7 @@ class ClienteCreate(BaseModel):
     telefono: Optional[str] = None
     contacto: Optional[str] = None
     vendedor: Optional[str] = None
+    mayorista: str = 'yaguar'
 
 
 class AdminVerify(BaseModel):

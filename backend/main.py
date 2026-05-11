@@ -21,50 +21,59 @@ async def lifespan(app: FastAPI):
                 ("ADMIN", hash_password(settings.ADMIN_PASSWORD)),
             )
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS id_yaguar VARCHAR")
+        cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS uxb INTEGER DEFAULT 0")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS importe_total NUMERIC DEFAULT 0")
-        # Tabla repartos
+        # Tabla repartos con mayorista
         cur.execute("""
             CREATE TABLE IF NOT EXISTS repartos (
                 id bigserial PRIMARY KEY,
-                nombre varchar UNIQUE NOT NULL,
-                orden integer NOT NULL DEFAULT 99
+                nombre varchar NOT NULL,
+                orden integer NOT NULL DEFAULT 99,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                UNIQUE (nombre, mayorista)
             )
         """)
-        # Poblar repartos si está vacía
-        cur.execute("SELECT COUNT(*) AS n FROM repartos")
+        cur.execute("ALTER TABLE repartos ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
+        # Poblar repartos de Yaguar si no existen
+        cur.execute("SELECT COUNT(*) AS n FROM repartos WHERE mayorista = 'yaguar'")
         if cur.fetchone()["n"] == 0:
             cur.execute("""
-                INSERT INTO repartos (nombre, orden) VALUES
-                ('Sur Abajo', 1), ('Sur Arriba', 2), ('Merlo', 3), ('Córdoba', 4), ('San Luis', 5)
-                ON CONFLICT (nombre) DO NOTHING
+                INSERT INTO repartos (nombre, orden, mayorista) VALUES
+                ('Sur Abajo', 1, 'yaguar'), ('Sur Arriba', 2, 'yaguar'), ('Merlo', 3, 'yaguar'),
+                ('Córdoba', 4, 'yaguar'), ('San Luis', 5, 'yaguar')
+                ON CONFLICT (nombre, mayorista) DO NOTHING
             """)
-        # Tabla zonas (con reparto en lugar de al_final)
+        # Tabla zonas con mayorista
         cur.execute("""
             CREATE TABLE IF NOT EXISTS zonas (
                 id bigserial PRIMARY KEY,
-                nombre varchar UNIQUE NOT NULL,
+                nombre varchar NOT NULL,
                 al_final boolean DEFAULT false,
-                created_at timestamptz DEFAULT now()
+                reparto varchar,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                created_at timestamptz DEFAULT now(),
+                UNIQUE (nombre, mayorista)
             )
         """)
         cur.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS reparto varchar")
+        cur.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
         # Normalizar localidades en clientes_yaguar y pick
         cur.execute("UPDATE clientes_yaguar SET localidad = 'MERLO' WHERE localidad ILIKE '%merlo%'")
         cur.execute("UPDATE clientes_yaguar SET localidad = 'SANTA ROSA' WHERE localidad ILIKE 'santa rosa%'")
         cur.execute("UPDATE pick SET localidad = 'MERLO' WHERE localidad ILIKE '%merlo%'")
         cur.execute("UPDATE pick SET localidad = 'SANTA ROSA' WHERE localidad ILIKE 'santa rosa%'")
-        # Poblar zonas desde las localidades existentes (solo si la tabla está vacía)
-        cur.execute("SELECT COUNT(*) AS n FROM zonas")
+        # Poblar zonas de Yaguar desde localidades existentes
+        cur.execute("SELECT COUNT(*) AS n FROM zonas WHERE mayorista = 'yaguar'")
         if cur.fetchone()["n"] == 0:
             cur.execute("""
-                INSERT INTO zonas (nombre)
-                SELECT DISTINCT UPPER(localidad)
+                INSERT INTO zonas (nombre, mayorista)
+                SELECT DISTINCT UPPER(localidad), 'yaguar'
                 FROM clientes_yaguar
-                WHERE localidad IS NOT NULL
-                ON CONFLICT (nombre) DO NOTHING
+                WHERE localidad IS NOT NULL AND mayorista = 'yaguar'
+                ON CONFLICT (nombre, mayorista) DO NOTHING
             """)
-        # Asignar repartos a las zonas existentes
+        # Asignar repartos a las zonas de Yaguar
         zona_reparto = [
             ('CARPINTERIA', 'Sur Arriba'), ('CERRO DE ORO', 'Merlo'), ('CONCARAN', 'Sur Abajo'),
             ('CORTADERAS', 'Sur Arriba'), ('CRUZ DE CAÑA', 'Córdoba'), ('LA PAZ', 'Córdoba'),
@@ -74,15 +83,21 @@ async def lifespan(app: FastAPI):
             ('VILLA LARCA', 'Sur Arriba'),
         ]
         for zona, reparto in zona_reparto:
-            cur.execute("UPDATE zonas SET reparto = %s WHERE nombre = %s AND (reparto IS NULL OR reparto = '')",
-                        (reparto, zona))
+            cur.execute(
+                "UPDATE zonas SET reparto = %s WHERE nombre = %s AND mayorista = 'yaguar' AND (reparto IS NULL OR reparto = '')",
+                (reparto, zona)
+            )
+        # Tabla semanas con mayorista
         cur.execute("""
             CREATE TABLE IF NOT EXISTS semanas (
-                id        bigserial PRIMARY KEY,
-                nombre    varchar UNIQUE NOT NULL,
-                created_at timestamptz DEFAULT now()
+                id bigserial PRIMARY KEY,
+                nombre varchar NOT NULL,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                created_at timestamptz DEFAULT now(),
+                UNIQUE (nombre, mayorista)
             )
         """)
+        cur.execute("ALTER TABLE semanas ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_pick_semana ON pick(semana)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_clientes_yaguar_id_yaguar ON clientes_yaguar(id_yaguar)")
     yield

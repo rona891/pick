@@ -17,6 +17,21 @@
 </head>
 <body>
 
+  <!-- ── Selector de mayorista ────────────────────────────────────────── -->
+  <div id="mayorista-view" class="hidden">
+    <div class="mayorista-selector">
+      <div class="mayorista-title">¿Con qué mayorista trabajás hoy?</div>
+      <div class="mayorista-cards">
+        <button class="mayorista-card" data-mayorista="yaguar">
+          <div class="mayorista-card-name">YAGUAR</div>
+        </button>
+        <button class="mayorista-card" data-mayorista="diarco">
+          <img src="diarco.png" alt="DIARCO" class="mayorista-logo" />
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Login ─────────────────────────────────────────────────────────── -->
   <div id="login-view" class="hidden">
     <div class="login-box">
@@ -43,6 +58,7 @@
     <div class="topbar">
       <div class="app-title">PICKING</div>
       <div id="topbar-usuario" class="topbar-usuario"></div>
+      <div id="topbar-mayorista" class="topbar-mayorista hidden"></div>
       <div class="topbar-actions">
         <button id="btn-fullscreen" class="btn-logout btn-fullscreen-mobile" title="Pantalla completa">⛶</button>
         <button id="change-pw-btn" class="btn-logout">Cuenta</button>

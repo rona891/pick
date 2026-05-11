@@ -39,7 +39,7 @@ def _thin_border():
 
 
 @router.get("/picks")
-def export_picks(semana: str = Query(...)):
+def export_picks(semana: str = Query(...), mayorista: str = Query("yaguar")):
     with get_db() as cur:
         cur.execute("""
             SELECT p.*, COALESCE(z.reparto, '') AS reparto_zona

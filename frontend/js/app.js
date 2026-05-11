@@ -16,7 +16,11 @@ let currentCameraIndex = 0;
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   if (getToken()) {
-    showApp();
+    if (mayoristaCaducado()) {
+      showMayoristaSelector();
+    } else {
+      showApp();
+    }
   } else {
     showLogin();
   }
@@ -36,22 +40,42 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Views ──────────────────────────────────────────────────────────────────
 function showLogin() {
   document.getElementById('login-view').classList.remove('hidden');
+  document.getElementById('mayorista-view').classList.add('hidden');
   document.getElementById('app-view').classList.add('hidden');
   document.getElementById('login-error').classList.add('hidden');
 }
 
+function showMayoristaSelector() {
+  document.getElementById('mayorista-view').classList.remove('hidden');
+  document.getElementById('login-view').classList.add('hidden');
+  document.getElementById('app-view').classList.add('hidden');
+}
+
 function showApp() {
   document.getElementById('login-view').classList.add('hidden');
+  document.getElementById('mayorista-view').classList.add('hidden');
   document.getElementById('app-view').classList.remove('hidden');
-  // Mostrar tab Admin solo a usuarios con rol admin o superadmin
   document.querySelector('.tab-btn[data-tab="admin"]').classList.toggle('hidden', !esAdmin());
   document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
+  const m = getMayorista();
+  const badge = document.getElementById('topbar-mayorista');
+  badge.textContent = m.toUpperCase();
+  badge.className = `topbar-mayorista mayorista-${m}`;
+  badge.classList.remove('hidden');
   loadSemanas().then(() => loadStats());
   switchTab('pick');
   prewarmCamera();
   renderHistorial();
   setTimeout(() => document.getElementById('barcode-input').focus(), 200);
 }
+
+// ── Selector de mayorista ──────────────────────────────────────────────────
+document.querySelectorAll('.mayorista-card').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    setMayorista(btn.dataset.mayorista);
+    showApp();
+  });
+});
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 document.getElementById('login-form').addEventListener('submit', async (e) => {
@@ -70,7 +94,11 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     setToken(res.access_token);
     setRol(res.rol);
     localStorage.setItem('username', username);
-    showApp();
+    if (mayoristaCaducado()) {
+      showMayoristaSelector();
+    } else {
+      showApp();
+    }
     setTimeout(() => { if (!isFullscreen()) enterFullscreen(); }, 300);
   } catch (err) {
     errorDiv.textContent = err.message || 'Usuario o contraseña incorrectos';

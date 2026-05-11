@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from app.models.schemas import Cliente, ClienteCreate
 from app.db.database import get_db
 from typing import List
@@ -7,9 +7,9 @@ router = APIRouter(prefix="/clientes", tags=["clientes"])
 
 
 @router.get("/", response_model=List[Cliente])
-def list_clientes():
+def list_clientes(mayorista: str = Query("yaguar")):
     with get_db() as cur:
-        cur.execute("SELECT * FROM clientes_yaguar ORDER BY nombre")
+        cur.execute("SELECT * FROM clientes_yaguar WHERE mayorista = %s ORDER BY nombre", (mayorista,))
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -17,9 +17,9 @@ def list_clientes():
 def create_cliente(data: ClienteCreate):
     with get_db() as cur:
         cur.execute(
-            """INSERT INTO clientes_yaguar (nombre, localidad, direccion, telefono, contacto, vendedor)
-               VALUES (%s, %s, %s, %s, %s, %s) RETURNING *""",
-            (data.nombre, data.localidad, data.direccion, data.telefono, data.contacto, data.vendedor),
+            """INSERT INTO clientes_yaguar (nombre, localidad, direccion, telefono, contacto, vendedor, mayorista)
+               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+            (data.nombre, data.localidad, data.direccion, data.telefono, data.contacto, data.vendedor, data.mayorista),
         )
         return dict(cur.fetchone())
 

@@ -70,9 +70,9 @@ def _query_db_file(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
 
 
 @router.get("/")
-def list_semanas():
+def list_semanas(mayorista: str = "yaguar"):
     with get_db() as cur:
-        cur.execute("SELECT id, nombre, created_at FROM semanas ORDER BY created_at DESC")
+        cur.execute("SELECT id, nombre, created_at FROM semanas WHERE mayorista = %s ORDER BY created_at DESC", (mayorista,))
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -82,6 +82,7 @@ async def importar_semana(
     fecha_desde: str = Form(...),
     fecha_hasta: str = Form(...),
     archivos: List[UploadFile] = File(...),
+    mayorista: str = Form("yaguar"),
 ):
     if len(fecha_desde) != 8 or not fecha_desde.isdigit():
         raise HTTPException(400, "fecha_desde debe estar en formato AAAAMMDD (ej: 20260422)")
@@ -110,11 +111,11 @@ async def importar_semana(
         # Crear semana (upsert — si ya existe la reemplaza)
         cur.execute(
             """
-            INSERT INTO semanas (nombre) VALUES (%s)
-            ON CONFLICT (nombre) DO UPDATE SET nombre = EXCLUDED.nombre
+            INSERT INTO semanas (nombre, mayorista) VALUES (%s, %s)
+            ON CONFLICT (nombre, mayorista) DO UPDATE SET nombre = EXCLUDED.nombre
             RETURNING id
             """,
-            (nombre,),
+            (nombre, mayorista),
         )
         cur.fetchone()
 
@@ -175,4 +176,4 @@ def delete_semana(id: int):
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Semana no encontrada")
-    return {"message": f"Semana eliminada", "nombre": row["nombre"]}
+    return {"message": "Semana eliminada", "nombre": row["nombre"]}
