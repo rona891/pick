@@ -215,7 +215,7 @@ async def importar_semana_diarco(
         }
         for loc in localidades_nuevas:
             cur.execute(
-                "INSERT INTO zonas (nombre, mayorista) VALUES (%s, 'yaguar') ON CONFLICT (nombre, mayorista) DO NOTHING",
+                "INSERT INTO zonas (nombre) VALUES (%s) ON CONFLICT (nombre) DO NOTHING",
                 (loc,),
             )
 
