@@ -108,6 +108,18 @@ async def lifespan(app: FastAPI):
             )
         """)
         cur.execute("ALTER TABLE semanas ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
+        # Migrar constraint de semanas: UNIQUE(nombre) → UNIQUE(nombre, mayorista)
+        cur.execute("""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'semanas_nombre_key'
+                ) THEN
+                    ALTER TABLE semanas DROP CONSTRAINT semanas_nombre_key;
+                    ALTER TABLE semanas ADD CONSTRAINT semanas_nombre_mayorista_key UNIQUE (nombre, mayorista);
+                END IF;
+            END$$;
+        """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_pick_semana ON pick(semana)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_clientes_yaguar_id_yaguar ON clientes_yaguar(id_yaguar)")
     yield
