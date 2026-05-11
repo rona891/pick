@@ -79,6 +79,9 @@ const api = {
   updateZona: (id, nombre, reparto) => request('PUT', `/api/zonas/${id}`, { nombre, reparto }),
   deleteZona: (id) => request('DELETE', `/api/zonas/${id}`),
 
+  // Export
+  exportPicksUrl: (semana) => `/api/export/picks?semana=${encodeURIComponent(semana)}`,
+
   // Semanas
   getSemanas: () => request('GET', '/api/semanas/'),
   deleteSemana: (id) => request('DELETE', `/api/semanas/${id}`),

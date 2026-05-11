@@ -947,6 +947,7 @@ async function loadSemanasAdmin() {
     list.innerHTML = semanas.map((s) => `
       <div class="semana-admin-item">
         <span class="semana-nombre-tag">${s.nombre}</span>
+        <a class="btn-export" href="${api.exportPicksUrl(s.nombre)}" download>↓ Excel</a>
         <button class="btn-del" onclick="deleteSemana(${s.id}, '${s.nombre.replace(/'/g, "\\'")}')">Eliminar</button>
       </div>
     `).join('');

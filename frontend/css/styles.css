@@ -1462,6 +1462,21 @@ input[type="date"]:focus { border-color: var(--accent); }
   color: var(--text);
 }
 
+.btn-export {
+  background: none;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: var(--radius);
+  padding: 5px 12px;
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: none;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+.btn-export:active { opacity: .7; }
+
 .semana-admin-empty {
   font-size: 12px;
   color: var(--muted);

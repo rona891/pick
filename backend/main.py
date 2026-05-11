@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import picks, auth, health, clientes, admin, semanas, zonas
+from app.api import picks, auth, health, clientes, admin, semanas, zonas, export
 from app.db.database import init_pool, get_db
 from config import settings
 
@@ -95,3 +95,4 @@ app.include_router(clientes.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(semanas.router, prefix="/api")
 app.include_router(zonas.router, prefix="/api")
+app.include_router(export.router, prefix="/api")
