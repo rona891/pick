@@ -21,6 +21,20 @@ import tempfile
 import os
 import re
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+
+# Items que DIARCO usa internamente y no forman parte del picking real.
+# - cod_art no numérico: items de sistema (ej: 'Semaforo')
+# - descripciones excluidas: equipamiento que no se pickea (heladeras exhibidoras, etc.)
+DESCRIP_EXCLUIDAS = [
+    "heladera exhibidora",
+]
+
+def _es_item_real(cod_art: str, descrip: str) -> bool:
+    """Devuelve False para items de sistema o equipamiento de DIARCO que no se pickean."""
+    if not cod_art.strip().lstrip('-').isdigit():
+        return False
+    descrip_lower = (descrip or "").lower()
+    return not any(excluida in descrip_lower for excluida in DESCRIP_EXCLUIDAS)
 from typing import List
 from app.db.database import get_db
 
@@ -125,14 +139,15 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                 cod_art = (item["STEPUID"] or "").strip()
                 if not cod_art:
                     continue
+                uxb, descrip_limpia = _parse_pack(item["STEPSelDesc"])
+                if not _es_item_real(cod_art, descrip_limpia):
+                    continue
                 try:
                     uni = int(float(item["Value2"] or 0))
                 except (ValueError, TypeError):
                     uni = 0
                 if uni <= 0:
                     continue
-
-                uxb, descrip_limpia = _parse_pack(item["STEPSelDesc"])
                 bul = uni // uxb if uxb > 0 else 0
 
                 picks.append({
