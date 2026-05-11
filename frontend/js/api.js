@@ -10,6 +10,20 @@ function setToken(token) {
 
 function clearToken() {
   localStorage.removeItem('token');
+  localStorage.removeItem('rol');
+}
+
+function getRol() {
+  return localStorage.getItem('rol') || 'operario';
+}
+
+function setRol(rol) {
+  localStorage.setItem('rol', rol);
+}
+
+function esAdmin() {
+  const r = getRol();
+  return r === 'admin' || r === 'superadmin';
 }
 
 async function request(method, path, body = null) {
@@ -70,6 +84,7 @@ const api = {
   getUsers: () => request('GET', '/api/auth/users'),
   createUser: (username, password) => request('POST', '/api/auth/users', { username, password }),
   deleteUser: (id) => request('DELETE', `/api/auth/users/${id}`),
+  updateRol: (id, rol) => request('PUT', `/api/auth/users/${id}/rol`, { rol }),
 
   // Zonas
   getZonas: () => request('GET', '/api/zonas/'),

@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
     id bigserial PRIMARY KEY,
     username varchar UNIQUE NOT NULL,
     password_hash varchar NOT NULL,
+    rol varchar NOT NULL DEFAULT 'operario',
     created_at timestamptz DEFAULT now()
 );
 
