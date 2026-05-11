@@ -993,8 +993,13 @@ async function loadUsers() {
       const rolLabel = esSuperadmin ? '<span style="color:var(--accent)">Superadmin</span>'
                      : esAdminUser  ? '<span style="color:var(--green)">Admin</span>'
                      :                '<span style="color:var(--muted)">Operario</span>';
-      const toggleBtn = esSuperadmin ? ''
-        : `<button class="btn-edit" onclick="toggleRol(${u.id}, '${u.rol}')">${esAdminUser ? '↓ Operario' : '↑ Admin'}</button>`;
+      const esSuperadminActual = getRol() === 'superadmin';
+      const toggleBtn = (esSuperadmin || !esSuperadminActual) ? '' : `
+        <label class="rol-switch" title="${esAdminUser ? 'Quitar admin' : 'Dar admin'}">
+          <input type="checkbox" ${esAdminUser ? 'checked' : ''} onchange="toggleRol(${u.id}, '${u.rol}', this)">
+          <span class="rol-switch-track"><span class="rol-switch-thumb"></span></span>
+          <span class="rol-switch-label">${esAdminUser ? 'Admin' : 'Operario'}</span>
+        </label>`;
       const delBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
       return `
         <tr>
@@ -1009,13 +1014,14 @@ async function loadUsers() {
   }
 }
 
-async function toggleRol(id, rolActual) {
+async function toggleRol(id, rolActual, checkbox) {
   const nuevoRol = rolActual === 'admin' ? 'operario' : 'admin';
   try {
     await api.updateRol(id, nuevoRol);
     showToast(`Rol actualizado a ${nuevoRol}`, 'success');
     loadUsers();
   } catch (err) {
+    checkbox.checked = !checkbox.checked;
     showToast(err.message, 'error');
   }
 }

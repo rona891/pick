@@ -98,7 +98,13 @@ def create_user(data: UserCreate):
 
 
 @router.put("/users/{id}/rol")
-def update_rol(id: int, data: RolUpdate):
+def update_rol(id: int, data: RolUpdate, authorization: str = Header(...)):
+    payload = verify_token(authorization)
+    with get_db() as cur:
+        cur.execute("SELECT rol FROM users WHERE id = %s", (payload.get("sub"),))
+        caller = cur.fetchone()
+    if not caller or caller["rol"] != "superadmin":
+        raise HTTPException(403, "Solo el superadmin puede cambiar roles")
     if data.rol not in ("operario", "admin"):
         raise HTTPException(400, "Rol inválido. Valores permitidos: operario, admin")
     with get_db() as cur:
