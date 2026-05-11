@@ -783,6 +783,17 @@ input[type="date"]:focus { border-color: var(--accent); }
 
 .admin-section-desc strong { color: var(--text); }
 
+.admin-tab-desc {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 20px;
+}
+
 .btn-upload {
   display: block;
   width: 100%;

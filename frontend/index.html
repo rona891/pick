@@ -167,6 +167,7 @@
 
         <!-- Sub-panel: Clientes -->
         <div class="admin-tab-panel" data-admin-panel="clientes">
+          <p class="admin-tab-desc">Acá podés ver todos los clientes de la empresa. Usá el botón <strong>+ Nuevo</strong> para agregar uno, o tocá <strong>Editar</strong> para modificar los datos de uno existente. Cada cliente necesita tener una zona y un vendedor asignado.</p>
           <div class="admin-header">
             <input type="text" id="admin-clientes-search" class="clientes-search-input" placeholder="Buscar cliente..." autocomplete="off" style="flex:1; margin-right:8px" />
             <button id="btn-nuevo-cliente" class="btn-search">+ Nuevo</button>
@@ -190,6 +191,7 @@
 
         <!-- Sub-panel: Semanas -->
         <div class="admin-tab-panel hidden" data-admin-panel="nueva-semana">
+          <p class="admin-tab-desc">Acá se cargan los pedidos de cada semana de reparto. Para importar una semana nueva, subí los archivos <strong>.db</strong> exportados desde la app Yaguar (uno por vendedor), poné el nombre y las fechas, y presioná <strong>Importar picks</strong>. También podés eliminar semanas que ya no necesitás.</p>
 
           <!-- Semanas cargadas -->
           <div class="admin-section-title">Semanas cargadas</div>
@@ -227,6 +229,7 @@
 
         <!-- Sub-panel: Usuarios -->
         <div class="admin-tab-panel hidden" data-admin-panel="usuarios">
+          <p class="admin-tab-desc">Acá podés ver y gestionar quiénes pueden iniciar sesión en la app. Cada operario del depósito debería tener su propio usuario. Usá <strong>Nuevo usuario</strong> para crear uno y el botón <strong>✕</strong> para eliminar uno que ya no se use.</p>
           <div class="admin-section-title" style="margin-bottom:16px">Usuarios activos</div>
           <div class="table-wrap" style="margin-bottom:24px">
             <table class="clientes-table">
@@ -257,6 +260,7 @@
 
         <!-- Sub-panel: Zonas -->
         <div class="admin-tab-panel hidden" data-admin-panel="zonas">
+          <p class="admin-tab-desc">Acá configurás las zonas de entrega y los repartos. Los <strong>repartos</strong> agrupan zonas que se entregan en el mismo vehículo — podés cambiar el orden en que aparecen usando las flechas ▲▼. Las <strong>zonas</strong> son las localidades de los clientes; cada una debe estar asignada a un reparto para que los picks se ordenen correctamente.</p>
           <div class="admin-section-title" style="margin-bottom:12px">Orden de repartos</div>
           <div id="repartos-orden-list" class="repartos-orden-list" style="margin-bottom:24px"></div>
 
