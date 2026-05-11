@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Header
-from app.models.schemas import LoginRequest, LoginResponse, ChangePasswordRequest, UserCreate, UserOut
+from app.models.schemas import LoginRequest, LoginResponse, ChangePasswordRequest, ChangeUsernameRequest, UserCreate, UserOut
 from app.db.database import get_db
 from app.auth.jwt import verify_password, create_access_token, hash_password, verify_token
 from typing import List
@@ -11,15 +11,15 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 def login(request: LoginRequest):
     with get_db() as cur:
         cur.execute(
-            "SELECT id, email, password_hash FROM users WHERE email = %s",
-            (request.email,),
+            "SELECT id, username, password_hash FROM users WHERE username = %s",
+            (request.username,),
         )
         user = cur.fetchone()
 
     if not user or not verify_password(request.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
-    return {"access_token": create_access_token(user["id"], user["email"])}
+    return {"access_token": create_access_token(user["id"], user["username"])}
 
 
 @router.post("/logout")
@@ -30,10 +30,10 @@ def logout():
 @router.put("/password")
 def change_password(request: ChangePasswordRequest, authorization: str = Header(...)):
     payload = verify_token(authorization)
-    email = payload.get("email")
+    username = payload.get("username")
 
     with get_db() as cur:
-        cur.execute("SELECT id, password_hash FROM users WHERE email = %s", (email,))
+        cur.execute("SELECT id, password_hash FROM users WHERE username = %s", (username,))
         user = cur.fetchone()
 
     if not user or not verify_password(request.current_password, user["password_hash"]):
@@ -46,22 +46,43 @@ def change_password(request: ChangePasswordRequest, authorization: str = Header(
     return {"message": "Contraseña actualizada"}
 
 
+@router.put("/username")
+def change_username(request: ChangeUsernameRequest, authorization: str = Header(...)):
+    payload = verify_token(authorization)
+    user_id = payload.get("sub")
+
+    with get_db() as cur:
+        cur.execute("SELECT id, password_hash FROM users WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+
+    if not user or not verify_password(request.current_password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+
+    with get_db() as cur:
+        cur.execute("SELECT id FROM users WHERE username = %s AND id != %s", (request.new_username, user_id))
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail="Ese nombre ya está en uso")
+        cur.execute("UPDATE users SET username = %s WHERE id = %s", (request.new_username, user_id))
+
+    return {"message": "Nombre actualizado"}
+
+
 @router.get("/users", response_model=List[UserOut])
 def list_users():
     with get_db() as cur:
-        cur.execute("SELECT id, email, created_at FROM users ORDER BY created_at")
+        cur.execute("SELECT id, username, created_at FROM users ORDER BY created_at")
         return [dict(r) for r in cur.fetchall()]
 
 
 @router.post("/users", response_model=UserOut, status_code=201)
 def create_user(data: UserCreate):
     with get_db() as cur:
-        cur.execute("SELECT id FROM users WHERE email = %s", (data.email,))
+        cur.execute("SELECT id FROM users WHERE username = %s", (data.username,))
         if cur.fetchone():
-            raise HTTPException(status_code=400, detail="Email ya registrado")
+            raise HTTPException(status_code=400, detail="Usuario ya registrado")
         cur.execute(
-            "INSERT INTO users (email, password_hash) VALUES (%s, %s) RETURNING id, email, created_at",
-            (data.email, hash_password(data.password)),
+            "INSERT INTO users (username, password_hash) VALUES (%s, %s) RETURNING id, username, created_at",
+            (data.username, hash_password(data.password)),
         )
         return dict(cur.fetchone())
 

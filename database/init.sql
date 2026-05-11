@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS users (
     id bigserial PRIMARY KEY,
-    email varchar UNIQUE NOT NULL,
+    username varchar UNIQUE NOT NULL,
     password_hash varchar NOT NULL,
     created_at timestamptz DEFAULT now()
 );
@@ -20,12 +20,26 @@ CREATE TABLE IF NOT EXISTS pick (
     semana varchar,
     updated_at timestamptz,
     created_at timestamptz DEFAULT now(),
-    uxb integer DEFAULT 0
+    uxb integer DEFAULT 0,
+    importe_total numeric DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS semanas (
     id bigserial PRIMARY KEY,
     nombre varchar UNIQUE NOT NULL,
+    created_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS repartos (
+    id bigserial PRIMARY KEY,
+    nombre varchar UNIQUE NOT NULL,
+    orden integer NOT NULL DEFAULT 99
+);
+
+CREATE TABLE IF NOT EXISTS zonas (
+    id bigserial PRIMARY KEY,
+    nombre varchar UNIQUE NOT NULL,
+    reparto varchar,
     created_at timestamptz DEFAULT now()
 );
 

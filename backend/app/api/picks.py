@@ -38,7 +38,8 @@ def get_resumen(semana: Optional[str] = Query(None)):
                 SELECT
                     nombre,
                     COUNT(*) AS total,
-                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completados
+                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completados,
+                    MAX(importe_total) AS importe_total
                 FROM pick
                 WHERE nombre IS NOT NULL AND semana = %s
                 GROUP BY nombre
@@ -49,7 +50,8 @@ def get_resumen(semana: Optional[str] = Query(None)):
                 SELECT
                     nombre,
                     COUNT(*) AS total,
-                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completados
+                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completados,
+                    MAX(importe_total) AS importe_total
                 FROM pick
                 WHERE nombre IS NOT NULL
                 GROUP BY nombre
@@ -74,6 +76,7 @@ def get_resumen(semana: Optional[str] = Query(None)):
             "completados": completados,
             "pendientes": pendientes,
             "estado_general": estado_general,
+            "importe_total": float(row["importe_total"] or 0),
         })
     return resumen
 
@@ -121,13 +124,27 @@ def buscar_por_descripcion(q: str = Query(..., min_length=2), semana: Optional[s
 def get_picks_by_barcode(cod_bar: str, semana: Optional[str] = Query(None)):
     with get_db() as cur:
         if semana:
-            cur.execute("SELECT * FROM pick WHERE cod_bar = %s AND semana = %s", (cod_bar, semana))
+            cur.execute("""
+                SELECT p.*, COALESCE(r.orden, 99) AS _reparto_orden
+                FROM pick p
+                LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+                LEFT JOIN repartos r ON z.reparto = r.nombre
+                WHERE p.cod_bar = %s AND p.semana = %s
+                ORDER BY _reparto_orden ASC, p.localidad ASC, p.nombre ASC
+            """, (cod_bar, semana))
         else:
-            cur.execute("SELECT * FROM pick WHERE cod_bar = %s", (cod_bar,))
+            cur.execute("""
+                SELECT p.*, COALESCE(r.orden, 99) AS _reparto_orden
+                FROM pick p
+                LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+                LEFT JOIN repartos r ON z.reparto = r.nombre
+                WHERE p.cod_bar = %s
+                ORDER BY _reparto_orden ASC, p.localidad ASC, p.nombre ASC
+            """, (cod_bar,))
         rows = cur.fetchall()
     if not rows:
         raise HTTPException(status_code=404, detail="No se encontraron picks para este código")
-    return [dict(r) for r in rows]
+    return [{k: v for k, v in dict(r).items() if k != "_reparto_orden"} for r in rows]
 
 
 @router.put("/{id}/quantity")
@@ -140,7 +157,10 @@ def update_quantity(id: int, update: QuantityUpdate):
 
         uni = row["uni"] or 0
         cantidad = update.cantidad_pickeada
-        estado = f"completado: {cantidad}/{uni} UNI" if cantidad >= uni else f"pendiente: {cantidad}/{uni} UNI"
+        if cantidad >= uni:
+            estado = f"completado: {cantidad}/{uni} UNI"
+        else:
+            estado = f"entregado: {cantidad}/{uni} UNI"
 
         cur.execute(
             "UPDATE pick SET cantidad_pickeada = %s, estado = %s, updated_at = %s WHERE id = %s",

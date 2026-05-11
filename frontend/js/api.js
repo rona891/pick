@@ -23,9 +23,9 @@ async function request(method, path, body = null) {
     body: body ? JSON.stringify(body) : null,
   });
 
-  if (res.status === 401) {
+  if (res.status === 401 && getToken()) {
     clearToken();
-    window.location.reload();
+    window.location.href = '/';
     return;
   }
 
@@ -40,7 +40,7 @@ function semanaParam(semana) {
 
 const api = {
   // Auth
-  login: (email, password) => request('POST', '/api/auth/login', { email, password }),
+  login: (username, password) => request('POST', '/api/auth/login', { username, password }),
   logout: () => request('POST', '/api/auth/logout'),
 
   // Picks (todos aceptan semana opcional)
@@ -63,11 +63,24 @@ const api = {
   // Password
   changePassword: (current_password, new_password) =>
     request('PUT', '/api/auth/password', { current_password, new_password }),
+  changeUsername: (current_password, new_username) =>
+    request('PUT', '/api/auth/username', { current_password, new_username }),
 
   // Usuarios (admin)
   getUsers: () => request('GET', '/api/auth/users'),
-  createUser: (email, password) => request('POST', '/api/auth/users', { email, password }),
+  createUser: (username, password) => request('POST', '/api/auth/users', { username, password }),
   deleteUser: (id) => request('DELETE', `/api/auth/users/${id}`),
+
+  // Zonas
+  getZonas: () => request('GET', '/api/zonas/'),
+  getRepartos: () => request('GET', '/api/zonas/repartos'),
+  moverReparto: (id, direccion) => request('PUT', `/api/zonas/repartos/${id}/orden?direccion=${direccion}`),
+  createZona: (nombre, reparto) => request('POST', '/api/zonas/', { nombre, reparto }),
+  updateZona: (id, nombre, reparto) => request('PUT', `/api/zonas/${id}`, { nombre, reparto }),
+  deleteZona: (id) => request('DELETE', `/api/zonas/${id}`),
+
+  // Export
+  exportPicksUrl: (semana) => `/api/export/picks?semana=${encodeURIComponent(semana)}`,
 
   // Semanas
   getSemanas: () => request('GET', '/api/semanas/'),
@@ -79,6 +92,10 @@ const api = {
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error(`Error del servidor (${res.status}). El archivo puede ser demasiado grande.`);
+    }
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Error del servidor');
     return data;
