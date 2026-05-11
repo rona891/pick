@@ -541,6 +541,7 @@ input:focus { border-color: var(--accent); }
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
+#sort-importe-btn { margin-left: auto; }
 
 .filter-btn {
   background: var(--surface);
