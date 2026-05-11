@@ -62,6 +62,12 @@ async def lifespan(app: FastAPI):
         """)
         cur.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS reparto varchar")
         cur.execute("ALTER TABLE zonas ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
+        # Zonas son compartidas: eliminar duplicados por nombre y dejar solo una fila por zona
+        cur.execute("""
+            DELETE FROM zonas WHERE id NOT IN (
+                SELECT MIN(id) FROM zonas GROUP BY nombre
+            )
+        """)
         # Normalizar localidades en clientes_yaguar y pick
         cur.execute("UPDATE clientes_yaguar SET localidad = 'MERLO' WHERE localidad ILIKE '%merlo%'")
         cur.execute("UPDATE clientes_yaguar SET localidad = 'SANTA ROSA' WHERE localidad ILIKE 'santa rosa%'")

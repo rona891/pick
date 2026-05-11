@@ -20,10 +20,10 @@ class ZonaIn(BaseModel):
 def list_zonas():
     with get_db() as cur:
         cur.execute("""
-            SELECT DISTINCT ON (z.nombre) z.id, z.nombre, z.reparto, COALESCE(r.orden, 99) AS orden
+            SELECT z.id, z.nombre, z.reparto, COALESCE(r.orden, 99) AS orden
             FROM zonas z
             LEFT JOIN repartos r ON z.reparto = r.nombre
-            ORDER BY z.nombre ASC, orden ASC
+            ORDER BY orden ASC, z.nombre ASC
         """)
         return [dict(r) for r in cur.fetchall()]
 
@@ -63,14 +63,14 @@ def create_zona(data: ZonaIn):
     if not nombre:
         raise HTTPException(400, "El nombre no puede estar vacío")
     with get_db() as cur:
-        try:
-            cur.execute(
-                "INSERT INTO zonas (nombre, reparto) VALUES (%s, %s) RETURNING id, nombre, reparto",
-                (nombre, data.reparto or None),
-            )
-            return dict(cur.fetchone())
-        except Exception:
+        cur.execute("SELECT id FROM zonas WHERE nombre = %s", (nombre,))
+        if cur.fetchone():
             raise HTTPException(400, "Ya existe una zona con ese nombre")
+        cur.execute(
+            "INSERT INTO zonas (nombre, reparto) VALUES (%s, %s) RETURNING id, nombre, reparto",
+            (nombre, data.reparto or None),
+        )
+        return dict(cur.fetchone())
 
 
 @router.put("/{id}")
