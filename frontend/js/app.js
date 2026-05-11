@@ -681,6 +681,21 @@ document.getElementById('clientes-search').addEventListener('input', (e) => {
   renderResumen(e.target.value.trim().toLowerCase());
 });
 
+function getPapelesKey() {
+  return `papeles_separados_${semanaActual}`;
+}
+
+function getPapelesSeparados() {
+  try { return new Set(JSON.parse(localStorage.getItem(getPapelesKey()) || '[]')); }
+  catch { return new Set(); }
+}
+
+function savePapelSeparado(nombre, marcado) {
+  const set = getPapelesSeparados();
+  marcado ? set.add(nombre) : set.delete(nombre);
+  localStorage.setItem(getPapelesKey(), JSON.stringify([...set]));
+}
+
 function renderResumen(searchQ = '') {
   const container = document.getElementById('resumen-list');
   let filtered = filtroActivo === 'todos'
@@ -696,8 +711,18 @@ function renderResumen(searchQ = '') {
     return;
   }
 
-  container.innerHTML = filtered.map((r) => `
-    <div class="resumen-card estado-${r.estado_general}" data-nombre="${encodeURIComponent(r.nombre)}">
+  const separados = getPapelesSeparados();
+  const sorted = [...filtered].sort((a, b) => {
+    const as = separados.has(a.nombre) ? 1 : 0;
+    const bs = separados.has(b.nombre) ? 1 : 0;
+    return as - bs;
+  });
+
+  container.innerHTML = sorted.map((r) => {
+    const marcado = separados.has(r.nombre);
+    return `
+    <div class="resumen-card estado-${r.estado_general}${marcado ? ' papel-separado' : ''}" data-nombre="${encodeURIComponent(r.nombre)}">
+      <button class="btn-papel${marcado ? ' marcado' : ''}" data-papel="${encodeURIComponent(r.nombre)}">✓</button>
       <div class="resumen-nombre">${r.nombre}</div>
       <div class="resumen-stats">
         <span class="tag-ok">${r.completados} ✓</span>
@@ -707,7 +732,19 @@ function renderResumen(searchQ = '') {
       <div class="resumen-badge badge-${r.estado_general}">${r.estado_general}</div>
       <button class="btn-ver-picks">›</button>
     </div>
-  `).join('');
+  `}).join('');
+
+  container.querySelectorAll('.btn-papel').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const nombre = decodeURIComponent(btn.dataset.papel);
+      const marcado = !btn.classList.contains('marcado');
+      savePapelSeparado(nombre, marcado);
+      btn.classList.toggle('marcado', marcado);
+      btn.closest('.resumen-card').classList.toggle('papel-separado', marcado);
+      renderResumen(document.getElementById('clientes-search').value.trim().toLowerCase());
+    });
+  });
 
   container.querySelectorAll('.resumen-card').forEach((card) => {
     card.addEventListener('click', () => {

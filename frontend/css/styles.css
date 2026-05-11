@@ -576,6 +576,28 @@ input:focus { border-color: var(--accent); }
 
 .resumen-card { cursor: pointer; }
 .resumen-card:active { opacity: .8; }
+.resumen-card.papel-separado { opacity: 0.45; }
+
+.btn-papel {
+  background: none;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  color: transparent;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.btn-papel.marcado {
+  background: var(--green);
+  border-color: var(--green);
+  color: #000;
+}
 
 .resumen-nombre { font-size: 14px; font-weight: 500; flex: 1; }
 
