@@ -905,6 +905,9 @@ document.getElementById('cliente-form').addEventListener('submit', async (e) => 
     data[f] = document.getElementById(`cf-${f}`).value.trim() || null;
   });
 
+  if (!data.localidad) { showToast('Seleccioná una zona', 'error'); return; }
+  if (!data.vendedor) { showToast('Ingresá el vendedor', 'error'); return; }
+
   try {
     if (editingClienteId) {
       await api.updateCliente(editingClienteId, data);
