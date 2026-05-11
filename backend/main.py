@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import picks, auth, health, clientes, admin, zonas, export
 from app.api.yaguar import semanas as yaguar_semanas
 from app.api.diarco import semanas as diarco_semanas
+# picks, clientes y export tienen routers dobles (uno por mayorista)
 from app.auth.jwt import hash_password
 from app.db.database import init_pool, get_db
 from config import settings
@@ -26,6 +27,7 @@ async def lifespan(app: FastAPI):
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS uxb INTEGER DEFAULT 0")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS importe_total NUMERIC DEFAULT 0")
+        cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
         # Tabla repartos con mayorista
         cur.execute("""
             CREATE TABLE IF NOT EXISTS repartos (
@@ -116,11 +118,16 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
-app.include_router(picks.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
-app.include_router(clientes.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(zonas.router, prefix="/api")           # zonas y repartos son compartidos
+# ── Yaguar ────────────────────────────────────────────────────────────────
 app.include_router(yaguar_semanas.router, prefix="/api")
+app.include_router(picks.router_yaguar, prefix="/api")
+app.include_router(clientes.router_yaguar, prefix="/api")
+app.include_router(export.router_yaguar, prefix="/api")
+# ── Diarco ────────────────────────────────────────────────────────────────
 app.include_router(diarco_semanas.router, prefix="/api")
-app.include_router(zonas.router, prefix="/api")
-app.include_router(export.router, prefix="/api")
+app.include_router(picks.router_diarco, prefix="/api")
+app.include_router(clientes.router_diarco, prefix="/api")
+app.include_router(export.router_diarco, prefix="/api")

@@ -72,19 +72,19 @@ const api = {
   login: (username, password) => request('POST', '/api/auth/login', { username, password }),
   logout: () => request('POST', '/api/auth/logout'),
 
-  // Picks (todos aceptan semana opcional)
-  getStats: (semana) => request('GET', `/api/picks/stats${semanaParam(semana)}`),
-  getResumen: (semana) => request('GET', `/api/picks/resumen${semanaParam(semana)}`),
-  getByBarcode: (cod_bar, semana) => request('GET', `/api/picks/barcode/${encodeURIComponent(cod_bar)}${semanaParam(semana)}`),
-  buscarPorDescrip: (q, semana) => request('GET', `/api/picks/buscar?q=${encodeURIComponent(q)}${semana ? `&semana=${encodeURIComponent(semana)}` : ''}`),
-  getPicksPorCliente: (nombre, semana) => request('GET', `/api/picks/por-cliente?nombre=${encodeURIComponent(nombre)}${semana ? `&semana=${encodeURIComponent(semana)}` : ''}`),
-  updateQuantity: (id, cantidad_pickeada) => request('PUT', `/api/picks/${id}/quantity`, { cantidad_pickeada }),
+  // Picks — rutas separadas por mayorista (/api/yaguar/picks/ o /api/diarco/picks/)
+  getStats: (semana) => request('GET', `/api/${getMayorista()}/picks/stats${semanaParam(semana)}`),
+  getResumen: (semana) => request('GET', `/api/${getMayorista()}/picks/resumen${semanaParam(semana)}`),
+  getByBarcode: (cod_bar, semana) => request('GET', `/api/${getMayorista()}/picks/barcode/${encodeURIComponent(cod_bar)}${semanaParam(semana)}`),
+  buscarPorDescrip: (q, semana) => request('GET', `/api/${getMayorista()}/picks/buscar?q=${encodeURIComponent(q)}${semana ? `&semana=${encodeURIComponent(semana)}` : ''}`),
+  getPicksPorCliente: (nombre, semana) => request('GET', `/api/${getMayorista()}/picks/por-cliente?nombre=${encodeURIComponent(nombre)}${semana ? `&semana=${encodeURIComponent(semana)}` : ''}`),
+  updateQuantity: (id, cantidad_pickeada) => request('PUT', `/api/${getMayorista()}/picks/${id}/quantity`, { cantidad_pickeada }),
 
-  // Clientes
-  getClientes: () => request('GET', `/api/clientes/?mayorista=${getMayorista()}`),
-  createCliente: (data) => request('POST', '/api/clientes/', { ...data, mayorista: getMayorista() }),
-  updateCliente: (id, data) => request('PUT', `/api/clientes/${id}`, data),
-  deleteCliente: (id) => request('DELETE', `/api/clientes/${id}`),
+  // Clientes — rutas separadas por mayorista (/api/yaguar/clientes/ o /api/diarco/clientes/)
+  getClientes: () => request('GET', `/api/${getMayorista()}/clientes/`),
+  createCliente: (data) => request('POST', `/api/${getMayorista()}/clientes/`, data),
+  updateCliente: (id, data) => request('PUT', `/api/${getMayorista()}/clientes/${id}`, data),
+  deleteCliente: (id) => request('DELETE', `/api/${getMayorista()}/clientes/${id}`),
 
   // Admin
   verifyAdmin: (password) => request('POST', '/api/admin/verify', { password }),
@@ -109,8 +109,8 @@ const api = {
   updateZona: (id, nombre, reparto) => request('PUT', `/api/zonas/${id}`, { nombre, reparto }),
   deleteZona: (id) => request('DELETE', `/api/zonas/${id}`),
 
-  // Export
-  exportPicksUrl: (semana) => `/api/export/picks?semana=${encodeURIComponent(semana)}&mayorista=${getMayorista()}`,
+  // Export — rutas separadas por mayorista (/api/yaguar/export/ o /api/diarco/export/)
+  exportPicksUrl: (semana) => `/api/${getMayorista()}/export/picks?semana=${encodeURIComponent(semana)}`,
 
   // Semanas (rutas separadas por mayorista)
   getSemanas: () => request('GET', `/api/${getMayorista()}/semanas/`),

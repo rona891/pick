@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS pick (
     updated_at timestamptz,
     created_at timestamptz DEFAULT now(),
     uxb integer DEFAULT 0,
-    importe_total numeric DEFAULT 0
+    importe_total numeric DEFAULT 0,
+    mayorista varchar NOT NULL DEFAULT 'yaguar'
 );
 
 CREATE TABLE IF NOT EXISTS semanas (

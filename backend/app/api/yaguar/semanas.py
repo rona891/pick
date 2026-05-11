@@ -148,8 +148,8 @@ async def importar_semana(
                 """
                 INSERT INTO pick
                     (cod_bar, cod_art, descrip, nombre, cliente, localidad, uni, bul, uxb,
-                     cantidad_pickeada, estado, semana, importe_total)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s)
+                     cantidad_pickeada, estado, semana, importe_total, mayorista)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, 'yaguar')
                 """,
                 (
                     r["cod_bar"],
