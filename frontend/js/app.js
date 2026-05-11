@@ -880,7 +880,7 @@ async function openClienteForm(id) {
   const zonas = await api.getZonas().catch(() => []);
   const sel = document.getElementById('cf-localidad');
   sel.innerHTML = '<option value="">— Seleccioná una zona —</option>' +
-    zonas.map((z) => `<option value="${z.nombre}">${z.nombre}${z.al_final ? ' (al final)' : ''}</option>`).join('');
+    zonas.map((z) => `<option value="${z.nombre}">${z.nombre}</option>`).join('');
 
   if (id) {
     api.getClientes().then((list) => {

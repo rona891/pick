@@ -81,7 +81,8 @@ label {
 input[type="email"],
 input[type="password"],
 input[type="text"],
-input[type="number"] {
+input[type="number"],
+select {
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -92,9 +93,13 @@ input[type="number"] {
   padding: 10px 12px;
   outline: none;
   transition: border-color .2s;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
 }
+select option { background: var(--bg); color: var(--text); }
 
-input:focus { border-color: var(--accent); }
+input:focus, select:focus { border-color: var(--accent); }
 
 .btn-primary {
   width: 100%;
