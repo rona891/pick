@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.admin-tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.adminPanel !== target));
       if (target === 'usuarios') loadUsers();
       if (target === 'nueva-semana') loadSemanasAdmin();
+      if (target === 'zonas') loadZonas();
     });
   });
 });
@@ -868,21 +869,20 @@ async function loadClientes() {
   }
 }
 
-function openClienteForm(id) {
+async function openClienteForm(id) {
   editingClienteId = id;
   document.getElementById('modal-title').textContent = id ? 'Editar cliente' : 'Nuevo cliente';
 
   const fields = ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'];
   fields.forEach((f) => { document.getElementById(`cf-${f}`).value = ''; });
 
+  // Poblar dropdown de zonas
+  const zonas = await api.getZonas().catch(() => []);
+  const sel = document.getElementById('cf-localidad');
+  sel.innerHTML = '<option value="">— Seleccioná una zona —</option>' +
+    zonas.map((z) => `<option value="${z.nombre}">${z.nombre}${z.al_final ? ' (al final)' : ''}</option>`).join('');
+
   if (id) {
-    // Buscar en las filas ya cargadas en la tabla en lugar de llamar API de nuevo
-    const row = document.querySelector(`#clientes-tbody tr[data-id="${id}"]`);
-    if (row) {
-      const cells = row.querySelectorAll('td');
-      const mapping = ['nombre', 'localidad', null, 'telefono', 'contacto', 'vendedor'];
-      // La tabla no tiene dirección, necesitamos la API solo para ese campo
-    }
     api.getClientes().then((list) => {
       const c = list.find((x) => x.id === id);
       if (c) {
@@ -1174,6 +1174,75 @@ document.getElementById('username-form').addEventListener('submit', async (e) =>
   });
 
 })();
+
+// ── Admin: Zonas ───────────────────────────────────────────────────────────
+async function loadZonas() {
+  const tbody = document.getElementById('zonas-tbody');
+  try {
+    const zonas = await api.getZonas();
+    if (!zonas.length) {
+      tbody.innerHTML = '<tr><td colspan="3" class="error-msg">No hay zonas cargadas</td></tr>';
+      return;
+    }
+    tbody.innerHTML = zonas.map((z) => `
+      <tr data-id="${z.id}">
+        <td>${z.nombre}</td>
+        <td style="text-align:center">${z.al_final ? '✓' : ''}</td>
+        <td>
+          <button class="btn-edit" onclick="editZona(${z.id}, '${z.nombre.replace(/'/g, "\\'")}', ${z.al_final})">Editar</button>
+          <button class="btn-del" onclick="deleteZona(${z.id}, '${z.nombre.replace(/'/g, "\\'")}')">✕</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
+  }
+}
+
+function editZona(id, nombre, alFinal) {
+  document.getElementById('nz-nombre').value = nombre;
+  document.getElementById('nz-al-final').checked = alFinal;
+  const btn = document.querySelector('#nueva-zona-form button[type="submit"]');
+  btn.textContent = 'Guardar cambios';
+  btn.dataset.editId = id;
+}
+
+async function deleteZona(id, nombre) {
+  const ok = await confirmar(`¿Eliminar la zona "${nombre}"?`);
+  if (!ok) return;
+  try {
+    await api.deleteZona(id);
+    showToast(`Zona ${nombre} eliminada`, 'info');
+    loadZonas();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+document.getElementById('nueva-zona-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = document.getElementById('nz-nombre').value.trim();
+  const alFinal = document.getElementById('nz-al-final').checked;
+  const btn = e.target.querySelector('button[type="submit"]');
+  const editId = btn.dataset.editId;
+
+  try {
+    if (editId) {
+      await api.updateZona(parseInt(editId), nombre, alFinal);
+      showToast('Zona actualizada', 'success');
+      delete btn.dataset.editId;
+      btn.textContent = 'Agregar zona';
+    } else {
+      await api.createZona(nombre, alFinal);
+      showToast(`Zona ${nombre} creada`, 'success');
+    }
+    document.getElementById('nz-nombre').value = '';
+    document.getElementById('nz-al-final').checked = false;
+    loadZonas();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
 
 // ── Modal de confirmación ──────────────────────────────────────────────────
 function confirmar(msg) {

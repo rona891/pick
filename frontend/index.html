@@ -162,6 +162,7 @@
           <button class="admin-tab-btn active" data-admin-tab="clientes">Clientes</button>
           <button class="admin-tab-btn" data-admin-tab="nueva-semana">Semanas</button>
           <button class="admin-tab-btn" data-admin-tab="usuarios">Usuarios</button>
+          <button class="admin-tab-btn" data-admin-tab="zonas">Zonas</button>
         </div>
 
         <!-- Sub-panel: Clientes -->
@@ -254,6 +255,35 @@
           </form>
         </div>
 
+        <!-- Sub-panel: Zonas -->
+        <div class="admin-tab-panel hidden" data-admin-panel="zonas">
+          <div class="admin-section-title" style="margin-bottom:16px">Zonas</div>
+          <div class="table-wrap" style="margin-bottom:24px">
+            <table class="clientes-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Al final</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="zonas-tbody"></tbody>
+            </table>
+          </div>
+          <div class="admin-section-title" style="margin-bottom:12px">Nueva zona</div>
+          <form id="nueva-zona-form">
+            <div class="form-group">
+              <label>Nombre</label>
+              <input type="text" id="nz-nombre" required autocomplete="off" placeholder="Ej: LA TOMA" />
+            </div>
+            <div class="form-group" style="display:flex;align-items:center;gap:10px">
+              <input type="checkbox" id="nz-al-final" />
+              <label for="nz-al-final" style="margin:0;color:var(--text);font-size:13px;text-transform:none">Mostrar siempre al final en picks</label>
+            </div>
+            <button type="submit" class="btn-primary">Agregar zona</button>
+          </form>
+        </div>
+
       </div>
 
     </div>
@@ -319,7 +349,7 @@
       </div>
       <form id="cliente-form">
         <div class="form-group"><label>Nombre</label><input type="text" id="cf-nombre" required /></div>
-        <div class="form-group"><label>Localidad</label><input type="text" id="cf-localidad" /></div>
+        <div class="form-group"><label>Zona</label><select id="cf-localidad"><option value="">— Seleccioná una zona —</option></select></div>
         <div class="form-group"><label>Dirección</label><input type="text" id="cf-direccion" /></div>
         <div class="form-group"><label>Teléfono</label><input type="text" id="cf-telefono" /></div>
         <div class="form-group"><label>Contacto</label><input type="text" id="cf-contacto" /></div>

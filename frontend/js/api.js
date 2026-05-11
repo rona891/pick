@@ -71,6 +71,12 @@ const api = {
   createUser: (username, password) => request('POST', '/api/auth/users', { username, password }),
   deleteUser: (id) => request('DELETE', `/api/auth/users/${id}`),
 
+  // Zonas
+  getZonas: () => request('GET', '/api/zonas/'),
+  createZona: (nombre, al_final) => request('POST', '/api/zonas/', { nombre, al_final }),
+  updateZona: (id, nombre, al_final) => request('PUT', `/api/zonas/${id}`, { nombre, al_final }),
+  deleteZona: (id) => request('DELETE', `/api/zonas/${id}`),
+
   // Semanas
   getSemanas: () => request('GET', '/api/semanas/'),
   deleteSemana: (id) => request('DELETE', `/api/semanas/${id}`),

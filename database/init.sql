@@ -30,6 +30,13 @@ CREATE TABLE IF NOT EXISTS semanas (
     created_at timestamptz DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS zonas (
+    id bigserial PRIMARY KEY,
+    nombre varchar UNIQUE NOT NULL,
+    al_final boolean DEFAULT false,
+    created_at timestamptz DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS clientes_yaguar (
     id bigserial PRIMARY KEY,
     nombre varchar,
