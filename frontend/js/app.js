@@ -45,6 +45,7 @@ function showApp() {
   document.getElementById('app-view').classList.remove('hidden');
   // Mostrar tab Admin solo a usuarios con rol admin o superadmin
   document.querySelector('.tab-btn[data-tab="admin"]').classList.toggle('hidden', !esAdmin());
+  document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
   loadSemanas().then(() => loadStats());
   switchTab('pick');
   prewarmCamera();
@@ -68,6 +69,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     const res = await api.login(username, password);
     setToken(res.access_token);
     setRol(res.rol);
+    localStorage.setItem('username', username);
     showApp();
     setTimeout(() => { if (!isFullscreen()) enterFullscreen(); }, 300);
   } catch (err) {

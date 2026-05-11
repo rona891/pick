@@ -11,6 +11,7 @@ function setToken(token) {
 function clearToken() {
   localStorage.removeItem('token');
   localStorage.removeItem('rol');
+  localStorage.removeItem('username');
 }
 
 function getRol() {
