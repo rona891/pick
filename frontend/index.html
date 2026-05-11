@@ -347,6 +347,17 @@
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
+  <!-- Modal de confirmación -->
+  <div id="confirm-modal" class="confirm-overlay hidden">
+    <div class="confirm-box">
+      <div id="confirm-msg" class="confirm-msg"></div>
+      <div class="confirm-actions">
+        <button id="confirm-cancel" class="btn-secondary">Cancelar</button>
+        <button id="confirm-ok" class="btn-danger">Sí, reemplazar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
   <script src="js/api.js?v=9"></script>
   <script src="js/app.js?v=9"></script>

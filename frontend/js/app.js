@@ -961,6 +961,12 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
   if (!fechaDesde || !fechaHasta) { showToast('Seleccioná las fechas', 'error'); return; }
   if (files.length === 0) { showToast('Seleccioná al menos un archivo .db', 'error'); return; }
 
+  const semanas = await api.getSemanas();
+  if (semanas.some((s) => s.nombre === nombre)) {
+    const ok = await confirmar(`La semana "${nombre}" ya existe. ¿Querés reemplazarla con los nuevos datos? Esto borrará todos los picks actuales de esa semana.`);
+    if (!ok) return;
+  }
+
   const formData = new FormData();
   formData.append('nombre', nombre);
   formData.append('fecha_desde', fechaDesde);
@@ -1092,6 +1098,27 @@ document.getElementById('username-form').addEventListener('submit', async (e) =>
   });
 
 })();
+
+// ── Modal de confirmación ──────────────────────────────────────────────────
+function confirmar(msg) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('confirm-modal');
+    document.getElementById('confirm-msg').textContent = msg;
+    overlay.classList.remove('hidden');
+    const ok = document.getElementById('confirm-ok');
+    const cancel = document.getElementById('confirm-cancel');
+    function cleanup(result) {
+      overlay.classList.add('hidden');
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    function onOk() { cleanup(true); }
+    function onCancel() { cleanup(false); }
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+  });
+}
 
 // ── Toast ──────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info') {
