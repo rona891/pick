@@ -999,7 +999,7 @@ async function loadUsers() {
           <td>${u.username}</td>
           <td>${rolLabel}</td>
           <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
-          <td class="td-actions">${toggleBtn}${delBtn}</td>
+          <td class="td-actions">${esSuperadmin ? '<span style="color:var(--muted)">—</span>' : toggleBtn + delBtn}</td>
         </tr>`;
     }).join('');
   } catch (err) {
