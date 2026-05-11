@@ -233,8 +233,7 @@ function aplicarFiltroPendientes(container) {
 // ── Formato cantidad ───────────────────────────────────────────────────────
 function estadoClass(estado) {
   if ((estado || '').startsWith('completado')) return 'estado-ok';
-  if ((estado || '').startsWith('entregado')) return 'estado-entregado';
-  return 'estado-pend';
+  return 'estado-entregado';
 }
 
 function formatCantidad(uni, bul, uxb) {

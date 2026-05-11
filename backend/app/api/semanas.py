@@ -132,7 +132,7 @@ async def importar_semana(
                     uni,
                     int(r["bul"] or 0),
                     int(r["uxb"] or 0),
-                    f"pendiente: 0/{uni} UNI",
+                    f"entregado: 0/{uni} UNI",
                     nombre,
                 ),
             )
