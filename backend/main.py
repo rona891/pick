@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import picks, auth, health, clientes, admin, semanas, zonas, export
+from app.auth.jwt import hash_password
 from app.db.database import init_pool, get_db
 from config import settings
 
@@ -10,6 +11,15 @@ from config import settings
 async def lifespan(app: FastAPI):
     init_pool()
     with get_db() as cur:
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS rol VARCHAR NOT NULL DEFAULT 'operario'")
+        # Crear superadmin si no existe ninguno
+        cur.execute("SELECT COUNT(*) AS n FROM users WHERE rol = 'superadmin'")
+        if cur.fetchone()["n"] == 0:
+            cur.execute(
+                """INSERT INTO users (username, password_hash, rol) VALUES (%s, %s, 'superadmin')
+                   ON CONFLICT (username) DO UPDATE SET rol = 'superadmin', password_hash = EXCLUDED.password_hash""",
+                ("ADMIN", hash_password(settings.ADMIN_PASSWORD)),
+            )
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS id_yaguar VARCHAR")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS uxb INTEGER DEFAULT 0")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS importe_total NUMERIC DEFAULT 0")

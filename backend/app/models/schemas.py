@@ -31,6 +31,7 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     access_token: str
+    rol: str
 
 
 class StatsResponse(BaseModel):
@@ -80,6 +81,7 @@ class UserCreate(BaseModel):
 class UserOut(BaseModel):
     id: int
     username: str
+    rol: str = 'operario'
     created_at: Optional[datetime] = None
 
 

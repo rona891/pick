@@ -43,6 +43,9 @@ function showLogin() {
 function showApp() {
   document.getElementById('login-view').classList.add('hidden');
   document.getElementById('app-view').classList.remove('hidden');
+  // Mostrar tab Admin solo a usuarios con rol admin o superadmin
+  document.querySelector('.tab-btn[data-tab="admin"]').classList.toggle('hidden', !esAdmin());
+  document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
   loadSemanas().then(() => loadStats());
   switchTab('pick');
   prewarmCamera();
@@ -65,6 +68,8 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   try {
     const res = await api.login(username, password);
     setToken(res.access_token);
+    setRol(res.rol);
+    localStorage.setItem('username', username);
     showApp();
     setTimeout(() => { if (!isFullscreen()) enterFullscreen(); }, 300);
   } catch (err) {
@@ -804,7 +809,10 @@ document.getElementById('cliente-picks-overlay').addEventListener('click', (e) =
 
 // ── Tab: Admin ─────────────────────────────────────────────────────────────
 function initAdmin() {
-  if (adminUnlocked) {
+  if (adminUnlocked || esAdmin()) {
+    adminUnlocked = true;
+    document.getElementById('admin-lock').classList.add('hidden');
+    document.getElementById('admin-panel').classList.remove('hidden');
     loadClientes();
   } else {
     document.getElementById('admin-lock').classList.remove('hidden');
@@ -976,20 +984,45 @@ async function deleteSemana(id, nombre) {
 async function loadUsers() {
   const tbody = document.getElementById('users-tbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="3" class="loading">Cargando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="4" class="loading">Cargando...</td></tr>';
   try {
     const users = await api.getUsers();
-    tbody.innerHTML = users.map((u) => `
-      <tr>
-        <td>${u.username}</td>
-        <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
-        <td class="td-actions">
-          <button class="btn-del" onclick="deleteUser(${u.id})">Eliminar</button>
-        </td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = users.map((u) => {
+      const esSuperadmin = u.rol === 'superadmin';
+      const esAdminUser = u.rol === 'admin';
+      const rolLabel = esSuperadmin ? '<span style="color:var(--accent)">Superadmin</span>'
+                     : esAdminUser  ? '<span style="color:var(--green)">Admin</span>'
+                     :                '<span style="color:var(--muted)">Operario</span>';
+      const esSuperadminActual = getRol() === 'superadmin';
+      const toggleBtn = (esSuperadmin || !esSuperadminActual) ? '' : `
+        <label class="rol-switch" title="${esAdminUser ? 'Quitar admin' : 'Dar admin'}">
+          <input type="checkbox" ${esAdminUser ? 'checked' : ''} onchange="toggleRol(${u.id}, '${u.rol}', this)">
+          <span class="rol-switch-track"><span class="rol-switch-thumb"></span></span>
+          <span class="rol-switch-label">${esAdminUser ? 'Admin' : 'Operario'}</span>
+        </label>`;
+      const delBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
+      return `
+        <tr>
+          <td>${u.username}</td>
+          <td>${rolLabel}</td>
+          <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
+          <td class="td-actions">${esSuperadmin ? '<span style="color:var(--muted)">—</span>' : toggleBtn + delBtn}</td>
+        </tr>`;
+    }).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="error-msg">${err.message}</td></tr>`;
+  }
+}
+
+async function toggleRol(id, rolActual, checkbox) {
+  const nuevoRol = rolActual === 'admin' ? 'operario' : 'admin';
+  try {
+    await api.updateRol(id, nuevoRol);
+    showToast(`Rol actualizado a ${nuevoRol}`, 'success');
+    loadUsers();
+  } catch (err) {
+    checkbox.checked = !checkbox.checked;
+    showToast(err.message, 'error');
   }
 }
 
