@@ -231,6 +231,12 @@ function aplicarFiltroPendientes(container) {
 }
 
 // ── Formato cantidad ───────────────────────────────────────────────────────
+function estadoClass(estado) {
+  if ((estado || '').startsWith('completado')) return 'estado-ok';
+  if ((estado || '').startsWith('entregado')) return 'estado-entregado';
+  return 'estado-pend';
+}
+
 function formatCantidad(uni, bul, uxb) {
   uni = uni || 0; bul = bul || 0; uxb = uxb || 0;
   if (uxb > 1 && bul > 0 && uni === bul * uxb) {
@@ -287,7 +293,7 @@ function renderPicks(picks, container = document.getElementById('results')) {
         <span class="qty-main">${qty.main}</span>
         ${qty.sub ? `<span class="qty-sub">${qty.sub}</span>` : ''}
       </div>
-      <div class="pick-estado ${isCompleted ? 'estado-ok' : 'estado-pend'}">${pick.estado ?? 'sin estado'}</div>
+      <div class="pick-estado ${estadoClass(pick.estado)}">${pick.estado ?? 'sin estado'}</div>
       <div class="pick-controls"></div>
     `;
 
@@ -353,7 +359,7 @@ async function saveQuantity(id, cantidad, card) {
     const isCompleted = res.estado.startsWith('completado');
     card.classList.toggle('completed', isCompleted);
     card.querySelector('.pick-estado').textContent = res.estado;
-    card.querySelector('.pick-estado').className = `pick-estado ${isCompleted ? 'estado-ok' : 'estado-pend'}`;
+    card.querySelector('.pick-estado').className = `pick-estado ${estadoClass(res.estado)}`;
 
     renderControls(card, cantidad, isCompleted);
     aplicarFiltroPendientes(card.closest('#results, .cliente-picks-content') || document.getElementById('results'));

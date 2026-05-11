@@ -464,6 +464,7 @@ input:focus { border-color: var(--accent); }
 }
 
 .estado-ok { background: #1e3a2a; color: var(--green); }
+.estado-entregado { background: #2a1e0a; color: var(--orange); }
 .estado-pend { background: #1e1e0d; color: var(--accent); }
 
 .pick-qty-info {

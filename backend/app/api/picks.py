@@ -140,7 +140,12 @@ def update_quantity(id: int, update: QuantityUpdate):
 
         uni = row["uni"] or 0
         cantidad = update.cantidad_pickeada
-        estado = f"completado: {cantidad}/{uni} UNI" if cantidad >= uni else f"pendiente: {cantidad}/{uni} UNI"
+        if cantidad >= uni:
+            estado = f"completado: {cantidad}/{uni} UNI"
+        elif cantidad > 0:
+            estado = f"entregado: {cantidad}/{uni} UNI"
+        else:
+            estado = f"pendiente: 0/{uni} UNI"
 
         cur.execute(
             "UPDATE pick SET cantidad_pickeada = %s, estado = %s, updated_at = %s WHERE id = %s",
