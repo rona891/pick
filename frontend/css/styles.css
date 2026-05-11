@@ -574,6 +574,13 @@ input:focus { border-color: var(--accent); }
 .resumen-card.estado-incompleto { border-left: 3px solid var(--orange); }
 .resumen-card.estado-pendiente { border-left: 3px solid var(--muted); }
 
+.resumen-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.resumen-row .resumen-card { flex: 1; min-width: 0; }
+
 .resumen-card { cursor: pointer; }
 .resumen-card:active { opacity: .8; }
 .resumen-card.papel-separado { opacity: 0.45; }
@@ -587,7 +594,7 @@ input:focus { border-color: var(--accent); }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 15px;
   cursor: pointer;
   flex-shrink: 0;
   color: transparent;

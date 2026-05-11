@@ -721,27 +721,26 @@ function renderResumen(searchQ = '') {
   container.innerHTML = sorted.map((r) => {
     const marcado = separados.has(r.nombre);
     return `
-    <div class="resumen-card estado-${r.estado_general}${marcado ? ' papel-separado' : ''}" data-nombre="${encodeURIComponent(r.nombre)}">
+    <div class="resumen-row">
       <button class="btn-papel${marcado ? ' marcado' : ''}" data-papel="${encodeURIComponent(r.nombre)}">✓</button>
-      <div class="resumen-nombre">${r.nombre}</div>
-      <div class="resumen-stats">
-        <span class="tag-ok">${r.completados} ✓</span>
-        <span class="tag-pend">${r.pendientes} pend.</span>
-        <span class="tag-total">${r.total} total</span>
+      <div class="resumen-card estado-${r.estado_general}${marcado ? ' papel-separado' : ''}" data-nombre="${encodeURIComponent(r.nombre)}">
+        <div class="resumen-nombre">${r.nombre}</div>
+        <div class="resumen-stats">
+          <span class="tag-ok">${r.completados} ✓</span>
+          <span class="tag-pend">${r.pendientes} pend.</span>
+          <span class="tag-total">${r.total} total</span>
+        </div>
+        <div class="resumen-badge badge-${r.estado_general}">${r.estado_general}</div>
+        <button class="btn-ver-picks">›</button>
       </div>
-      <div class="resumen-badge badge-${r.estado_general}">${r.estado_general}</div>
-      <button class="btn-ver-picks">›</button>
     </div>
   `}).join('');
 
   container.querySelectorAll('.btn-papel').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
+    btn.addEventListener('click', () => {
       const nombre = decodeURIComponent(btn.dataset.papel);
       const marcado = !btn.classList.contains('marcado');
       savePapelSeparado(nombre, marcado);
-      btn.classList.toggle('marcado', marcado);
-      btn.closest('.resumen-card').classList.toggle('papel-separado', marcado);
       renderResumen(document.getElementById('clientes-search').value.trim().toLowerCase());
     });
   });
