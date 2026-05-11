@@ -290,7 +290,6 @@ function renderPicks(picks, container = document.getElementById('results')) {
     const qty = formatRestante(uni, cantidad, pick.bul, uxb);
 
     card.innerHTML = `
-      ${isParcial ? `<div class="pick-aviso">⚠ ${cantidad} uni ya entregadas — verificá antes de agregar más</div>` : ''}
       <div class="pick-header">
         <span class="pick-art">${pick.cod_art ?? ''}</span>
       </div>
@@ -380,18 +379,6 @@ async function saveQuantity(id, cantidad, card) {
     card.querySelector('.qty-main').textContent = qty.main;
     const qtySub = card.querySelector('.qty-sub');
     if (qtySub) qtySub.textContent = qty.sub || '';
-
-    const avisoExistente = card.querySelector('.pick-aviso');
-    if (isParcial && !avisoExistente) {
-      const aviso = document.createElement('div');
-      aviso.className = 'pick-aviso';
-      aviso.textContent = `⚠ ${cantidad} uni ya entregadas — verificá antes de agregar más`;
-      card.insertBefore(aviso, card.firstChild);
-    } else if (!isParcial && avisoExistente) {
-      avisoExistente.remove();
-    } else if (isParcial && avisoExistente) {
-      avisoExistente.textContent = `⚠ ${cantidad} uni ya entregadas — verificá antes de agregar más`;
-    }
 
     renderControls(card, cantidad, isCompleted);
     aplicarFiltroPendientes(card.closest('#results, .cliente-picks-content') || document.getElementById('results'));
