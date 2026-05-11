@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS pick (
     semana varchar,
     updated_at timestamptz,
     created_at timestamptz DEFAULT now(),
-    uxb integer DEFAULT 0
+    uxb integer DEFAULT 0,
+    importe_total numeric DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS semanas (

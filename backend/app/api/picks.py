@@ -38,7 +38,8 @@ def get_resumen(semana: Optional[str] = Query(None)):
                 SELECT
                     nombre,
                     COUNT(*) AS total,
-                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completados
+                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completados,
+                    MAX(importe_total) AS importe_total
                 FROM pick
                 WHERE nombre IS NOT NULL AND semana = %s
                 GROUP BY nombre
@@ -49,7 +50,8 @@ def get_resumen(semana: Optional[str] = Query(None)):
                 SELECT
                     nombre,
                     COUNT(*) AS total,
-                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completados
+                    COUNT(*) FILTER (WHERE estado LIKE 'completado%%') AS completados,
+                    MAX(importe_total) AS importe_total
                 FROM pick
                 WHERE nombre IS NOT NULL
                 GROUP BY nombre
@@ -74,6 +76,7 @@ def get_resumen(semana: Optional[str] = Query(None)):
             "completados": completados,
             "pendientes": pendientes,
             "estado_general": estado_general,
+            "importe_total": float(row["importe_total"] or 0),
         })
     return resumen
 

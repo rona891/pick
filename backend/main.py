@@ -12,6 +12,7 @@ async def lifespan(app: FastAPI):
     with get_db() as cur:
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS id_yaguar VARCHAR")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS uxb INTEGER DEFAULT 0")
+        cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS importe_total NUMERIC DEFAULT 0")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS semanas (
                 id        bigserial PRIMARY KEY,

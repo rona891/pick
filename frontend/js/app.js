@@ -8,6 +8,7 @@ let soloPendientes = false;
 let wakeLock = null;
 let resumenData = [];
 let filtroActivo = 'todos';
+let sortByImporte = false;
 let descripTimer = null;
 let cameras = [];
 let currentCameraIndex = 0;
@@ -242,6 +243,11 @@ function formatCantidad(uni, bul, uxb) {
     return { main: `${bul} bulto${bul !== 1 ? 's' : ''}`, sub: `× ${uxb} uni/bulto` };
   }
   return { main: `${uni} uni`, sub: uxb > 1 ? `× ${uxb} uni/bulto` : null };
+}
+
+function formatImporte(n) {
+  if (!n) return '';
+  return '$' + Math.round(n).toLocaleString('es-AR');
 }
 
 function formatRestante(uni, cantidad, bul, uxb) {
@@ -669,12 +675,18 @@ async function loadResumen() {
   }
 }
 
-document.querySelectorAll('.filter-btn').forEach((btn) => {
+document.querySelectorAll('.filter-btn[data-filter]').forEach((btn) => {
   btn.addEventListener('click', () => {
     filtroActivo = btn.dataset.filter;
-    document.querySelectorAll('.filter-btn').forEach((b) => b.classList.toggle('active', b.dataset.filter === filtroActivo));
+    document.querySelectorAll('.filter-btn[data-filter]').forEach((b) => b.classList.toggle('active', b.dataset.filter === filtroActivo));
     renderResumen();
   });
+});
+
+document.getElementById('sort-importe-btn').addEventListener('click', () => {
+  sortByImporte = !sortByImporte;
+  document.getElementById('sort-importe-btn').classList.toggle('active', sortByImporte);
+  renderResumen(document.getElementById('clientes-search').value.trim().toLowerCase());
 });
 
 document.getElementById('clientes-search').addEventListener('input', (e) => {
@@ -715,7 +727,9 @@ function renderResumen(searchQ = '') {
   const sorted = [...filtered].sort((a, b) => {
     const as = separados.has(a.nombre) ? 1 : 0;
     const bs = separados.has(b.nombre) ? 1 : 0;
-    return as - bs;
+    if (as !== bs) return as - bs;
+    if (sortByImporte) return (b.importe_total || 0) - (a.importe_total || 0);
+    return 0;
   });
 
   container.innerHTML = sorted.map((r) => {
@@ -729,6 +743,7 @@ function renderResumen(searchQ = '') {
           <span class="tag-ok">${r.completados} ✓</span>
           <span class="tag-pend">${r.pendientes} pend.</span>
           <span class="tag-total">${r.total} total</span>
+          ${r.importe_total > 0 ? `<span class="tag-importe">${formatImporte(r.importe_total)}</span>` : ''}
         </div>
         <div class="resumen-badge badge-${r.estado_general}">${r.estado_general}</div>
         <button class="btn-ver-picks">›</button>

@@ -45,6 +45,7 @@ class PickResumen(BaseModel):
     completados: int
     pendientes: int
     estado_general: str  # "completo" | "incompleto" | "pendiente"
+    importe_total: float = 0
 
 
 class Cliente(BaseModel):

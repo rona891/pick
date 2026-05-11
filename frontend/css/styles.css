@@ -620,10 +620,11 @@ input:focus { border-color: var(--accent); }
   flex-shrink: 0;
 }
 
-.resumen-stats { display: flex; gap: 10px; font-size: 12px; }
+.resumen-stats { display: flex; gap: 10px; font-size: 12px; flex-wrap: wrap; }
 .tag-ok { color: var(--green); }
 .tag-pend { color: var(--accent); }
 .tag-total { color: var(--muted); }
+.tag-importe { color: var(--text); font-weight: 600; }
 
 .resumen-badge {
   font-size: 11px;

@@ -36,7 +36,22 @@ ORDER BY pc.PED_FECHA_REG DESC
 """
 
 
-def _query_db_file(db_bytes: bytes, fecha_desde: str, fecha_hasta: str) -> list:
+TOTALES_SQL = """
+WITH PedidosFiltrados AS (
+    SELECT *
+    FROM hpedidosCabecera
+    WHERE (SUBSTR(PED_FECHA_REG, 1, 4) || SUBSTR(PED_FECHA_REG, 6, 2) || SUBSTR(PED_FECHA_REG, 9, 2))
+        BETWEEN ? AND ?
+)
+SELECT SUBSTR(c.CLI_ID, -6) AS cliente_id,
+       ROUND(SUM(pc.PED_IMPORTE_TOTAL), 2) AS total_importe
+FROM PedidosFiltrados pc
+JOIN clientes c ON pc.PED_CLI_ID = c.CLI_ID
+GROUP BY c.CLI_ID
+"""
+
+
+def _query_db_file(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         f.write(db_bytes)
         tmp_path = f.name
@@ -45,9 +60,11 @@ def _query_db_file(db_bytes: bytes, fecha_desde: str, fecha_hasta: str) -> list:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
         cur.execute(EXTRACT_SQL, (fecha_desde, fecha_hasta))
-        rows = [dict(r) for r in cur.fetchall()]
+        picks = [dict(r) for r in cur.fetchall()]
+        cur.execute(TOTALES_SQL, (fecha_desde, fecha_hasta))
+        totales = {r["cliente_id"]: float(r["total_importe"] or 0) for r in cur.fetchall()}
         conn.close()
-        return rows
+        return picks, totales
     finally:
         os.unlink(tmp_path)
 
@@ -72,10 +89,13 @@ async def importar_semana(
         raise HTTPException(400, "fecha_hasta debe estar en formato AAAAMMDD (ej: 20260429)")
 
     all_rows: list = []
+    totales_por_cliente: dict = {}
     for archivo in archivos:
         content = await archivo.read()
-        rows = _query_db_file(content, fecha_desde, fecha_hasta)
+        rows, totales = _query_db_file(content, fecha_desde, fecha_hasta)
         all_rows.extend(rows)
+        for cid, monto in totales.items():
+            totales_por_cliente[cid] = totales_por_cliente.get(cid, 0) + monto
 
     if not all_rows:
         raise HTTPException(400, "No se encontraron picks en ese rango de fechas. Verificá las fechas.")
@@ -115,12 +135,14 @@ async def importar_semana(
 
             uni = int(r["uni"] or 0)
 
+            importe_total = totales_por_cliente.get(cliente_id, 0)
+
             cur.execute(
                 """
                 INSERT INTO pick
                     (cod_bar, cod_art, descrip, nombre, cliente, localidad, uni, bul, uxb,
-                     cantidad_pickeada, estado, semana)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s)
+                     cantidad_pickeada, estado, semana, importe_total)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s)
                 """,
                 (
                     r["cod_bar"],
@@ -134,6 +156,7 @@ async def importar_semana(
                     int(r["uxb"] or 0),
                     f"entregado: 0/{uni} UNI",
                     nombre,
+                    importe_total,
                 ),
             )
             inserted += 1
