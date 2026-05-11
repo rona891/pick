@@ -81,6 +81,10 @@ const api = {
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
     });
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error(`Error del servidor (${res.status}). El archivo puede ser demasiado grande.`);
+    }
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Error del servidor');
     return data;
