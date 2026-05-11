@@ -738,6 +738,8 @@ function initAdmin() {
 document.getElementById('admin-unlock-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const pw = document.getElementById('admin-password').value;
+  const errorDiv = document.getElementById('admin-error');
+  errorDiv.classList.add('hidden');
   try {
     await api.verifyAdmin(pw);
     adminUnlocked = true;
@@ -745,7 +747,8 @@ document.getElementById('admin-unlock-form').addEventListener('submit', async (e
     document.getElementById('admin-panel').classList.remove('hidden');
     loadClientes();
   } catch {
-    showToast('Contraseña incorrecta', 'error');
+    errorDiv.textContent = 'Contraseña incorrecta';
+    errorDiv.classList.remove('hidden');
   }
 });
 
