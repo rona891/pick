@@ -976,6 +976,16 @@ async function deleteCliente(id) {
 async function loadSemanasAdmin() {
   const list = document.getElementById('semanas-admin-list');
   if (!list) return;
+
+  const m = getMayorista();
+
+  // Descripción y formulario según mayorista
+  document.getElementById('semanas-desc').innerHTML = m === 'diarco'
+    ? 'Acá se cargan los pedidos de DIARCO. Subí el archivo <strong>MobileAssistantBU.db</strong> de la app DIARCO, completá el nombre y las fechas, y presioná <strong>Importar picks</strong>.'
+    : 'Acá se cargan los pedidos de Yaguar. Subí los archivos <strong>.db</strong> exportados de la app Yaguar (uno por vendedor), completá el nombre y las fechas, y presioná <strong>Importar picks</strong>.';
+  document.getElementById('import-yaguar').classList.toggle('hidden', m === 'diarco');
+  document.getElementById('import-diarco').classList.toggle('hidden', m !== 'diarco');
+
   try {
     const semanas = await api.getSemanas();
     if (semanas.length === 0) {
@@ -1147,6 +1157,67 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
         <div class="import-missing-list">${tags}</div>
       `;
     }
+    resultPanel.classList.remove('hidden');
+  } catch (err) {
+    resultPanel.className = 'import-result result-warn';
+    resultPanel.innerHTML = `<div class="import-result-title warn">Error</div>${err.message}`;
+    resultPanel.classList.remove('hidden');
+  } finally {
+    btn.disabled = files.length === 0;
+    btn.textContent = 'Importar picks';
+  }
+});
+
+// ── Admin: Importar DIARCO ─────────────────────────────────────────────────
+document.getElementById('diarco-file-input').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files);
+  const list = document.getElementById('diarco-upload-list');
+  list.innerHTML = files.map((f) => `
+    <div class="upload-file-item">
+      <span class="upload-file-name">${f.name}</span>
+      <span class="upload-file-size">${(f.size / 1024).toFixed(1)} KB</span>
+    </div>
+  `).join('');
+  document.getElementById('btn-importar-diarco').disabled = files.length === 0;
+});
+
+document.getElementById('btn-importar-diarco').addEventListener('click', async () => {
+  const nombre = document.getElementById('diarco-semana-nombre').value.trim();
+  const fechaDesde = document.getElementById('diarco-fecha-desde').value.replace(/-/g, '');
+  const fechaHasta = document.getElementById('diarco-fecha-hasta').value.replace(/-/g, '');
+  const files = document.getElementById('diarco-file-input').files;
+
+  if (!nombre) { showToast('Ingresá un nombre para el pick', 'error'); return; }
+  if (!fechaDesde || !fechaHasta) { showToast('Seleccioná las fechas', 'error'); return; }
+  if (files.length === 0) { showToast('Seleccioná al menos un archivo MobileAssistantBU.db', 'error'); return; }
+
+  const semanas = await api.getSemanas();
+  if (semanas.some((s) => s.nombre === nombre)) {
+    const ok = await confirmar(`La semana "${nombre}" ya existe. ¿Querés reemplazarla con los nuevos datos?`);
+    if (!ok) return;
+  }
+
+  const formData = new FormData();
+  formData.append('nombre', nombre);
+  formData.append('fecha_desde', fechaDesde);
+  formData.append('fecha_hasta', fechaHasta);
+  for (const file of files) formData.append('archivos', file);
+
+  const btn = document.getElementById('btn-importar-diarco');
+  btn.disabled = true;
+  btn.textContent = 'Importando...';
+  const resultPanel = document.getElementById('import-result');
+
+  try {
+    const res = await api.importarSemana(formData);
+    await loadSemanas();
+    loadStats();
+    loadSemanasAdmin();
+    resultPanel.className = 'import-result result-ok';
+    resultPanel.innerHTML = `
+      <div class="import-result-title ok">Importación exitosa</div>
+      ${res.picks_importados} picks cargados para <strong>${res.semana}</strong> — ${res.clientes} clientes.
+    `;
     resultPanel.classList.remove('hidden');
   } catch (err) {
     resultPanel.className = 'import-result result-warn';

@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import picks, auth, health, clientes, admin, semanas, zonas, export
+from app.api import picks, auth, health, clientes, admin, zonas, export
+from app.api.yaguar import semanas as yaguar_semanas
+from app.api.diarco import semanas as diarco_semanas
 from app.auth.jwt import hash_password
 from app.db.database import init_pool, get_db
 from config import settings
@@ -118,6 +120,7 @@ app.include_router(picks.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(clientes.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
-app.include_router(semanas.router, prefix="/api")
+app.include_router(yaguar_semanas.router, prefix="/api")
+app.include_router(diarco_semanas.router, prefix="/api")
 app.include_router(zonas.router, prefix="/api")
 app.include_router(export.router, prefix="/api")

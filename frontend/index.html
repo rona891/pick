@@ -205,9 +205,9 @@
           </div>
         </div>
 
-        <!-- Sub-panel: Semanas -->
+        <!-- Sub-panel: Semanas (el contenido se renderiza dinámicamente según el mayorista activo) -->
         <div class="admin-tab-panel hidden" data-admin-panel="nueva-semana">
-          <p class="admin-tab-desc">Acá se cargan los pedidos de cada semana de reparto. Para importar una semana nueva, subí los archivos <strong>.db</strong> exportados desde la app Yaguar (uno por vendedor), poné el nombre y las fechas, y presioná <strong>Importar picks</strong>. También podés eliminar semanas que ya no necesitás.</p>
+          <p id="semanas-desc" class="admin-tab-desc"></p>
 
           <!-- Semanas cargadas -->
           <div class="admin-section-title">Semanas cargadas</div>
@@ -215,31 +215,58 @@
 
           <div class="admin-divider"></div>
 
-          <!-- Importar nueva semana -->
-          <div class="admin-section-title">Importar nueva semana</div>
-          <div class="form-group">
-            <label>Nombre del pick</label>
-            <input type="text" id="semana-nombre" placeholder="Ej: PICK 30-04-2026" autocomplete="off" />
-          </div>
-          <div class="fecha-row">
+          <!-- ── Importar Yaguar ───────────────────────────────────────── -->
+          <div id="import-yaguar">
+            <div class="admin-section-title">Importar nueva semana</div>
             <div class="form-group">
-              <label>Fecha desde</label>
-              <input type="date" id="semana-fecha-desde" />
+              <label>Nombre del pick</label>
+              <input type="text" id="semana-nombre" placeholder="Ej: PICK 30-04-2026" autocomplete="off" />
             </div>
-            <div class="form-group">
-              <label>Fecha hasta</label>
-              <input type="date" id="semana-fecha-hasta" />
+            <div class="fecha-row">
+              <div class="form-group">
+                <label>Fecha desde</label>
+                <input type="date" id="semana-fecha-desde" />
+              </div>
+              <div class="form-group">
+                <label>Fecha hasta</label>
+                <input type="date" id="semana-fecha-hasta" />
+              </div>
             </div>
+            <p class="admin-section-desc">
+              Seleccioná los archivos <strong>.db</strong> exportados de la app Yaguar (uno por vendedor).
+            </p>
+            <input type="file" id="db-file-input" accept=".db" multiple class="hidden" />
+            <label for="db-file-input" class="btn-upload">Seleccionar archivos .db</label>
+            <div id="upload-file-list" class="upload-file-list"></div>
+            <button id="btn-importar-semana" class="btn-primary" style="margin-top:16px" disabled>Importar picks</button>
           </div>
-          <p class="admin-section-desc">
-            Seleccioná los archivos <strong>.db</strong> exportados de la app Yaguar (uno por vendedor).
-          </p>
-          <input type="file" id="db-file-input" accept=".db" multiple class="hidden" />
-          <label for="db-file-input" class="btn-upload">Seleccionar archivos .db</label>
-          <div id="upload-file-list" class="upload-file-list"></div>
-          <button id="btn-importar-semana" class="btn-primary" style="margin-top:16px" disabled>
-            Importar picks
-          </button>
+
+          <!-- ── Importar Diarco ───────────────────────────────────────── -->
+          <div id="import-diarco" class="hidden">
+            <div class="admin-section-title">Importar nueva semana</div>
+            <div class="form-group">
+              <label>Nombre del pick</label>
+              <input type="text" id="diarco-semana-nombre" placeholder="Ej: DIARCO 06-05-2026" autocomplete="off" />
+            </div>
+            <div class="fecha-row">
+              <div class="form-group">
+                <label>Fecha desde</label>
+                <input type="date" id="diarco-fecha-desde" />
+              </div>
+              <div class="form-group">
+                <label>Fecha hasta</label>
+                <input type="date" id="diarco-fecha-hasta" />
+              </div>
+            </div>
+            <p class="admin-section-desc">
+              Seleccioná el archivo <strong>MobileAssistantBU.db</strong> de la app DIARCO. Podés subir varios si tenés archivos de distintos vendedores.
+            </p>
+            <input type="file" id="diarco-file-input" accept=".db" multiple class="hidden" />
+            <label for="diarco-file-input" class="btn-upload">Seleccionar MobileAssistantBU.db</label>
+            <div id="diarco-upload-list" class="upload-file-list"></div>
+            <button id="btn-importar-diarco" class="btn-primary" style="margin-top:16px" disabled>Importar picks</button>
+          </div>
+
           <div id="import-result" class="import-result hidden"></div>
         </div>
 

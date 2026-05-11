@@ -112,12 +112,12 @@ const api = {
   // Export
   exportPicksUrl: (semana) => `/api/export/picks?semana=${encodeURIComponent(semana)}&mayorista=${getMayorista()}`,
 
-  // Semanas
-  getSemanas: () => request('GET', `/api/semanas/?mayorista=${getMayorista()}`),
-  deleteSemana: (id) => request('DELETE', `/api/semanas/${id}`),
+  // Semanas (rutas separadas por mayorista)
+  getSemanas: () => request('GET', `/api/${getMayorista()}/semanas/`),
+  deleteSemana: (id) => request('DELETE', `/api/${getMayorista()}/semanas/${id}`),
   importarSemana: async (formData) => {
     const token = getToken();
-    const res = await fetch(`${API_BASE}/api/semanas/importar`, {
+    const res = await fetch(`${API_BASE}/api/${getMayorista()}/semanas/importar`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: formData,

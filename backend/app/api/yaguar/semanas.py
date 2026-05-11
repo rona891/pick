@@ -1,3 +1,9 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# YAGUAR — Importación de semanas/picks
+# Lee archivos .db exportados por la app de Yaguar (SQLite con estructura
+# propia: hpedidosCabecera, hpedidosDetalle, articulos, clientes).
+# Endpoint: POST /api/yaguar/semanas/importar
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 import sqlite3
 import tempfile
 import os
@@ -5,7 +11,7 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from typing import List
 from app.db.database import get_db
 
-router = APIRouter(prefix="/semanas", tags=["semanas"])
+router = APIRouter(prefix="/yaguar/semanas", tags=["Yaguar - Semanas"])
 
 # Mismo SQL que se usaba manualmente, adaptado para Python (sqlite3 usa ? como placeholder)
 EXTRACT_SQL = """
