@@ -1176,10 +1176,18 @@ document.getElementById('username-form').addEventListener('submit', async (e) =>
 })();
 
 // ── Admin: Zonas ───────────────────────────────────────────────────────────
+async function populateRepartosSelect(selectId, valorActual = '') {
+  const sel = document.getElementById(selectId);
+  const repartos = await api.getRepartos().catch(() => []);
+  sel.innerHTML = '<option value="">— Sin reparto —</option>' +
+    repartos.map((r) => `<option value="${r.nombre}" ${r.nombre === valorActual ? 'selected' : ''}>${r.nombre}</option>`).join('');
+}
+
 async function loadZonas() {
   const tbody = document.getElementById('zonas-tbody');
   try {
     const zonas = await api.getZonas();
+    await populateRepartosSelect('nz-reparto');
     if (!zonas.length) {
       tbody.innerHTML = '<tr><td colspan="3" class="error-msg">No hay zonas cargadas</td></tr>';
       return;
@@ -1187,9 +1195,9 @@ async function loadZonas() {
     tbody.innerHTML = zonas.map((z) => `
       <tr data-id="${z.id}">
         <td>${z.nombre}</td>
-        <td style="text-align:center">${z.al_final ? '✓' : ''}</td>
+        <td>${z.reparto || '<span style="color:var(--muted)">—</span>'}</td>
         <td>
-          <button class="btn-edit" onclick="editZona(${z.id}, '${z.nombre.replace(/'/g, "\\'")}', ${z.al_final})">Editar</button>
+          <button class="btn-edit" onclick="editZona(${z.id}, '${z.nombre.replace(/'/g, "\\'")}', '${(z.reparto || '').replace(/'/g, "\\'")}')">Editar</button>
           <button class="btn-del" onclick="deleteZona(${z.id}, '${z.nombre.replace(/'/g, "\\'")}')">✕</button>
         </td>
       </tr>
@@ -1199,9 +1207,9 @@ async function loadZonas() {
   }
 }
 
-function editZona(id, nombre, alFinal) {
+function editZona(id, nombre, reparto) {
   document.getElementById('nz-nombre').value = nombre;
-  document.getElementById('nz-al-final').checked = alFinal;
+  document.getElementById('nz-reparto').value = reparto;
   const btn = document.querySelector('#nueva-zona-form button[type="submit"]');
   btn.textContent = 'Guardar cambios';
   btn.dataset.editId = id;
@@ -1222,22 +1230,22 @@ async function deleteZona(id, nombre) {
 document.getElementById('nueva-zona-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const nombre = document.getElementById('nz-nombre').value.trim();
-  const alFinal = document.getElementById('nz-al-final').checked;
+  const reparto = document.getElementById('nz-reparto').value;
   const btn = e.target.querySelector('button[type="submit"]');
   const editId = btn.dataset.editId;
 
   try {
     if (editId) {
-      await api.updateZona(parseInt(editId), nombre, alFinal);
+      await api.updateZona(parseInt(editId), nombre, reparto);
       showToast('Zona actualizada', 'success');
       delete btn.dataset.editId;
       btn.textContent = 'Agregar zona';
     } else {
-      await api.createZona(nombre, alFinal);
+      await api.createZona(nombre, reparto);
       showToast(`Zona ${nombre} creada`, 'success');
     }
     document.getElementById('nz-nombre').value = '';
-    document.getElementById('nz-al-final').checked = false;
+    document.getElementById('nz-reparto').value = '';
     loadZonas();
   } catch (err) {
     showToast(err.message, 'error');

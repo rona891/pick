@@ -73,8 +73,9 @@ const api = {
 
   // Zonas
   getZonas: () => request('GET', '/api/zonas/'),
-  createZona: (nombre, al_final) => request('POST', '/api/zonas/', { nombre, al_final }),
-  updateZona: (id, nombre, al_final) => request('PUT', `/api/zonas/${id}`, { nombre, al_final }),
+  getRepartos: () => request('GET', '/api/zonas/repartos'),
+  createZona: (nombre, reparto) => request('POST', '/api/zonas/', { nombre, reparto }),
+  updateZona: (id, nombre, reparto) => request('PUT', `/api/zonas/${id}`, { nombre, reparto }),
   deleteZona: (id) => request('DELETE', `/api/zonas/${id}`),
 
   // Semanas

@@ -125,26 +125,26 @@ def get_picks_by_barcode(cod_bar: str, semana: Optional[str] = Query(None)):
     with get_db() as cur:
         if semana:
             cur.execute("""
-                SELECT p.*,
-                       COALESCE(z.al_final, false) AS _al_final
+                SELECT p.*, COALESCE(r.orden, 99) AS _reparto_orden
                 FROM pick p
                 LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+                LEFT JOIN repartos r ON z.reparto = r.nombre
                 WHERE p.cod_bar = %s AND p.semana = %s
-                ORDER BY _al_final ASC, p.localidad ASC, p.nombre ASC
+                ORDER BY _reparto_orden ASC, p.localidad ASC, p.nombre ASC
             """, (cod_bar, semana))
         else:
             cur.execute("""
-                SELECT p.*,
-                       COALESCE(z.al_final, false) AS _al_final
+                SELECT p.*, COALESCE(r.orden, 99) AS _reparto_orden
                 FROM pick p
                 LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+                LEFT JOIN repartos r ON z.reparto = r.nombre
                 WHERE p.cod_bar = %s
-                ORDER BY _al_final ASC, p.localidad ASC, p.nombre ASC
+                ORDER BY _reparto_orden ASC, p.localidad ASC, p.nombre ASC
             """, (cod_bar,))
         rows = cur.fetchall()
     if not rows:
         raise HTTPException(status_code=404, detail="No se encontraron picks para este código")
-    return [{k: v for k, v in dict(r).items() if k != "_al_final"} for r in rows]
+    return [{k: v for k, v in dict(r).items() if k != "_reparto_orden"} for r in rows]
 
 
 @router.put("/{id}/quantity")

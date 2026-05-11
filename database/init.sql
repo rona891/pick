@@ -30,10 +30,16 @@ CREATE TABLE IF NOT EXISTS semanas (
     created_at timestamptz DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS repartos (
+    id bigserial PRIMARY KEY,
+    nombre varchar UNIQUE NOT NULL,
+    orden integer NOT NULL DEFAULT 99
+);
+
 CREATE TABLE IF NOT EXISTS zonas (
     id bigserial PRIMARY KEY,
     nombre varchar UNIQUE NOT NULL,
-    al_final boolean DEFAULT false,
+    reparto varchar,
     created_at timestamptz DEFAULT now()
 );
 

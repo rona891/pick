@@ -263,7 +263,7 @@
               <thead>
                 <tr>
                   <th>Nombre</th>
-                  <th>Al final</th>
+                  <th>Reparto</th>
                   <th></th>
                 </tr>
               </thead>
@@ -276,9 +276,11 @@
               <label>Nombre</label>
               <input type="text" id="nz-nombre" required autocomplete="off" placeholder="Ej: LA TOMA" />
             </div>
-            <div class="form-group" style="display:flex;align-items:center;gap:10px">
-              <input type="checkbox" id="nz-al-final" />
-              <label for="nz-al-final" style="margin:0;color:var(--text);font-size:13px;text-transform:none">Mostrar siempre al final en picks</label>
+            <div class="form-group">
+              <label>Reparto</label>
+              <select id="nz-reparto">
+                <option value="">— Sin reparto —</option>
+              </select>
             </div>
             <button type="submit" class="btn-primary">Agregar zona</button>
           </form>
