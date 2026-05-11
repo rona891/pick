@@ -23,7 +23,7 @@ async function request(method, path, body = null) {
     body: body ? JSON.stringify(body) : null,
   });
 
-  if (res.status === 401) {
+  if (res.status === 401 && getToken()) {
     clearToken();
     window.location.href = '/';
     return;
