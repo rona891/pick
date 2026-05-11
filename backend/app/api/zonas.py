@@ -29,6 +29,28 @@ def list_repartos():
         return [dict(r) for r in cur.fetchall()]
 
 
+@router.put("/repartos/{id}/orden")
+def update_reparto_orden(id: int, direccion: str):
+    if direccion not in ("up", "down"):
+        raise HTTPException(400, "direccion debe ser 'up' o 'down'")
+    with get_db() as cur:
+        cur.execute("SELECT id, orden FROM repartos WHERE id = %s", (id,))
+        actual = cur.fetchone()
+        if not actual:
+            raise HTTPException(404, "Reparto no encontrado")
+        orden_actual = actual["orden"]
+        if direccion == "up":
+            cur.execute("SELECT id, orden FROM repartos WHERE orden < %s ORDER BY orden DESC LIMIT 1", (orden_actual,))
+        else:
+            cur.execute("SELECT id, orden FROM repartos WHERE orden > %s ORDER BY orden ASC LIMIT 1", (orden_actual,))
+        vecino = cur.fetchone()
+        if not vecino:
+            return list_repartos()
+        cur.execute("UPDATE repartos SET orden = %s WHERE id = %s", (vecino["orden"], id))
+        cur.execute("UPDATE repartos SET orden = %s WHERE id = %s", (orden_actual, vecino["id"]))
+    return list_repartos()
+
+
 @router.post("/")
 def create_zona(data: ZonaIn):
     nombre = data.nombre.strip().upper()

@@ -1183,11 +1183,36 @@ async function populateRepartosSelect(selectId, valorActual = '') {
     repartos.map((r) => `<option value="${r.nombre}" ${r.nombre === valorActual ? 'selected' : ''}>${r.nombre}</option>`).join('');
 }
 
+function renderRepartosOrden(repartos) {
+  const list = document.getElementById('repartos-orden-list');
+  list.innerHTML = repartos.map((r, i) => `
+    <div class="reparto-orden-item">
+      <span class="reparto-orden-num">${i + 1}</span>
+      <span class="reparto-orden-nombre">${r.nombre}</span>
+      <button class="btn-orden" onclick="moverReparto(${r.id}, 'up')" ${i === 0 ? 'disabled' : ''}>▲</button>
+      <button class="btn-orden" onclick="moverReparto(${r.id}, 'down')" ${i === repartos.length - 1 ? 'disabled' : ''}>▼</button>
+    </div>
+  `).join('');
+}
+
+async function moverReparto(id, direccion) {
+  try {
+    const repartos = await api.moverReparto(id, direccion);
+    renderRepartosOrden(repartos);
+    await populateRepartosSelect('nz-reparto', document.getElementById('nz-reparto').value);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
 async function loadZonas() {
   const tbody = document.getElementById('zonas-tbody');
   try {
-    const zonas = await api.getZonas();
-    await populateRepartosSelect('nz-reparto');
+    const [zonas, repartos] = await Promise.all([api.getZonas(), api.getRepartos()]);
+    renderRepartosOrden(repartos);
+    const repActual = document.getElementById('nz-reparto').value;
+    document.getElementById('nz-reparto').innerHTML = '<option value="">— Sin reparto —</option>' +
+      repartos.map((r) => `<option value="${r.nombre}" ${r.nombre === repActual ? 'selected' : ''}>${r.nombre}</option>`).join('');
     if (!zonas.length) {
       tbody.innerHTML = '<tr><td colspan="3" class="error-msg">No hay zonas cargadas</td></tr>';
       return;

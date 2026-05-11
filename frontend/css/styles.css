@@ -1395,6 +1395,39 @@ input[type="date"]:focus { border-color: var(--accent); }
   margin: 24px 0;
 }
 
+.repartos-orden-list { display: flex; flex-direction: column; gap: 6px; }
+.reparto-orden-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+.reparto-orden-nombre { flex: 1; font-size: 13px; }
+.reparto-orden-num {
+  font-size: 11px;
+  color: var(--muted);
+  width: 20px;
+  text-align: center;
+}
+.btn-orden {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-orden:disabled { opacity: 0.25; cursor: default; }
+.btn-orden:not(:disabled):active { background: var(--border); }
+
 .semanas-admin-list {
   display: flex;
   flex-direction: column;

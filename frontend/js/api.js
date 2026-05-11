@@ -74,6 +74,7 @@ const api = {
   // Zonas
   getZonas: () => request('GET', '/api/zonas/'),
   getRepartos: () => request('GET', '/api/zonas/repartos'),
+  moverReparto: (id, direccion) => request('PUT', `/api/zonas/repartos/${id}/orden?direccion=${direccion}`),
   createZona: (nombre, reparto) => request('POST', '/api/zonas/', { nombre, reparto }),
   updateZona: (id, nombre, reparto) => request('PUT', `/api/zonas/${id}`, { nombre, reparto }),
   deleteZona: (id) => request('DELETE', `/api/zonas/${id}`),
