@@ -58,10 +58,7 @@ function showApp() {
   document.querySelector('.tab-btn[data-tab="admin"]').classList.toggle('hidden', !esAdmin());
   document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
   const m = getMayorista();
-  const badge = document.getElementById('topbar-mayorista');
-  badge.textContent = m.toUpperCase();
-  badge.className = `topbar-mayorista mayorista-${m}`;
-  badge.classList.remove('hidden');
+  document.getElementById('topbar-logo').src = m === 'diarco' ? 'diarco.png' : 'yaguar.png';
   loadSemanas().then(() => loadStats());
   switchTab('pick');
   prewarmCamera();
@@ -76,6 +73,11 @@ document.querySelectorAll('.mayorista-card').forEach((btn) => {
     showApp();
   });
 });
+
+function cambiarMayorista() {
+  localStorage.removeItem('mayorista_ts');
+  showMayoristaSelector();
+}
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 document.getElementById('login-form').addEventListener('submit', async (e) => {

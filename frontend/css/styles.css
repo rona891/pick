@@ -82,17 +82,6 @@ body {
   object-fit: contain;
 }
 
-.topbar-mayorista {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-.topbar-mayorista.mayorista-yaguar { background: rgba(224,255,79,0.15); color: var(--accent); }
-.topbar-mayorista.mayorista-diarco { background: rgba(230,57,70,0.15); color: #e63946; }
 
 /* ── Login ────────────────────────────────────────────────────────────────── */
 #login-view {
@@ -233,12 +222,16 @@ input:focus, select:focus { border-color: var(--accent); }
   margin-bottom: 20px;
 }
 
-.app-title {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 28px;
-  letter-spacing: 2px;
-  color: var(--accent);
+.topbar-logo {
+  height: 32px;
+  max-width: 110px;
+  object-fit: contain;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: .9;
+  transition: opacity .15s;
 }
+.topbar-logo:active { opacity: .6; }
 
 .topbar-actions { display: flex; gap: 8px; }
 
