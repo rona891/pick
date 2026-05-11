@@ -664,7 +664,8 @@ INSERT INTO public.semanas VALUES (1, 'PICK 28-04-2026', '2026-05-04 01:27:51.05
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: picking
 --
 
-INSERT INTO public.users (id, username, password_hash, created_at) VALUES (1, 'admin@picking.local', '$2b$12$mxuYF6RS7KKSZCWq8rqMoeIvWfMByfVIPGD/2kx5OFBfte/rZ.mVO', '2026-05-03 20:24:30.230815+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.users VALUES (1, 'MIA', '$2b$12$m0sr89RIomW2cuLra.aLVOSrqm28rqylw8QDk0yxyytVlyVO6lCIK', '2026-05-03 20:24:30.230815+00') ON CONFLICT DO NOTHING;
+INSERT INTO public.users VALUES (2, 'NAHU', '$2b$12$m0sr89RIomW2cuLra.aLVOSrqm28rqylw8QDk0yxyytVlyVO6lCIK', '2026-05-05 00:00:00.000000+00') ON CONFLICT DO NOTHING;
 
 
 --
@@ -692,7 +693,7 @@ SELECT pg_catalog.setval('public.semanas_id_seq', 1, true);
 -- Name: users_id_seq; Type: SEQUENCE SET; Schema: public; Owner: picking
 --
 
-SELECT pg_catalog.setval('public.users_id_seq', 1, true);
+SELECT pg_catalog.setval('public.users_id_seq', 2, true);
 
 
 --
