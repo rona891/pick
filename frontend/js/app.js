@@ -8,6 +8,7 @@ let soloPendientes = false;
 let wakeLock = null;
 let resumenData = [];
 let filtroActivo = 'todos';
+let sortByImporte = false;
 let descripTimer = null;
 let cameras = [];
 let currentCameraIndex = 0;
@@ -27,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.admin-tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.adminPanel !== target));
       if (target === 'usuarios') loadUsers();
       if (target === 'nueva-semana') loadSemanasAdmin();
+      if (target === 'zonas') loadZonas();
     });
   });
 });
@@ -35,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function showLogin() {
   document.getElementById('login-view').classList.remove('hidden');
   document.getElementById('app-view').classList.add('hidden');
+  document.getElementById('login-error').classList.add('hidden');
 }
 
 function showApp() {
@@ -50,19 +53,23 @@ function showApp() {
 // ── Auth ───────────────────────────────────────────────────────────────────
 document.getElementById('login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = document.getElementById('email').value.trim();
+  const username = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
   const btn = document.getElementById('login-btn');
+  const errorDiv = document.getElementById('login-error');
 
+  errorDiv.classList.add('hidden');
   btn.disabled = true;
   btn.textContent = 'Entrando...';
 
   try {
-    const res = await api.login(email, password);
+    const res = await api.login(username, password);
     setToken(res.access_token);
     showApp();
+    setTimeout(() => { if (!isFullscreen()) enterFullscreen(); }, 300);
   } catch (err) {
-    showToast(err.message || 'Error al iniciar sesión', 'error');
+    errorDiv.textContent = err.message || 'Usuario o contraseña incorrectos';
+    errorDiv.classList.remove('hidden');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Entrar';
@@ -119,10 +126,12 @@ async function loadStats() {
 
 function updateProgressBar(completed, total) {
   const fill = document.getElementById('progress-bar-fill');
+  const label = document.getElementById('progress-pct');
   if (!fill) return;
   const pct = total > 0 ? Math.round(completed / total * 100) : 0;
   fill.style.width = pct + '%';
   fill.style.background = pct >= 100 ? 'var(--green)' : 'var(--accent)';
+  if (label) { label.textContent = pct + '%'; label.style.color = pct >= 100 ? 'var(--green)' : ''; }
 }
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
@@ -145,16 +154,6 @@ document.getElementById('search-form').addEventListener('submit', async (e) => {
   if (val) await searchBarcode(val);
 });
 
-document.getElementById('barcode-input').addEventListener('focus', () => {
-  renderHistorial();
-  const wrap = document.getElementById('historial-wrap');
-  const hist = JSON.parse(localStorage.getItem('pick_historial') || '[]');
-  if (hist.length > 0) wrap.classList.remove('hidden');
-});
-
-document.getElementById('barcode-input').addEventListener('blur', () => {
-  setTimeout(() => document.getElementById('historial-wrap').classList.add('hidden'), 200);
-});
 
 async function searchBarcode(codBar) {
   const results = document.getElementById('results');
@@ -162,32 +161,56 @@ async function searchBarcode(codBar) {
 
   try {
     const picks = await api.getByBarcode(codBar, semanaActual);
-    addToHistorial(codBar);
-    renderPicks(picks);
+    addToHistorial(codBar, picks[0]?.descrip || codBar);
+
+    const todosEntregados = picks.length > 0 && picks.every(p => (p.estado || '').startsWith('completado'));
+
+    if (todosEntregados) {
+      results.innerHTML = `
+        <div class="entregado-banner">
+          <span>✓ Este producto ya fue entregado a todos los clientes</span>
+          <button class="btn-ver-entregados" id="toggle-entregados">Ver items</button>
+        </div>
+        <div id="entregados-container" class="hidden"></div>
+      `;
+      const container = document.getElementById('entregados-container');
+      renderPicks(picks, container);
+      document.getElementById('toggle-entregados').addEventListener('click', function () {
+        const isHidden = container.classList.toggle('hidden');
+        this.textContent = isHidden ? 'Ver items' : 'Ocultar items';
+      });
+    } else {
+      renderPicks(picks);
+      aplicarFiltroPendientes(results);
+    }
   } catch (err) {
-    results.innerHTML = `<p class="error-msg">${err.message}</p>`;
+    const noEncontrado = err.message.includes('No se encontraron picks');
+    results.innerHTML = `<p class="error-msg">${noEncontrado ? 'Producto no encontrado' : err.message}</p>`;
   }
 }
 
 // ── Historial ──────────────────────────────────────────────────────────────
-function addToHistorial(codBar) {
+function addToHistorial(codBar, descrip) {
   let hist = JSON.parse(localStorage.getItem('pick_historial') || '[]');
-  hist = [codBar, ...hist.filter((c) => c !== codBar)].slice(0, 5);
+  // normalizar entradas viejas (strings) a objetos
+  hist = hist.map(e => typeof e === 'string' ? { cod: e, descrip: e } : e);
+  hist = [{ cod: codBar, descrip }, ...hist.filter(e => e.cod !== codBar)].slice(0, 5);
   localStorage.setItem('pick_historial', JSON.stringify(hist));
   renderHistorial();
 }
 
 function renderHistorial() {
-  const hist = JSON.parse(localStorage.getItem('pick_historial') || '[]');
+  let hist = JSON.parse(localStorage.getItem('pick_historial') || '[]');
+  hist = hist.map(e => typeof e === 'string' ? { cod: e, descrip: e } : e);
   const chips = document.getElementById('historial-chips');
   const wrap = document.getElementById('historial-wrap');
   if (!chips) return;
   if (hist.length === 0) { wrap.classList.add('hidden'); return; }
-  chips.innerHTML = hist.map((c) => `<span class="hist-chip" data-cod="${c}">${c}</span>`).join('');
+  wrap.classList.remove('hidden');
+  chips.innerHTML = hist.map(e => `<span class="hist-chip" data-cod="${e.cod}">${e.descrip}</span>`).join('');
   chips.querySelectorAll('.hist-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       document.getElementById('barcode-input').value = chip.dataset.cod;
-      document.getElementById('historial-wrap').classList.add('hidden');
       searchBarcode(chip.dataset.cod);
     });
   });
@@ -210,12 +233,29 @@ function aplicarFiltroPendientes(container) {
 }
 
 // ── Formato cantidad ───────────────────────────────────────────────────────
+function estadoClass(estado) {
+  if ((estado || '').startsWith('completado')) return 'estado-ok';
+  return 'estado-entregado';
+}
+
 function formatCantidad(uni, bul, uxb) {
   uni = uni || 0; bul = bul || 0; uxb = uxb || 0;
   if (uxb > 1 && bul > 0 && uni === bul * uxb) {
     return { main: `${bul} bulto${bul !== 1 ? 's' : ''}`, sub: `× ${uxb} uni/bulto` };
   }
   return { main: `${uni} uni`, sub: uxb > 1 ? `× ${uxb} uni/bulto` : null };
+}
+
+function formatImporte(n) {
+  if (!n) return '';
+  return '$' + Math.round(n).toLocaleString('es-AR');
+}
+
+function formatRestante(uni, cantidad, bul, uxb) {
+  uni = uni || 0; cantidad = cantidad || 0; bul = bul || 0; uxb = uxb || 0;
+  const restante = Math.max(0, uni - cantidad);
+  const restanteBul = (uxb > 0 && restante % uxb === 0) ? restante / uxb : 0;
+  return formatCantidad(restante, restanteBul, uxb);
 }
 
 function getEntregadoLabel(uni, bul, uxb) {
@@ -251,7 +291,10 @@ function renderPicks(picks, container = document.getElementById('results')) {
 
     const cantidad = pick.cantidad_pickeada ?? 0;
     const uni = pick.uni ?? 0;
-    const qty = formatCantidad(uni, pick.bul, pick.uxb);
+    const uxb = pick.uxb ?? 0;
+    const isParcial = cantidad > 0 && cantidad < uni;
+    if (isParcial) card.classList.add('parcial');
+    const qty = formatRestante(uni, cantidad, pick.bul, uxb);
 
     card.innerHTML = `
       <div class="pick-header">
@@ -266,7 +309,7 @@ function renderPicks(picks, container = document.getElementById('results')) {
         <span class="qty-main">${qty.main}</span>
         ${qty.sub ? `<span class="qty-sub">${qty.sub}</span>` : ''}
       </div>
-      <div class="pick-estado ${isCompleted ? 'estado-ok' : 'estado-pend'}">${pick.estado ?? 'sin estado'}</div>
+      <div class="pick-estado ${estadoClass(pick.estado)}">${pick.estado ?? 'sin estado'}</div>
       <div class="pick-controls"></div>
     `;
 
@@ -330,9 +373,19 @@ async function saveQuantity(id, cantidad, card) {
   try {
     const res = await api.updateQuantity(id, cantidad);
     const isCompleted = res.estado.startsWith('completado');
+    const uni = parseInt(card.dataset.uni) || 0;
+    const uxb = parseInt(card.dataset.uxb) || 0;
+    const bul = parseInt(card.dataset.bul) || 0;
+    const isParcial = cantidad > 0 && cantidad < uni;
     card.classList.toggle('completed', isCompleted);
+    card.classList.toggle('parcial', isParcial);
     card.querySelector('.pick-estado').textContent = res.estado;
-    card.querySelector('.pick-estado').className = `pick-estado ${isCompleted ? 'estado-ok' : 'estado-pend'}`;
+    card.querySelector('.pick-estado').className = `pick-estado ${estadoClass(res.estado)}`;
+
+    const qty = formatRestante(uni, cantidad, bul, uxb);
+    card.querySelector('.qty-main').textContent = qty.main;
+    const qtySub = card.querySelector('.qty-sub');
+    if (qtySub) qtySub.textContent = qty.sub || '';
 
     renderControls(card, cantidad, isCompleted);
     aplicarFiltroPendientes(card.closest('#results, .cliente-picks-content') || document.getElementById('results'));
@@ -623,17 +676,38 @@ async function loadResumen() {
   }
 }
 
-document.querySelectorAll('.filter-btn').forEach((btn) => {
+document.querySelectorAll('.filter-btn[data-filter]').forEach((btn) => {
   btn.addEventListener('click', () => {
     filtroActivo = btn.dataset.filter;
-    document.querySelectorAll('.filter-btn').forEach((b) => b.classList.toggle('active', b.dataset.filter === filtroActivo));
+    document.querySelectorAll('.filter-btn[data-filter]').forEach((b) => b.classList.toggle('active', b.dataset.filter === filtroActivo));
     renderResumen();
   });
+});
+
+document.getElementById('sort-importe-btn').addEventListener('click', () => {
+  sortByImporte = !sortByImporte;
+  document.getElementById('sort-importe-btn').classList.toggle('active', sortByImporte);
+  renderResumen(document.getElementById('clientes-search').value.trim().toLowerCase());
 });
 
 document.getElementById('clientes-search').addEventListener('input', (e) => {
   renderResumen(e.target.value.trim().toLowerCase());
 });
+
+function getPapelesKey() {
+  return `papeles_separados_${semanaActual}`;
+}
+
+function getPapelesSeparados() {
+  try { return new Set(JSON.parse(localStorage.getItem(getPapelesKey()) || '[]')); }
+  catch { return new Set(); }
+}
+
+function savePapelSeparado(nombre, marcado) {
+  const set = getPapelesSeparados();
+  marcado ? set.add(nombre) : set.delete(nombre);
+  localStorage.setItem(getPapelesKey(), JSON.stringify([...set]));
+}
 
 function renderResumen(searchQ = '') {
   const container = document.getElementById('resumen-list');
@@ -650,18 +724,42 @@ function renderResumen(searchQ = '') {
     return;
   }
 
-  container.innerHTML = filtered.map((r) => `
-    <div class="resumen-card estado-${r.estado_general}" data-nombre="${encodeURIComponent(r.nombre)}">
-      <div class="resumen-nombre">${r.nombre}</div>
-      <div class="resumen-stats">
-        <span class="tag-ok">${r.completados} ✓</span>
-        <span class="tag-pend">${r.pendientes} pend.</span>
-        <span class="tag-total">${r.total} total</span>
+  const separados = getPapelesSeparados();
+  const sorted = [...filtered].sort((a, b) => {
+    const as = separados.has(a.nombre) ? 1 : 0;
+    const bs = separados.has(b.nombre) ? 1 : 0;
+    if (as !== bs) return as - bs;
+    if (sortByImporte) return (b.importe_total || 0) - (a.importe_total || 0);
+    return 0;
+  });
+
+  container.innerHTML = sorted.map((r) => {
+    const marcado = separados.has(r.nombre);
+    return `
+    <div class="resumen-row">
+      <button class="btn-papel${marcado ? ' marcado' : ''}" data-papel="${encodeURIComponent(r.nombre)}">✓</button>
+      <div class="resumen-card estado-${r.estado_general}${marcado ? ' papel-separado' : ''}" data-nombre="${encodeURIComponent(r.nombre)}">
+        <div class="resumen-nombre">${r.nombre}</div>
+        <div class="resumen-stats">
+          <span class="tag-ok">${r.completados} ✓</span>
+          <span class="tag-pend">${r.pendientes} pend.</span>
+          <span class="tag-total">${r.total} total</span>
+          ${r.importe_total > 0 ? `<span class="tag-importe">${formatImporte(r.importe_total)}</span>` : ''}
+        </div>
+        <div class="resumen-badge badge-${r.estado_general}">${r.estado_general}</div>
+        <button class="btn-ver-picks">›</button>
       </div>
-      <div class="resumen-badge badge-${r.estado_general}">${r.estado_general}</div>
-      <button class="btn-ver-picks">›</button>
     </div>
-  `).join('');
+  `}).join('');
+
+  container.querySelectorAll('.btn-papel').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const nombre = decodeURIComponent(btn.dataset.papel);
+      const marcado = !btn.classList.contains('marcado');
+      savePapelSeparado(nombre, marcado);
+      renderResumen(document.getElementById('clientes-search').value.trim().toLowerCase());
+    });
+  });
 
   container.querySelectorAll('.resumen-card').forEach((card) => {
     card.addEventListener('click', () => {
@@ -703,23 +801,6 @@ document.getElementById('cliente-picks-overlay').addEventListener('click', (e) =
   }
 });
 
-document.getElementById('btn-completar-todo').addEventListener('click', async () => {
-  const content = document.getElementById('cliente-picks-content');
-  const pendientes = Array.from(content.querySelectorAll('.pick-card:not(.completed)'));
-  if (pendientes.length === 0) { showToast('No hay items pendientes', 'info'); return; }
-
-  const btn = document.getElementById('btn-completar-todo');
-  btn.disabled = true;
-
-  for (const card of pendientes) {
-    const id = parseInt(card.dataset.pickId);
-    const uni = parseInt(card.dataset.uni) || 0;
-    await saveQuantity(id, uni, card);
-  }
-
-  btn.disabled = false;
-  loadResumen();
-});
 
 // ── Tab: Admin ─────────────────────────────────────────────────────────────
 function initAdmin() {
@@ -734,6 +815,8 @@ function initAdmin() {
 document.getElementById('admin-unlock-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const pw = document.getElementById('admin-password').value;
+  const errorDiv = document.getElementById('admin-error');
+  errorDiv.classList.add('hidden');
   try {
     await api.verifyAdmin(pw);
     adminUnlocked = true;
@@ -741,7 +824,8 @@ document.getElementById('admin-unlock-form').addEventListener('submit', async (e
     document.getElementById('admin-panel').classList.remove('hidden');
     loadClientes();
   } catch {
-    showToast('Contraseña incorrecta', 'error');
+    errorDiv.textContent = 'Contraseña incorrecta';
+    errorDiv.classList.remove('hidden');
   }
 });
 
@@ -785,21 +869,20 @@ async function loadClientes() {
   }
 }
 
-function openClienteForm(id) {
+async function openClienteForm(id) {
   editingClienteId = id;
   document.getElementById('modal-title').textContent = id ? 'Editar cliente' : 'Nuevo cliente';
 
   const fields = ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'];
   fields.forEach((f) => { document.getElementById(`cf-${f}`).value = ''; });
 
+  // Poblar dropdown de zonas
+  const zonas = await api.getZonas().catch(() => []);
+  const sel = document.getElementById('cf-localidad');
+  sel.innerHTML = '<option value="">— Seleccioná una zona —</option>' +
+    zonas.map((z) => `<option value="${z.nombre}">${z.nombre}</option>`).join('');
+
   if (id) {
-    // Buscar en las filas ya cargadas en la tabla en lugar de llamar API de nuevo
-    const row = document.querySelector(`#clientes-tbody tr[data-id="${id}"]`);
-    if (row) {
-      const cells = row.querySelectorAll('td');
-      const mapping = ['nombre', 'localidad', null, 'telefono', 'contacto', 'vendedor'];
-      // La tabla no tiene dirección, necesitamos la API solo para ese campo
-    }
     api.getClientes().then((list) => {
       const c = list.find((x) => x.id === id);
       if (c) {
@@ -821,6 +904,9 @@ document.getElementById('cliente-form').addEventListener('submit', async (e) => 
   ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'].forEach((f) => {
     data[f] = document.getElementById(`cf-${f}`).value.trim() || null;
   });
+
+  if (!data.localidad) { showToast('Seleccioná una zona', 'error'); return; }
+  if (!data.vendedor) { showToast('Ingresá el vendedor', 'error'); return; }
 
   try {
     if (editingClienteId) {
@@ -861,6 +947,7 @@ async function loadSemanasAdmin() {
     list.innerHTML = semanas.map((s) => `
       <div class="semana-admin-item">
         <span class="semana-nombre-tag">${s.nombre}</span>
+        <a class="btn-export" href="${api.exportPicksUrl(s.nombre)}" download>↓ Excel</a>
         <button class="btn-del" onclick="deleteSemana(${s.id}, '${s.nombre.replace(/'/g, "\\'")}')">Eliminar</button>
       </div>
     `).join('');
@@ -894,7 +981,7 @@ async function loadUsers() {
     const users = await api.getUsers();
     tbody.innerHTML = users.map((u) => `
       <tr>
-        <td>${u.email}</td>
+        <td>${u.username}</td>
         <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
         <td class="td-actions">
           <button class="btn-del" onclick="deleteUser(${u.id})">Eliminar</button>
@@ -919,11 +1006,11 @@ async function deleteUser(id) {
 
 document.getElementById('nuevo-usuario-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const email = document.getElementById('nu-email').value.trim();
+  const username = document.getElementById('nu-email').value.trim();
   const password = document.getElementById('nu-password').value;
   try {
-    await api.createUser(email, password);
-    showToast(`Usuario ${email} creado`, 'success');
+    await api.createUser(username, password);
+    showToast(`Usuario ${username} creado`, 'success');
     document.getElementById('nuevo-usuario-form').reset();
     loadUsers();
   } catch (err) {
@@ -953,6 +1040,12 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
   if (!nombre) { showToast('Ingresá un nombre para el pick', 'error'); return; }
   if (!fechaDesde || !fechaHasta) { showToast('Seleccioná las fechas', 'error'); return; }
   if (files.length === 0) { showToast('Seleccioná al menos un archivo .db', 'error'); return; }
+
+  const semanas = await api.getSemanas();
+  if (semanas.some((s) => s.nombre === nombre)) {
+    const ok = await confirmar(`La semana "${nombre}" ya existe. ¿Querés reemplazarla con los nuevos datos? Esto borrará todos los picks actuales de esa semana.`);
+    if (!ok) return;
+  }
 
   const formData = new FormData();
   formData.append('nombre', nombre);
@@ -1005,6 +1098,7 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
 // ── Cambiar contraseña ─────────────────────────────────────────────────────
 document.getElementById('change-pw-btn').addEventListener('click', () => {
   document.getElementById('pw-form').reset();
+  document.getElementById('username-form').reset();
   document.getElementById('pw-modal').classList.remove('hidden');
 });
 
@@ -1031,6 +1125,182 @@ document.getElementById('pw-form').addEventListener('submit', async (e) => {
     showToast(err.message, 'error');
   }
 });
+
+document.getElementById('username-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const newUsername = document.getElementById('un-new').value.trim();
+  const password = document.getElementById('un-password').value;
+
+  try {
+    await api.changeUsername(password, newUsername);
+    document.getElementById('pw-modal').classList.add('hidden');
+    clearToken();
+    showLogin();
+    showToast(`Nombre cambiado a "${newUsername}". Ingresá de nuevo.`, 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
+
+// ── Pantalla completa (solo mobile) ────────────────────────────────────────
+(function () {
+  const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (!MOBILE) return;
+
+  const btn = document.getElementById('btn-fullscreen');
+
+  function enterFullscreen() {
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  }
+
+  function exitFullscreen() {
+    if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  }
+
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function updateBtn() {
+    if (!btn) return;
+    btn.textContent = isFullscreen() ? '⊡' : '⛶';
+    btn.title = isFullscreen() ? 'Salir de pantalla completa' : 'Pantalla completa';
+  }
+
+  document.addEventListener('fullscreenchange', updateBtn);
+  document.addEventListener('webkitfullscreenchange', updateBtn);
+
+  if (btn) btn.addEventListener('click', () => {
+    if (isFullscreen()) exitFullscreen(); else enterFullscreen();
+  });
+
+})();
+
+// ── Admin: Zonas ───────────────────────────────────────────────────────────
+async function populateRepartosSelect(selectId, valorActual = '') {
+  const sel = document.getElementById(selectId);
+  const repartos = await api.getRepartos().catch(() => []);
+  sel.innerHTML = '<option value="">— Sin reparto —</option>' +
+    repartos.map((r) => `<option value="${r.nombre}" ${r.nombre === valorActual ? 'selected' : ''}>${r.nombre}</option>`).join('');
+}
+
+function renderRepartosOrden(repartos) {
+  const list = document.getElementById('repartos-orden-list');
+  list.innerHTML = repartos.map((r, i) => `
+    <div class="reparto-orden-item">
+      <span class="reparto-orden-num">${i + 1}</span>
+      <span class="reparto-orden-nombre">${r.nombre}</span>
+      <button class="btn-orden" onclick="moverReparto(${r.id}, 'up')" ${i === 0 ? 'disabled' : ''}>▲</button>
+      <button class="btn-orden" onclick="moverReparto(${r.id}, 'down')" ${i === repartos.length - 1 ? 'disabled' : ''}>▼</button>
+    </div>
+  `).join('');
+}
+
+async function moverReparto(id, direccion) {
+  try {
+    const repartos = await api.moverReparto(id, direccion);
+    renderRepartosOrden(repartos);
+    await populateRepartosSelect('nz-reparto', document.getElementById('nz-reparto').value);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function loadZonas() {
+  const tbody = document.getElementById('zonas-tbody');
+  try {
+    const [zonas, repartos] = await Promise.all([api.getZonas(), api.getRepartos()]);
+    renderRepartosOrden(repartos);
+    const repActual = document.getElementById('nz-reparto').value;
+    document.getElementById('nz-reparto').innerHTML = '<option value="">— Sin reparto —</option>' +
+      repartos.map((r) => `<option value="${r.nombre}" ${r.nombre === repActual ? 'selected' : ''}>${r.nombre}</option>`).join('');
+    if (!zonas.length) {
+      tbody.innerHTML = '<tr><td colspan="3" class="error-msg">No hay zonas cargadas</td></tr>';
+      return;
+    }
+    tbody.innerHTML = zonas.map((z) => `
+      <tr data-id="${z.id}">
+        <td>${z.nombre}</td>
+        <td>${z.reparto || '<span style="color:var(--muted)">—</span>'}</td>
+        <td>
+          <button class="btn-edit" onclick="editZona(${z.id}, '${z.nombre.replace(/'/g, "\\'")}', '${(z.reparto || '').replace(/'/g, "\\'")}')">Editar</button>
+          <button class="btn-del" onclick="deleteZona(${z.id}, '${z.nombre.replace(/'/g, "\\'")}')">✕</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
+  }
+}
+
+function editZona(id, nombre, reparto) {
+  document.getElementById('nz-nombre').value = nombre;
+  document.getElementById('nz-reparto').value = reparto;
+  const btn = document.querySelector('#nueva-zona-form button[type="submit"]');
+  btn.textContent = 'Guardar cambios';
+  btn.dataset.editId = id;
+}
+
+async function deleteZona(id, nombre) {
+  const ok = await confirmar(`¿Eliminar la zona "${nombre}"?`);
+  if (!ok) return;
+  try {
+    await api.deleteZona(id);
+    showToast(`Zona ${nombre} eliminada`, 'info');
+    loadZonas();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+document.getElementById('nueva-zona-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nombre = document.getElementById('nz-nombre').value.trim();
+  const reparto = document.getElementById('nz-reparto').value;
+  const btn = e.target.querySelector('button[type="submit"]');
+  const editId = btn.dataset.editId;
+
+  try {
+    if (editId) {
+      await api.updateZona(parseInt(editId), nombre, reparto);
+      showToast('Zona actualizada', 'success');
+      delete btn.dataset.editId;
+      btn.textContent = 'Agregar zona';
+    } else {
+      await api.createZona(nombre, reparto);
+      showToast(`Zona ${nombre} creada`, 'success');
+    }
+    document.getElementById('nz-nombre').value = '';
+    document.getElementById('nz-reparto').value = '';
+    loadZonas();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
+
+// ── Modal de confirmación ──────────────────────────────────────────────────
+function confirmar(msg) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('confirm-modal');
+    document.getElementById('confirm-msg').textContent = msg;
+    overlay.classList.remove('hidden');
+    const ok = document.getElementById('confirm-ok');
+    const cancel = document.getElementById('confirm-cancel');
+    function cleanup(result) {
+      overlay.classList.add('hidden');
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    function onOk() { cleanup(true); }
+    function onCancel() { cleanup(false); }
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+  });
+}
 
 // ── Toast ──────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info') {

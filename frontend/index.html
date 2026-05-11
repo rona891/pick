@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
@@ -21,13 +24,14 @@
       <div class="login-sub">Sistema de gestión de almacén</div>
       <form id="login-form">
         <div class="form-group">
-          <label for="email">Email</label>
-          <input type="email" id="email" autocomplete="email" required />
+          <label for="email">Usuario</label>
+          <input type="text" id="email" autocomplete="username" required />
         </div>
         <div class="form-group">
           <label for="password">Contraseña</label>
           <input type="password" id="password" autocomplete="current-password" required />
         </div>
+        <div id="login-error" class="login-error hidden"></div>
         <button type="submit" id="login-btn" class="btn-primary">Entrar</button>
       </form>
     </div>
@@ -39,7 +43,8 @@
     <div class="topbar">
       <div class="app-title">PICKING</div>
       <div class="topbar-actions">
-        <button id="change-pw-btn" class="btn-logout">Contraseña</button>
+        <button id="btn-fullscreen" class="btn-logout btn-fullscreen-mobile" title="Pantalla completa">⛶</button>
+        <button id="change-pw-btn" class="btn-logout">Cuenta</button>
         <button id="logout-btn" class="btn-logout">Salir</button>
       </div>
     </div>
@@ -54,7 +59,10 @@
 
     <!-- Barra de progreso -->
     <div class="progress-bar-wrap">
-      <div id="progress-bar-fill" class="progress-bar-fill"></div>
+      <div class="progress-bar-track">
+        <div id="progress-bar-fill" class="progress-bar-fill"></div>
+      </div>
+      <span id="progress-pct" class="progress-pct">0%</span>
     </div>
 
     <!-- Stats -->
@@ -128,6 +136,7 @@
         <button class="filter-btn" data-filter="completo">Completo</button>
         <button class="filter-btn" data-filter="incompleto">Incompleto</button>
         <button class="filter-btn" data-filter="pendiente">Pendiente</button>
+        <button id="sort-importe-btn" class="filter-btn">$ Mayor</button>
       </div>
       <div id="resumen-list"></div>
     </div>
@@ -140,6 +149,7 @@
         <form id="admin-unlock-form" class="admin-lock-form">
           <label>Contraseña de administrador</label>
           <input type="password" id="admin-password" placeholder="••••••••" required />
+          <div id="admin-error" class="login-error hidden"></div>
           <button type="submit" class="btn-primary">Acceder</button>
         </form>
       </div>
@@ -152,10 +162,12 @@
           <button class="admin-tab-btn active" data-admin-tab="clientes">Clientes</button>
           <button class="admin-tab-btn" data-admin-tab="nueva-semana">Semanas</button>
           <button class="admin-tab-btn" data-admin-tab="usuarios">Usuarios</button>
+          <button class="admin-tab-btn" data-admin-tab="zonas">Zonas</button>
         </div>
 
         <!-- Sub-panel: Clientes -->
         <div class="admin-tab-panel" data-admin-panel="clientes">
+          <p class="admin-tab-desc">Acá podés ver todos los clientes de la empresa. Usá el botón <strong>+ Nuevo</strong> para agregar uno, o tocá <strong>Editar</strong> para modificar los datos de uno existente. Cada cliente necesita tener una zona y un vendedor asignado.</p>
           <div class="admin-header">
             <input type="text" id="admin-clientes-search" class="clientes-search-input" placeholder="Buscar cliente..." autocomplete="off" style="flex:1; margin-right:8px" />
             <button id="btn-nuevo-cliente" class="btn-search">+ Nuevo</button>
@@ -179,6 +191,7 @@
 
         <!-- Sub-panel: Semanas -->
         <div class="admin-tab-panel hidden" data-admin-panel="nueva-semana">
+          <p class="admin-tab-desc">Acá se cargan los pedidos de cada semana de reparto. Para importar una semana nueva, subí los archivos <strong>.db</strong> exportados desde la app Yaguar (uno por vendedor), poné el nombre y las fechas, y presioná <strong>Importar picks</strong>. También podés eliminar semanas que ya no necesitás.</p>
 
           <!-- Semanas cargadas -->
           <div class="admin-section-title">Semanas cargadas</div>
@@ -216,12 +229,13 @@
 
         <!-- Sub-panel: Usuarios -->
         <div class="admin-tab-panel hidden" data-admin-panel="usuarios">
+          <p class="admin-tab-desc">Acá podés ver y gestionar quiénes pueden iniciar sesión en la app. Cada operario del depósito debería tener su propio usuario. Usá <strong>Nuevo usuario</strong> para crear uno y el botón <strong>✕</strong> para eliminar uno que ya no se use.</p>
           <div class="admin-section-title" style="margin-bottom:16px">Usuarios activos</div>
           <div class="table-wrap" style="margin-bottom:24px">
             <table class="clientes-table">
               <thead>
                 <tr>
-                  <th>Email</th>
+                  <th>Usuario</th>
                   <th>Creado</th>
                   <th></th>
                 </tr>
@@ -233,8 +247,8 @@
           <div class="admin-section-title" style="margin-bottom:12px">Nuevo usuario</div>
           <form id="nuevo-usuario-form">
             <div class="form-group">
-              <label>Email</label>
-              <input type="email" id="nu-email" required autocomplete="off" />
+              <label>Usuario</label>
+              <input type="text" id="nu-email" required autocomplete="off" />
             </div>
             <div class="form-group">
               <label>Contraseña</label>
@@ -244,34 +258,95 @@
           </form>
         </div>
 
+        <!-- Sub-panel: Zonas -->
+        <div class="admin-tab-panel hidden" data-admin-panel="zonas">
+          <p class="admin-tab-desc">Acá configurás las zonas de entrega y los repartos. Los <strong>repartos</strong> agrupan zonas que se entregan en el mismo vehículo — podés cambiar el orden en que aparecen usando las flechas ▲▼. Las <strong>zonas</strong> son las localidades de los clientes; cada una debe estar asignada a un reparto para que los picks se ordenen correctamente.</p>
+          <div class="admin-section-title" style="margin-bottom:12px">Orden de repartos</div>
+          <div id="repartos-orden-list" class="repartos-orden-list" style="margin-bottom:24px"></div>
+
+          <div class="admin-divider"></div>
+          <div class="admin-section-title" style="margin-bottom:16px">Zonas</div>
+          <div class="table-wrap" style="margin-bottom:24px">
+            <table class="clientes-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Reparto</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="zonas-tbody"></tbody>
+            </table>
+          </div>
+          <div class="admin-section-title" style="margin-bottom:12px">Nueva zona</div>
+          <form id="nueva-zona-form">
+            <div class="form-group">
+              <label>Nombre</label>
+              <input type="text" id="nz-nombre" required autocomplete="off" placeholder="Ej: LA TOMA" />
+            </div>
+            <div class="form-group">
+              <label>Reparto</label>
+              <select id="nz-reparto">
+                <option value="">— Sin reparto —</option>
+              </select>
+            </div>
+            <button type="submit" class="btn-primary">Agregar zona</button>
+          </form>
+        </div>
+
       </div>
 
     </div>
 
   </div>
 
-  <!-- ── Modal cambiar contraseña ─────────────────────────────────────── -->
+  <!-- ── Modal mi cuenta ───────────────────────────────────────────────── -->
   <div id="pw-modal" class="modal-overlay hidden">
-    <div class="modal">
+    <div class="modal cuenta-modal">
       <div class="modal-header">
-        <span>Cambiar contraseña</span>
+        <span>Mi cuenta</span>
         <button id="pw-modal-close" class="modal-close">✕</button>
       </div>
-      <form id="pw-form" style="padding:20px;display:flex;flex-direction:column;gap:0">
-        <div class="form-group">
-          <label>Contraseña actual</label>
-          <input type="password" id="pw-current" required />
-        </div>
-        <div class="form-group">
-          <label>Contraseña nueva</label>
-          <input type="password" id="pw-new" required minlength="8" />
-        </div>
-        <div class="form-group">
-          <label>Repetir contraseña nueva</label>
-          <input type="password" id="pw-confirm" required minlength="8" />
-        </div>
-        <button type="submit" class="btn-primary">Guardar</button>
-      </form>
+
+      <div class="cuenta-section">
+        <div class="cuenta-section-label">Contraseña</div>
+        <form id="pw-form" class="cuenta-form">
+          <div class="cuenta-field">
+            <label>Actual</label>
+            <input type="password" id="pw-current" required />
+          </div>
+          <div class="cuenta-field">
+            <label>Nueva</label>
+            <input type="password" id="pw-new" required minlength="8" />
+          </div>
+          <div class="cuenta-field">
+            <label>Repetir nueva</label>
+            <input type="password" id="pw-confirm" required minlength="8" />
+          </div>
+          <div class="cuenta-form-footer">
+            <button type="submit" class="btn-cuenta">Guardar</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="cuenta-divider"></div>
+
+      <div class="cuenta-section">
+        <div class="cuenta-section-label">Nombre de usuario</div>
+        <form id="username-form" class="cuenta-form">
+          <div class="cuenta-field">
+            <label>Nuevo nombre</label>
+            <input type="text" id="un-new" required autocomplete="off" />
+          </div>
+          <div class="cuenta-field">
+            <label>Contraseña actual</label>
+            <input type="password" id="un-password" required />
+          </div>
+          <div class="cuenta-form-footer">
+            <button type="submit" class="btn-cuenta">Guardar</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -284,11 +359,11 @@
       </div>
       <form id="cliente-form">
         <div class="form-group"><label>Nombre</label><input type="text" id="cf-nombre" required /></div>
-        <div class="form-group"><label>Localidad</label><input type="text" id="cf-localidad" /></div>
+        <div class="form-group"><label>Zona *</label><select id="cf-localidad" required><option value="">— Seleccioná una zona —</option></select></div>
         <div class="form-group"><label>Dirección</label><input type="text" id="cf-direccion" /></div>
         <div class="form-group"><label>Teléfono</label><input type="text" id="cf-telefono" /></div>
         <div class="form-group"><label>Contacto</label><input type="text" id="cf-contacto" /></div>
-        <div class="form-group"><label>Vendedor</label><input type="text" id="cf-vendedor" /></div>
+        <div class="form-group"><label>Vendedor *</label><input type="text" id="cf-vendedor" required /></div>
         <button type="submit" class="btn-primary">Guardar</button>
       </form>
     </div>
@@ -303,7 +378,6 @@
           <span id="cliente-picks-progress" class="sheet-progress"></span>
         </div>
         <div class="sheet-header-actions">
-          <button id="btn-completar-todo" class="btn-completar-todo">✓ Todo</button>
           <button id="cliente-picks-close" class="modal-close">✕</button>
         </div>
       </div>
@@ -313,6 +387,17 @@
 
   <!-- Toast -->
   <div id="toast" class="toast"></div>
+
+  <!-- Modal de confirmación -->
+  <div id="confirm-modal" class="confirm-overlay hidden">
+    <div class="confirm-box">
+      <div id="confirm-msg" class="confirm-msg"></div>
+      <div class="confirm-actions">
+        <button id="confirm-cancel" class="btn-secondary">Cancelar</button>
+        <button id="confirm-ok" class="btn-danger">Sí, reemplazar</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
   <script src="js/api.js?v=9"></script>
