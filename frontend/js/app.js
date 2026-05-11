@@ -35,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
 function showLogin() {
   document.getElementById('login-view').classList.remove('hidden');
   document.getElementById('app-view').classList.add('hidden');
+  document.getElementById('login-error').classList.add('hidden');
 }
 
 function showApp() {
@@ -53,7 +54,9 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   const username = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
   const btn = document.getElementById('login-btn');
+  const errorDiv = document.getElementById('login-error');
 
+  errorDiv.classList.add('hidden');
   btn.disabled = true;
   btn.textContent = 'Entrando...';
 
@@ -61,8 +64,10 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     const res = await api.login(username, password);
     setToken(res.access_token);
     showApp();
+    setTimeout(() => { if (!isFullscreen()) enterFullscreen(); }, 300);
   } catch (err) {
-    showToast(err.message || 'Error al iniciar sesión', 'error');
+    errorDiv.textContent = err.message || 'Usuario o contraseña incorrectos';
+    errorDiv.classList.remove('hidden');
   } finally {
     btn.disabled = false;
     btn.textContent = 'Entrar';
@@ -1083,10 +1088,6 @@ document.getElementById('username-form').addEventListener('submit', async (e) =>
     if (isFullscreen()) exitFullscreen(); else enterFullscreen();
   });
 
-  // Auto-entrar en pantalla completa al hacer login (Android)
-  document.getElementById('login-form').addEventListener('submit', () => {
-    setTimeout(() => { if (!isFullscreen()) enterFullscreen(); }, 300);
-  });
 })();
 
 // ── Toast ──────────────────────────────────────────────────────────────────

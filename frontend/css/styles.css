@@ -59,6 +59,16 @@ body {
 
 .form-group { margin-bottom: 16px; }
 
+.login-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #f87171;
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
 label {
   display: block;
   font-size: 11px;
