@@ -77,7 +77,10 @@ def change_username(request: ChangeUsernameRequest, authorization: str = Header(
 @router.get("/users", response_model=List[UserOut])
 def list_users():
     with get_db() as cur:
-        cur.execute("SELECT id, username, rol, created_at FROM users ORDER BY created_at")
+        cur.execute("""
+            SELECT id, username, rol, created_at FROM users
+            ORDER BY CASE rol WHEN 'superadmin' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, created_at
+        """)
         return [dict(r) for r in cur.fetchall()]
 
 
