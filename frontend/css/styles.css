@@ -433,6 +433,23 @@ input:focus { border-color: var(--accent); }
 }
 
 .pick-card.completed { border-color: #1e3a2a; background: #0d1f16; }
+.pick-card.parcial { border-color: var(--orange); background: #1a1200; }
+
+.pick-aviso {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 179, 71, 0.15);
+  border: 1px solid rgba(255, 179, 71, 0.4);
+  border-radius: var(--radius);
+  color: var(--orange);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 10px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
 
 .pick-header {
   display: flex;
