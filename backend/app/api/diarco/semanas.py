@@ -190,11 +190,8 @@ async def importar_semana_diarco(
         raise HTTPException(400, "No se encontraron pedidos en ese rango de fechas. Verificá las fechas.")
 
     with get_db() as cur:
-        # Lookup de zonas DIARCO para normalizar localidades
-        cur.execute(
-            "SELECT nombre FROM zonas WHERE mayorista = %s",
-            (MAYORISTA,),
-        )
+        # Lookup de todas las zonas (compartidas entre mayoristas)
+        cur.execute("SELECT nombre FROM zonas")
         zonas_diarco = {r["nombre"] for r in cur.fetchall()}
 
         # Crear o reemplazar la semana
@@ -218,8 +215,8 @@ async def importar_semana_diarco(
         }
         for loc in localidades_nuevas:
             cur.execute(
-                "INSERT INTO zonas (nombre, mayorista) VALUES (%s, %s) ON CONFLICT (nombre, mayorista) DO NOTHING",
-                (loc, MAYORISTA),
+                "INSERT INTO zonas (nombre) VALUES (%s) ON CONFLICT DO NOTHING",
+                (loc,),
             )
 
         inserted = 0

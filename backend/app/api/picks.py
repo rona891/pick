@@ -120,8 +120,8 @@ def _by_barcode(mayorista: str, cod_bar: str, semana: Optional[str]):
             cur.execute("""
                 SELECT p.*, COALESCE(r.orden, 99) AS _reparto_orden
                 FROM pick p
-                LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre AND z.mayorista = p.mayorista
-                LEFT JOIN repartos r ON z.reparto = r.nombre AND r.mayorista = p.mayorista
+                LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+                LEFT JOIN repartos r ON z.reparto = r.nombre
                 WHERE p.cod_bar = %s AND p.semana = %s AND p.mayorista = %s
                 ORDER BY _reparto_orden ASC, p.localidad ASC, p.nombre ASC
             """, (cod_bar, semana, mayorista))
@@ -129,8 +129,8 @@ def _by_barcode(mayorista: str, cod_bar: str, semana: Optional[str]):
             cur.execute("""
                 SELECT p.*, COALESCE(r.orden, 99) AS _reparto_orden
                 FROM pick p
-                LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre AND z.mayorista = p.mayorista
-                LEFT JOIN repartos r ON z.reparto = r.nombre AND r.mayorista = p.mayorista
+                LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+                LEFT JOIN repartos r ON z.reparto = r.nombre
                 WHERE p.cod_bar = %s AND p.mayorista = %s
                 ORDER BY _reparto_orden ASC, p.localidad ASC, p.nombre ASC
             """, (cod_bar, mayorista))

@@ -1,33 +1,37 @@
-from fastapi import APIRouter, HTTPException, Query
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Zonas y Repartos — COMPARTIDOS entre Yaguar y Diarco.
+# Las zonas físicas (MERLO, SANTA ROSA, etc.) y los repartos (Sur Abajo,
+# Sur Arriba, etc.) son los mismos para ambos mayoristas.
+# Endpoint: /api/zonas/
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.db.database import get_db
 
-router = APIRouter(prefix="/zonas", tags=["zonas"])
+router = APIRouter(prefix="/zonas", tags=["Zonas y Repartos (compartido)"])
 
 
 class ZonaIn(BaseModel):
     nombre: str
     reparto: str = ""
-    mayorista: str = "yaguar"
 
 
 @router.get("/")
-def list_zonas(mayorista: str = Query("yaguar")):
+def list_zonas():
     with get_db() as cur:
         cur.execute("""
-            SELECT z.id, z.nombre, z.reparto, z.mayorista, COALESCE(r.orden, 99) AS orden
+            SELECT DISTINCT ON (z.nombre) z.id, z.nombre, z.reparto, COALESCE(r.orden, 99) AS orden
             FROM zonas z
-            LEFT JOIN repartos r ON z.reparto = r.nombre AND r.mayorista = z.mayorista
-            WHERE z.mayorista = %s
-            ORDER BY orden ASC, z.nombre ASC
-        """, (mayorista,))
+            LEFT JOIN repartos r ON z.reparto = r.nombre
+            ORDER BY z.nombre ASC, orden ASC
+        """)
         return [dict(r) for r in cur.fetchall()]
 
 
 @router.get("/repartos")
-def list_repartos(mayorista: str = Query("yaguar")):
+def list_repartos():
     with get_db() as cur:
-        cur.execute("SELECT id, nombre, orden, mayorista FROM repartos WHERE mayorista = %s ORDER BY orden ASC", (mayorista,))
+        cur.execute("SELECT id, nombre, orden FROM repartos ORDER BY orden ASC")
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -36,22 +40,21 @@ def update_reparto_orden(id: int, direccion: str):
     if direccion not in ("up", "down"):
         raise HTTPException(400, "direccion debe ser 'up' o 'down'")
     with get_db() as cur:
-        cur.execute("SELECT id, orden, mayorista FROM repartos WHERE id = %s", (id,))
+        cur.execute("SELECT id, orden FROM repartos WHERE id = %s", (id,))
         actual = cur.fetchone()
         if not actual:
             raise HTTPException(404, "Reparto no encontrado")
         orden_actual = actual["orden"]
-        mayorista = actual["mayorista"]
         if direccion == "up":
-            cur.execute("SELECT id, orden FROM repartos WHERE orden < %s AND mayorista = %s ORDER BY orden DESC LIMIT 1", (orden_actual, mayorista))
+            cur.execute("SELECT id, orden FROM repartos WHERE orden < %s ORDER BY orden DESC LIMIT 1", (orden_actual,))
         else:
-            cur.execute("SELECT id, orden FROM repartos WHERE orden > %s AND mayorista = %s ORDER BY orden ASC LIMIT 1", (orden_actual, mayorista))
+            cur.execute("SELECT id, orden FROM repartos WHERE orden > %s ORDER BY orden ASC LIMIT 1", (orden_actual,))
         vecino = cur.fetchone()
         if not vecino:
-            return list_repartos(mayorista)
+            return list_repartos()
         cur.execute("UPDATE repartos SET orden = %s WHERE id = %s", (vecino["orden"], id))
         cur.execute("UPDATE repartos SET orden = %s WHERE id = %s", (orden_actual, vecino["id"]))
-    return list_repartos(mayorista)
+    return list_repartos()
 
 
 @router.post("/")
@@ -62,8 +65,8 @@ def create_zona(data: ZonaIn):
     with get_db() as cur:
         try:
             cur.execute(
-                "INSERT INTO zonas (nombre, reparto, mayorista) VALUES (%s, %s, %s) RETURNING id, nombre, reparto, mayorista",
-                (nombre, data.reparto or None, data.mayorista),
+                "INSERT INTO zonas (nombre, reparto) VALUES (%s, %s) RETURNING id, nombre, reparto",
+                (nombre, data.reparto or None),
             )
             return dict(cur.fetchone())
         except Exception:
@@ -77,7 +80,7 @@ def update_zona(id: int, data: ZonaIn):
         raise HTTPException(400, "El nombre no puede estar vacío")
     with get_db() as cur:
         cur.execute(
-            "UPDATE zonas SET nombre=%s, reparto=%s WHERE id=%s RETURNING id, nombre, reparto, mayorista",
+            "UPDATE zonas SET nombre=%s, reparto=%s WHERE id=%s RETURNING id, nombre, reparto",
             (nombre, data.reparto or None, id),
         )
         row = cur.fetchone()

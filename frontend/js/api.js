@@ -101,9 +101,9 @@ const api = {
   deleteUser: (id) => request('DELETE', `/api/auth/users/${id}`),
   updateRol: (id, rol) => request('PUT', `/api/auth/users/${id}/rol`, { rol }),
 
-  // Zonas
-  getZonas: () => request('GET', `/api/zonas/?mayorista=${getMayorista()}`),
-  getRepartos: () => request('GET', `/api/zonas/repartos?mayorista=${getMayorista()}`),
+  // Zonas y Repartos — compartidos entre mayoristas
+  getZonas: () => request('GET', '/api/zonas/'),
+  getRepartos: () => request('GET', '/api/zonas/repartos'),
   moverReparto: (id, direccion) => request('PUT', `/api/zonas/repartos/${id}/orden?direccion=${direccion}`),
   createZona: (nombre, reparto) => request('POST', '/api/zonas/', { nombre, reparto }),
   updateZona: (id, nombre, reparto) => request('PUT', `/api/zonas/${id}`, { nombre, reparto }),

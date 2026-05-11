@@ -49,8 +49,8 @@ def _export_picks(semana: str, mayorista: str):
         cur.execute("""
             SELECT p.*, COALESCE(z.reparto, '') AS reparto_zona
             FROM pick p
-            LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre AND z.mayorista = p.mayorista
-            LEFT JOIN repartos r ON z.reparto = r.nombre AND r.mayorista = p.mayorista
+            LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+            LEFT JOIN repartos r ON z.reparto = r.nombre
             WHERE p.semana = %s AND p.mayorista = %s
             ORDER BY COALESCE(r.orden, 99) ASC, p.localidad ASC, p.nombre ASC, p.descrip ASC
         """, (semana, mayorista))
