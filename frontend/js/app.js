@@ -244,6 +244,13 @@ function formatCantidad(uni, bul, uxb) {
   return { main: `${uni} uni`, sub: uxb > 1 ? `× ${uxb} uni/bulto` : null };
 }
 
+function formatRestante(uni, cantidad, bul, uxb) {
+  uni = uni || 0; cantidad = cantidad || 0; bul = bul || 0; uxb = uxb || 0;
+  const restante = Math.max(0, uni - cantidad);
+  const restanteBul = (uxb > 0 && restante % uxb === 0) ? restante / uxb : 0;
+  return formatCantidad(restante, restanteBul, uxb);
+}
+
 function getEntregadoLabel(uni, bul, uxb) {
   uni = uni || 0; bul = bul || 0; uxb = uxb || 0;
   if (uxb > 1 && bul > 0 && uni === bul * uxb) {
@@ -277,9 +284,10 @@ function renderPicks(picks, container = document.getElementById('results')) {
 
     const cantidad = pick.cantidad_pickeada ?? 0;
     const uni = pick.uni ?? 0;
+    const uxb = pick.uxb ?? 0;
     const isParcial = cantidad > 0 && cantidad < uni;
     if (isParcial) card.classList.add('parcial');
-    const qty = formatCantidad(uni, pick.bul, pick.uxb);
+    const qty = formatRestante(uni, cantidad, pick.bul, uxb);
 
     card.innerHTML = `
       ${isParcial ? `<div class="pick-aviso">⚠ ${cantidad} uni ya entregadas — verificá antes de agregar más</div>` : ''}
@@ -360,11 +368,18 @@ async function saveQuantity(id, cantidad, card) {
     const res = await api.updateQuantity(id, cantidad);
     const isCompleted = res.estado.startsWith('completado');
     const uni = parseInt(card.dataset.uni) || 0;
+    const uxb = parseInt(card.dataset.uxb) || 0;
+    const bul = parseInt(card.dataset.bul) || 0;
     const isParcial = cantidad > 0 && cantidad < uni;
     card.classList.toggle('completed', isCompleted);
     card.classList.toggle('parcial', isParcial);
     card.querySelector('.pick-estado').textContent = res.estado;
     card.querySelector('.pick-estado').className = `pick-estado ${estadoClass(res.estado)}`;
+
+    const qty = formatRestante(uni, cantidad, bul, uxb);
+    card.querySelector('.qty-main').textContent = qty.main;
+    const qtySub = card.querySelector('.qty-sub');
+    if (qtySub) qtySub.textContent = qty.sub || '';
 
     const avisoExistente = card.querySelector('.pick-aviso');
     if (isParcial && !avisoExistente) {
