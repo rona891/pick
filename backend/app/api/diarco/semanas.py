@@ -151,27 +151,20 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
             ).fetchone()
             localidad = _extract_city(dir_row["Value3"] if dir_row else None)
 
-            # Total del pedido y código de cliente (paso GWS)
+            # Código de cliente (paso GWS)
             gws = conn.execute(
-                "SELECT STEPDesc, Value3 FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS' LIMIT 1",
+                "SELECT STEPDesc FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS' LIMIT 1",
                 (transid,),
             ).fetchone()
-            total_pedido = 0.0
             cod_cliente = ""
             if gws:
-                try:
-                    total_pedido = float(gws["Value3"] or 0)
-                except (ValueError, TypeError):
-                    pass
-                # STEPDesc = "Pedido para: 744017 xu liyu"
                 desc_parts = (gws["STEPDesc"] or "").replace("Pedido para:", "").strip().split(" ", 1)
                 cod_cliente = desc_parts[0] if desc_parts else ""
 
-            totales[nombre_cliente] = totales.get(nombre_cliente, 0.0) + total_pedido
-
             # Artículos del pedido (pasos GWS.ELEM)
+            # Formula = precio unitario del ítem (del SQL original del pick)
             items = conn.execute(
-                "SELECT STEPUID, STEPSelDesc, Value2, Value3 FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS.ELEM'",
+                "SELECT STEPUID, STEPSelDesc, Value2, Formula FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS.ELEM'",
                 (transid,),
             ).fetchall()
 
@@ -191,6 +184,13 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                 # Si factor>1: Value2 está en bultos → multiplicar por uxb para obtener unidades
                 uni = qty * uxb if qty_en_bultos and uxb > 0 else qty
                 bul = uni // uxb if uxb > 0 else 0
+
+                # Total acumulado solo de ítems reales (excluye heladeras, semáforos, etc.)
+                try:
+                    precio_unitario = float(item["Formula"] or 0)
+                except (ValueError, TypeError):
+                    precio_unitario = 0.0
+                totales[nombre_cliente] = totales.get(nombre_cliente, 0.0) + precio_unitario * uni
 
                 picks.append({
                     "cod_bar":       barcodes_13.get(cod_art),   # EAN-13 (unidad)
