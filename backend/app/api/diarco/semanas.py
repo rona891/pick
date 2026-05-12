@@ -166,25 +166,22 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                 except (ValueError, TypeError):
                     pass
 
-            # IVA total de la orden (paso V:IVAFINAL)
-            iva_row = conn.execute(
-                "SELECT Formula FROM mWTATrx WHERE TRANSID=? AND STEPCode='V:IVAFINAL' LIMIT 1",
+            # Total con IVA de la orden completa (paso GWS.Value3)
+            gws_v3_row = conn.execute(
+                "SELECT Value3 FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS' LIMIT 1",
                 (transid,),
             ).fetchone()
-            iva_total = 0.0
-            if iva_row:
+            total_orden_con_iva = 0.0
+            if gws_v3_row:
                 try:
-                    iva_total = float(iva_row["Formula"] or 0)
+                    total_orden_con_iva = float(gws_v3_row["Value3"] or 0)
                 except (ValueError, TypeError):
                     pass
 
-            importe_trans_sin_iva = 0.0  # acumula solo los ítems reales de esta transacción
+            importe_excluidos_con_iva = 0.0  # acumula el con-IVA de ítems excluidos (heladera, etc.)
 
             # Artículos del pedido (pasos GWS.ELEM)
-            # Formula × V2 × V4 = total sin IVA del ítem (verificado contra V:TOTAL)
-            #   Formula = precio unitario sin IVA
-            #   V2      = cantidad (bultos o unidades según factor)
-            #   V4      = factor de conversión (uxb desde DIARCO)
+            # Formula × V2 × V4 = total sin IVA del ítem
             items = conn.execute(
                 "SELECT STEPUID, STEPSelDesc, Value2, Value4, Formula FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS.ELEM'",
                 (transid,),
@@ -196,6 +193,21 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                     continue
                 uxb, qty_en_bultos, descrip_limpia = _parse_pack(item["STEPSelDesc"])
                 if not _es_item_real(cod_art, descrip_limpia):
+                    # Ítem excluido: calcular su precio con IVA desde mWTARep para restar del total
+                    # mWTARep.Value1 = precio sin IVA del ítem para este cliente (Key2=cod_cliente)
+                    # mWTARep.Value9 = categoría IVA: '1' → 21%, '2' → 10.5%
+                    rep = conn.execute(
+                        "SELECT Value1, Value9 FROM mWTARep WHERE STEPUID=? AND Key2=? LIMIT 1",
+                        (cod_art, cod_cliente),
+                    ).fetchone()
+                    if rep and rep["Value1"]:
+                        try:
+                            precio_sin_iva = float(rep["Value1"])
+                            iva_cat = str(rep["Value9"] or "1").strip()
+                            iva_factor = 1.105 if iva_cat == "2" else 1.21
+                            importe_excluidos_con_iva += precio_sin_iva * iva_factor
+                        except (ValueError, TypeError):
+                            pass
                     continue
                 try:
                     qty = int(float(item["Value2"] or 0))
@@ -207,15 +219,7 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                 uni = qty * uxb if qty_en_bultos and uxb > 0 else qty
                 bul = uni // uxb if uxb > 0 else 0
 
-                # Total del ítem sin IVA = Formula × V2 × V4
-                try:
-                    v2 = float(item["Value2"] or 0)
-                    v4 = float(item["Value4"] or 0)
-                    formula = float(item["Formula"] or 0)
-                    importe_item_sin_iva = formula * v2 * v4
-                except (ValueError, TypeError):
-                    importe_item_sin_iva = 0.0
-                importe_trans_sin_iva += importe_item_sin_iva
+                pass  # el total real se calcula al final por diferencia con los excluidos
 
                 picks.append({
                     "cod_bar":       barcodes_13.get(cod_art),   # EAN-13 (unidad)
@@ -230,14 +234,10 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                     "uxb":           uxb,
                 })
 
-            # Aplicar IVA proporcional: iva_real = iva_total × (real_sin_iva / orden_sin_iva)
-            # Esto distribuye el IVA correctamente cuando se excluyen ítems (heladera, etc.)
-            if total_orden_sin_iva > 0 and iva_total > 0:
-                proporcion = min(importe_trans_sin_iva / total_orden_sin_iva, 1.0)
-                importe_trans_con_iva = importe_trans_sin_iva + iva_total * proporcion
-            else:
-                importe_trans_con_iva = importe_trans_sin_iva
-
+            # Total real con IVA = total_orden_con_iva − excluidos_con_iva
+            # Los precios de ítems excluidos se obtienen de mWTARep (precio catálogo × factor IVA)
+            # Esto replica exactamente: importe_total + IVA - heladera_c_iva
+            importe_trans_con_iva = total_orden_con_iva - importe_excluidos_con_iva
             totales[nombre_cliente] = totales.get(nombre_cliente, 0.0) + importe_trans_con_iva
 
         conn.close()
