@@ -206,10 +206,11 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                             # mWTARep.Value1 = precio sin IVA, Value9 = cat. IVA ('2'→10.5%, '1'→21%)
                             rep = conn.execute(
                                 "SELECT Value1, Value9 FROM mWTARep "
-                                "WHERE TRIM(STEPUID)=? AND TRIM(Key2)=? LIMIT 1",
+                                "WHERE TRIM(STEPUID)=? AND TRIM(Key2)=? "
+                                "AND CAST(TRIM(Value1) AS REAL) > 0 LIMIT 1",
                                 (cod_art, cod_cliente.strip()),
                             ).fetchone()
-                            if rep and rep["Value1"]:
+                            if rep:
                                 try:
                                     precio_sin_iva = float(rep["Value1"])
                                     iva_factor = 1.105 if str(rep["Value9"] or "").strip() == "2" else 1.21
