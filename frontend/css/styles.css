@@ -1,18 +1,54 @@
 /* ── Reset & base ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Paleta base (neutral, se sobreescribe con el tema del mayorista) ─────── */
 :root {
   --bg: #0a0a0a;
   --surface: #141414;
   --border: #222;
   --text: #e8e8e8;
   --muted: #666;
-  --accent: #e0ff4f;
-  --red: #ff4f4f;
+  --accent: #F2E205;
+  --red: #F20505;
   --green: #4fff91;
-  --orange: #ffb347;
+  --orange: #F2CB07;
+  --completed-border: #1e3a2a;
+  --completed-bg: #0d1f16;
+  --parcial-bg: #1a1200;
   --radius: 6px;
   --font: 'DM Mono', monospace;
+}
+
+/* ── Tema YAGUAR — amarillo/negro (paleta: #F2E205, #8C862E, #F20505, #0D0D0D) */
+body.theme-yaguar {
+  --bg: #0D0D0D;
+  --surface: #141200;
+  --border: #2a2600;
+  --text: #e8e8e8;
+  --muted: #8C862E;
+  --accent: #F2E205;
+  --red: #F20505;
+  --green: #4fff91;
+  --orange: #F2CB07;
+  --completed-border: #1e3a2a;
+  --completed-bg: #0d1f16;
+  --parcial-bg: #1a1200;
+}
+
+/* ── Tema DIARCO — rojo/naranja/marrón (paleta: #F22233, #F2A516, #A67721, #593203) */
+body.theme-diarco {
+  --bg: #0a0a0a;
+  --surface: #150d08;
+  --border: #2e1408;
+  --text: #e8e8e8;
+  --muted: #A67721;
+  --accent: #F22233;
+  --red: #F22233;
+  --green: #4fff91;
+  --orange: #F2A516;
+  --completed-border: #1e3a2a;
+  --completed-bg: #0d1f16;
+  --parcial-bg: #1a0800;
 }
 
 body {
@@ -511,8 +547,8 @@ input:focus, select:focus { border-color: var(--accent); }
   transition: border-color .2s;
 }
 
-.pick-card.completed { border-color: #1e3a2a; background: #0d1f16; }
-.pick-card.parcial { border-color: var(--orange); background: #1a1200; }
+.pick-card.completed { border-color: var(--completed-border); background: var(--completed-bg); }
+.pick-card.parcial { border-color: var(--orange); background: var(--parcial-bg); }
 
 .pick-header {
   display: flex;
@@ -543,7 +579,7 @@ input:focus, select:focus { border-color: var(--accent); }
   letter-spacing: .5px;
 }
 
-.estado-ok { background: #1e3a2a; color: var(--green); }
+.estado-ok { background: var(--completed-border); color: var(--green); }
 .estado-entregado { background: #2a1e0a; color: var(--orange); }
 .estado-pend { background: #1e1e0d; color: var(--accent); }
 
@@ -714,7 +750,7 @@ input:focus, select:focus { border-color: var(--accent); }
   letter-spacing: .5px;
 }
 
-.badge-completo { background: #1e3a2a; color: var(--green); }
+.badge-completo { background: var(--completed-border); color: var(--green); }
 .badge-incompleto { background: #2a1e0d; color: var(--orange); }
 .badge-pendiente { background: #1a1a1a; color: var(--muted); }
 
@@ -949,14 +985,14 @@ input[type="date"]:focus { border-color: var(--accent); }
 }
 
 .import-result.result-ok {
-  background: #0d1f16;
-  border: 1px solid #1e3a2a;
+  background: var(--completed-bg);
+  border: 1px solid var(--completed-border);
   color: var(--green);
 }
 
 .import-result.result-warn {
-  background: #1a1200;
-  border: 1px solid #3a2e00;
+  background: var(--parcial-bg);
+  border: 1px solid var(--orange);
   color: var(--text);
 }
 

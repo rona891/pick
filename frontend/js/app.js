@@ -58,6 +58,7 @@ function showApp() {
   document.querySelector('.tab-btn[data-tab="admin"]').classList.toggle('hidden', !esAdmin());
   document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
   const m = getMayorista();
+  aplicarTema(m);
   document.getElementById('topbar-logo').src = m === 'diarco' ? 'diarco.png' : 'yaguar.png';
   loadSemanas().then(() => loadStats());
   switchTab('pick');
@@ -67,15 +68,22 @@ function showApp() {
 }
 
 // ── Selector de mayorista ──────────────────────────────────────────────────
+function aplicarTema(mayorista) {
+  document.body.classList.remove('theme-yaguar', 'theme-diarco');
+  if (mayorista) document.body.classList.add(`theme-${mayorista}`);
+}
+
 document.querySelectorAll('.mayorista-card').forEach((btn) => {
   btn.addEventListener('click', () => {
     setMayorista(btn.dataset.mayorista);
+    aplicarTema(btn.dataset.mayorista);
     showApp();
   });
 });
 
 function cambiarMayorista() {
   localStorage.removeItem('mayorista_ts');
+  aplicarTema(null);
   showMayoristaSelector();
 }
 
