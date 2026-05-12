@@ -1,3 +1,9 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# YAGUAR — Importación de semanas/picks
+# Lee archivos .db exportados por la app de Yaguar (SQLite con estructura
+# propia: hpedidosCabecera, hpedidosDetalle, articulos, clientes).
+# Endpoint: POST /api/yaguar/semanas/importar
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 import sqlite3
 import tempfile
 import os
@@ -5,7 +11,7 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from typing import List
 from app.db.database import get_db
 
-router = APIRouter(prefix="/semanas", tags=["semanas"])
+router = APIRouter(prefix="/yaguar/semanas", tags=["Yaguar - Semanas"])
 
 # Mismo SQL que se usaba manualmente, adaptado para Python (sqlite3 usa ? como placeholder)
 EXTRACT_SQL = """
@@ -70,9 +76,9 @@ def _query_db_file(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
 
 
 @router.get("/")
-def list_semanas():
+def list_semanas(mayorista: str = "yaguar"):
     with get_db() as cur:
-        cur.execute("SELECT id, nombre, created_at FROM semanas ORDER BY created_at DESC")
+        cur.execute("SELECT id, nombre, created_at FROM semanas WHERE mayorista = %s ORDER BY created_at DESC", (mayorista,))
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -82,6 +88,7 @@ async def importar_semana(
     fecha_desde: str = Form(...),
     fecha_hasta: str = Form(...),
     archivos: List[UploadFile] = File(...),
+    mayorista: str = Form("yaguar"),
 ):
     if len(fecha_desde) != 8 or not fecha_desde.isdigit():
         raise HTTPException(400, "fecha_desde debe estar en formato AAAAMMDD (ej: 20260422)")
@@ -110,11 +117,11 @@ async def importar_semana(
         # Crear semana (upsert — si ya existe la reemplaza)
         cur.execute(
             """
-            INSERT INTO semanas (nombre) VALUES (%s)
-            ON CONFLICT (nombre) DO UPDATE SET nombre = EXCLUDED.nombre
+            INSERT INTO semanas (nombre, mayorista) VALUES (%s, %s)
+            ON CONFLICT (nombre, mayorista) DO UPDATE SET nombre = EXCLUDED.nombre
             RETURNING id
             """,
-            (nombre,),
+            (nombre, mayorista),
         )
         cur.fetchone()
 
@@ -141,8 +148,8 @@ async def importar_semana(
                 """
                 INSERT INTO pick
                     (cod_bar, cod_art, descrip, nombre, cliente, localidad, uni, bul, uxb,
-                     cantidad_pickeada, estado, semana, importe_total)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s)
+                     cantidad_pickeada, estado, semana, importe_total, mayorista)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, 'yaguar')
                 """,
                 (
                     r["cod_bar"],
@@ -175,4 +182,4 @@ def delete_semana(id: int):
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Semana no encontrada")
-    return {"message": f"Semana eliminada", "nombre": row["nombre"]}
+    return {"message": "Semana eliminada", "nombre": row["nombre"]}

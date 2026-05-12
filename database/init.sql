@@ -22,26 +22,33 @@ CREATE TABLE IF NOT EXISTS pick (
     updated_at timestamptz,
     created_at timestamptz DEFAULT now(),
     uxb integer DEFAULT 0,
-    importe_total numeric DEFAULT 0
+    importe_total numeric DEFAULT 0,
+    mayorista varchar NOT NULL DEFAULT 'yaguar'
 );
 
 CREATE TABLE IF NOT EXISTS semanas (
     id bigserial PRIMARY KEY,
-    nombre varchar UNIQUE NOT NULL,
-    created_at timestamptz DEFAULT now()
+    nombre varchar NOT NULL,
+    mayorista varchar NOT NULL DEFAULT 'yaguar',
+    created_at timestamptz DEFAULT now(),
+    UNIQUE (nombre, mayorista)
 );
 
 CREATE TABLE IF NOT EXISTS repartos (
     id bigserial PRIMARY KEY,
-    nombre varchar UNIQUE NOT NULL,
-    orden integer NOT NULL DEFAULT 99
+    nombre varchar NOT NULL,
+    orden integer NOT NULL DEFAULT 99,
+    mayorista varchar NOT NULL DEFAULT 'yaguar',
+    UNIQUE (nombre, mayorista)
 );
 
 CREATE TABLE IF NOT EXISTS zonas (
     id bigserial PRIMARY KEY,
-    nombre varchar UNIQUE NOT NULL,
+    nombre varchar NOT NULL,
     reparto varchar,
-    created_at timestamptz DEFAULT now()
+    mayorista varchar NOT NULL DEFAULT 'yaguar',
+    created_at timestamptz DEFAULT now(),
+    UNIQUE (nombre, mayorista)
 );
 
 CREATE TABLE IF NOT EXISTS clientes_yaguar (
@@ -52,6 +59,7 @@ CREATE TABLE IF NOT EXISTS clientes_yaguar (
     telefono varchar,
     contacto varchar,
     vendedor varchar,
+    mayorista varchar NOT NULL DEFAULT 'yaguar',
     created_at timestamptz DEFAULT now(),
     id_yaguar varchar
 );

@@ -1,18 +1,84 @@
 /* ── Reset & base ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Paleta base (neutral, se sobreescribe con el tema del mayorista) ─────── */
 :root {
   --bg: #0a0a0a;
   --surface: #141414;
   --border: #222;
   --text: #e8e8e8;
   --muted: #666;
-  --accent: #e0ff4f;
-  --red: #ff4f4f;
+  --accent: #F2E205;
+  --red: #F20505;
   --green: #4fff91;
-  --orange: #ffb347;
+  --orange: #F2CB07;
+  --completed-border: #1e3a2a;
+  --completed-bg: #0d1f16;
+  --parcial-bg: #1a1200;
   --radius: 6px;
   --font: 'DM Mono', monospace;
+}
+
+/* ── Tema YAGUAR — amarillo/negro (paleta: #F2E205, #8C862E, #F20505, #0D0D0D) */
+body.theme-yaguar {
+  --bg: #0D0D0D;
+  --surface: #141200;
+  --border: #2a2600;
+  --text: #e8e8e8;
+  --muted: #8C862E;
+  --accent: #F2E205;
+  --red: #F20505;
+  --green: #4fff91;
+  --orange: #F2CB07;
+  --completed-border: #1e3a2a;
+  --completed-bg: #0d1f16;
+  --parcial-bg: #1a1200;
+}
+
+/* ── Tema DIARCO — rojo/naranja/marrón (paleta: #F22233, #F2A516, #A67721, #593203) */
+body.theme-diarco {
+  --bg: #0a0a0a;
+  --surface: #150d08;
+  --border: #2e1408;
+  --text: #e8e8e8;
+  --muted: #A67721;
+  --accent: #F22233;
+  --red: #F22233;
+  --green: #4fff91;
+  --orange: #F2A516;
+  --completed-border: #1e3a2a;
+  --completed-bg: #0d1f16;
+  --parcial-bg: #1a0800;
+}
+
+/* ── Modo claro ────────────────────────────────────────────────────────────── */
+body.light-mode {
+  --bg: #f0f0f0;
+  --surface: #ffffff;
+  --border: #d0d0d0;
+  --text: #111111;
+  --muted: #777777;
+  --completed-border: #2d7a4f;
+  --completed-bg: #e6f5ee;
+  --parcial-bg: #fff8e6;
+}
+
+/* Yaguar claro: el amarillo #F2E205 es ilegible en fondo blanco → usar olive #8C862E */
+body.theme-yaguar.light-mode {
+  --surface: #fffde8;
+  --border: #d4c400;
+  --muted: #8C862E;
+  --accent: #8C862E;
+  --orange: #b89000;
+  --parcial-bg: #fffbcc;
+}
+
+/* Diarco claro: el rojo se mantiene legible en fondo claro */
+body.theme-diarco.light-mode {
+  --surface: #fff8f5;
+  --border: #e0c0a8;
+  --muted: #7a5515;
+  --parcial-bg: #fff3e8;
 }
 
 body {
@@ -24,6 +90,64 @@ body {
 }
 
 .hidden { display: none !important; }
+
+/* ── Selector de mayorista ────────────────────────────────────────────────── */
+#mayorista-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.mayorista-selector { width: 100%; max-width: 380px; }
+
+.mayorista-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.mayorista-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mayorista-card {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 32px 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .2s, background .2s;
+  min-height: 120px;
+}
+
+.mayorista-card:active { opacity: .8; }
+.mayorista-card[data-mayorista="yaguar"]:hover { border-color: var(--accent); }
+.mayorista-card[data-mayorista="diarco"]:hover { border-color: #e63946; }
+
+.mayorista-card-name {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 48px;
+  letter-spacing: 4px;
+  color: var(--accent);
+}
+
+.mayorista-logo {
+  max-width: 200px;
+  max-height: 80px;
+  object-fit: contain;
+}
+
 
 /* ── Login ────────────────────────────────────────────────────────────────── */
 #login-view {
@@ -164,14 +288,19 @@ input:focus, select:focus { border-color: var(--accent); }
   margin-bottom: 20px;
 }
 
-.app-title {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 28px;
-  letter-spacing: 2px;
-  color: var(--accent);
+.topbar-logo {
+  height: 44px;
+  max-width: 130px;
+  object-fit: contain;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: .9;
+  transition: opacity .15s;
 }
+.topbar-logo:active { opacity: .6; }
 
 .topbar-actions { display: flex; gap: 8px; }
+.btn-theme { font-size: 16px; }
 
 .topbar-usuario {
   flex: 1;
@@ -449,8 +578,8 @@ input:focus, select:focus { border-color: var(--accent); }
   transition: border-color .2s;
 }
 
-.pick-card.completed { border-color: #1e3a2a; background: #0d1f16; }
-.pick-card.parcial { border-color: var(--orange); background: #1a1200; }
+.pick-card.completed { border-color: var(--completed-border); background: var(--completed-bg); }
+.pick-card.parcial { border-color: var(--orange); background: var(--parcial-bg); }
 
 .pick-header {
   display: flex;
@@ -481,7 +610,7 @@ input:focus, select:focus { border-color: var(--accent); }
   letter-spacing: .5px;
 }
 
-.estado-ok { background: #1e3a2a; color: var(--green); }
+.estado-ok { background: var(--completed-border); color: var(--green); }
 .estado-entregado { background: #2a1e0a; color: var(--orange); }
 .estado-pend { background: #1e1e0d; color: var(--accent); }
 
@@ -652,9 +781,9 @@ input:focus, select:focus { border-color: var(--accent); }
   letter-spacing: .5px;
 }
 
-.badge-completo { background: #1e3a2a; color: var(--green); }
+.badge-completo { background: var(--completed-border); color: var(--green); }
 .badge-incompleto { background: #2a1e0d; color: var(--orange); }
-.badge-pendiente { background: #1a1a1a; color: var(--muted); }
+.badge-pendiente { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
 
 /* ── Admin tab ────────────────────────────────────────────────────────────── */
 .admin-lock-form {
@@ -887,14 +1016,14 @@ input[type="date"]:focus { border-color: var(--accent); }
 }
 
 .import-result.result-ok {
-  background: #0d1f16;
-  border: 1px solid #1e3a2a;
+  background: var(--completed-bg);
+  border: 1px solid var(--completed-border);
   color: var(--green);
 }
 
 .import-result.result-warn {
-  background: #1a1200;
-  border: 1px solid #3a2e00;
+  background: var(--parcial-bg);
+  border: 1px solid var(--orange);
   color: var(--text);
 }
 
@@ -1331,12 +1460,21 @@ input[type="date"]:focus { border-color: var(--accent); }
 .btn-step-plus:active  { color: var(--green); border-color: var(--green); }
 
 .step-value {
-  min-width: 36px;
+  width: 56px;
   text-align: center;
   font-size: 18px;
   font-weight: 600;
   color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 4px;
+  font-family: var(--font);
+  -moz-appearance: textfield;
 }
+.step-value::-webkit-inner-spin-button,
+.step-value::-webkit-outer-spin-button { -webkit-appearance: none; }
+.step-value:focus { border-color: var(--accent); outline: none; }
 
 .btn-save {
   flex: 1;

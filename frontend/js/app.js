@@ -15,8 +15,13 @@ let currentCameraIndex = 0;
 
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  aplicarModo();
   if (getToken()) {
-    showApp();
+    if (mayoristaCaducado()) {
+      showMayoristaSelector();
+    } else {
+      showApp();
+    }
   } else {
     showLogin();
   }
@@ -36,21 +41,68 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Views ──────────────────────────────────────────────────────────────────
 function showLogin() {
   document.getElementById('login-view').classList.remove('hidden');
+  document.getElementById('mayorista-view').classList.add('hidden');
   document.getElementById('app-view').classList.add('hidden');
   document.getElementById('login-error').classList.add('hidden');
 }
 
+function showMayoristaSelector() {
+  document.getElementById('mayorista-view').classList.remove('hidden');
+  document.getElementById('login-view').classList.add('hidden');
+  document.getElementById('app-view').classList.add('hidden');
+}
+
 function showApp() {
   document.getElementById('login-view').classList.add('hidden');
+  document.getElementById('mayorista-view').classList.add('hidden');
   document.getElementById('app-view').classList.remove('hidden');
-  // Mostrar tab Admin solo a usuarios con rol admin o superadmin
   document.querySelector('.tab-btn[data-tab="admin"]').classList.toggle('hidden', !esAdmin());
   document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
+  const m = getMayorista();
+  aplicarTema(m);
+  document.getElementById('topbar-logo').src = m === 'diarco' ? 'diarco.png' : 'yaguar.png';
   loadSemanas().then(() => loadStats());
   switchTab('pick');
   prewarmCamera();
   renderHistorial();
   setTimeout(() => document.getElementById('barcode-input').focus(), 200);
+}
+
+// ── Modo claro / oscuro ────────────────────────────────────────────────────
+function esLightMode() {
+  return localStorage.getItem('lightMode') === '1';
+}
+
+function aplicarModo() {
+  const light = esLightMode();
+  document.body.classList.toggle('light-mode', light);
+  const btn = document.getElementById('btn-theme');
+  if (btn) btn.textContent = light ? '🌙' : '☀';
+}
+
+document.getElementById('btn-theme').addEventListener('click', () => {
+  localStorage.setItem('lightMode', esLightMode() ? '0' : '1');
+  aplicarModo();
+});
+
+// ── Selector de mayorista ──────────────────────────────────────────────────
+function aplicarTema(mayorista) {
+  document.body.classList.remove('theme-yaguar', 'theme-diarco');
+  if (mayorista) document.body.classList.add(`theme-${mayorista}`);
+}
+
+document.querySelectorAll('.mayorista-card').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    setMayorista(btn.dataset.mayorista);
+    aplicarTema(btn.dataset.mayorista);
+    showApp();
+  });
+});
+
+function cambiarMayorista() {
+  localStorage.removeItem('mayorista_ts');
+  aplicarTema(null);
+  showMayoristaSelector();
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────────
@@ -70,7 +122,11 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     setToken(res.access_token);
     setRol(res.rol);
     localStorage.setItem('username', username);
-    showApp();
+    if (mayoristaCaducado()) {
+      showMayoristaSelector();
+    } else {
+      showApp();
+    }
     setTimeout(() => { if (!isFullscreen()) enterFullscreen(); }, 300);
   } catch (err) {
     errorDiv.textContent = err.message || 'Usuario o contraseña incorrectos';
@@ -156,9 +212,28 @@ function switchTab(tab) {
 document.getElementById('search-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const val = document.getElementById('barcode-input').value.trim();
-  if (val) await searchBarcode(val);
+  if (!val) return;
+  // DIARCO no tiene barcodes: buscar por código de artículo DIARCO
+  if (getMayorista() === 'diarco') {
+    await searchByCodArt(val);
+  } else {
+    await searchBarcode(val);
+  }
 });
 
+
+async function searchByCodArt(codArt) {
+  const results = document.getElementById('results');
+  results.innerHTML = '<p class="loading">Buscando...</p>';
+  try {
+    const picks = await api.getByCodArt(codArt, semanaActual);
+    addToHistorial(codArt, picks[0]?.descrip || codArt);
+    renderPicks(picks, results);
+    loadStats();
+  } catch (err) {
+    results.innerHTML = `<p class="error-msg">Producto no encontrado</p>`;
+  }
+}
 
 async function searchBarcode(codBar) {
   const results = document.getElementById('results');
@@ -215,8 +290,10 @@ function renderHistorial() {
   chips.innerHTML = hist.map(e => `<span class="hist-chip" data-cod="${e.cod}">${e.descrip}</span>`).join('');
   chips.querySelectorAll('.hist-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
-      document.getElementById('barcode-input').value = chip.dataset.cod;
-      searchBarcode(chip.dataset.cod);
+      const cod = chip.dataset.cod;
+      document.getElementById('barcode-input').value = cod;
+      if (getMayorista() === 'diarco') searchByCodArt(cod);
+      else searchBarcode(cod);
     });
   });
 }
@@ -349,27 +426,43 @@ function renderControls(card, cantidad, isCompleted) {
       <button class="btn-entregado">${entLabel}</button>
       <div class="pick-stepper">
         <button class="btn-step-minus">−</button>
-        <span class="step-value">${current}</span>
+        <input class="step-value" type="number" min="0" max="${uni}" value="${current}" inputmode="numeric" />
         <button class="btn-step-plus">+</button>
         <button class="btn-save">Guardar</button>
       </div>
     `;
 
-    const valueEl = ctrl.querySelector('.step-value');
+    const inputEl = ctrl.querySelector('.step-value');
+
+    const syncFromInput = () => {
+      let v = parseInt(inputEl.value);
+      if (isNaN(v) || v < 0) v = 0;
+      if (v > uni) v = uni;
+      current = v;
+      inputEl.value = current;
+    };
 
     ctrl.querySelector('.btn-entregado').addEventListener('click', () => saveQuantity(id, uni, card));
 
     ctrl.querySelector('.btn-step-minus').addEventListener('click', () => {
+      syncFromInput();
       current = Math.max(0, current - 1);
-      valueEl.textContent = current;
+      inputEl.value = current;
     });
 
     ctrl.querySelector('.btn-step-plus').addEventListener('click', () => {
+      syncFromInput();
       current = Math.min(uni, current + 1);
-      valueEl.textContent = current;
+      inputEl.value = current;
     });
 
-    ctrl.querySelector('.btn-save').addEventListener('click', () => saveQuantity(id, current, card));
+    inputEl.addEventListener('change', syncFromInput);
+    inputEl.addEventListener('blur', syncFromInput);
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { syncFromInput(); saveQuantity(id, current, card); }
+    });
+
+    ctrl.querySelector('.btn-save').addEventListener('click', () => { syncFromInput(); saveQuantity(id, current, card); });
   }
 }
 
@@ -532,19 +625,25 @@ async function buscarPorDescrip(q) {
       container.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
     } else {
       container.innerHTML = items.map((item) => `
-        <div class="descrip-item" data-codbar="${item.cod_bar}">
+        <div class="descrip-item" data-codbar="${item.cod_bar ?? ''}" data-codart="${item.cod_art ?? ''}">
           <span class="descrip-item-name">${item.descrip ?? ''}</span>
           <span class="descrip-item-code">${item.cod_art ?? ''}</span>
         </div>
       `).join('');
       container.querySelectorAll('.descrip-item').forEach((el) => {
-        el.addEventListener('click', () => {
+        el.addEventListener('click', async () => {
           const codBar = el.dataset.codbar;
+          const codArt = el.dataset.codart;
           const descrip = el.querySelector('.descrip-item-name').textContent;
           document.getElementById('descrip-input').value = descrip;
-          document.getElementById('barcode-input').value = codBar;
           hideDescripResults();
-          searchBarcode(codBar);
+          if (codBar) {
+            document.getElementById('barcode-input').value = codBar;
+            searchBarcode(codBar);
+          } else {
+            document.getElementById('barcode-input').value = codArt;
+            await searchByCodArt(codArt);
+          }
         });
       });
     }
@@ -568,7 +667,11 @@ function onScanResult(result) {
   document.getElementById('barcode-input').value = code;
   if (navigator.vibrate) navigator.vibrate(80);
   stopScanner();
-  searchBarcode(code);
+  if (getMayorista() === 'diarco') {
+    searchByCodArt(code);
+  } else {
+    searchBarcode(code);
+  }
 }
 
 async function startScanner(deviceId = null) {
@@ -946,6 +1049,16 @@ async function deleteCliente(id) {
 async function loadSemanasAdmin() {
   const list = document.getElementById('semanas-admin-list');
   if (!list) return;
+
+  const m = getMayorista();
+
+  // Descripción y formulario según mayorista
+  document.getElementById('semanas-desc').innerHTML = m === 'diarco'
+    ? 'Acá se cargan los pedidos de DIARCO. Subí el archivo <strong>MobileAssistantBU.db</strong> de la app DIARCO, completá el nombre y las fechas, y presioná <strong>Importar picks</strong>.'
+    : 'Acá se cargan los pedidos de Yaguar. Subí los archivos <strong>.db</strong> exportados de la app Yaguar (uno por vendedor), completá el nombre y las fechas, y presioná <strong>Importar picks</strong>.';
+  document.getElementById('import-yaguar').classList.toggle('hidden', m === 'diarco');
+  document.getElementById('import-diarco').classList.toggle('hidden', m !== 'diarco');
+
   try {
     const semanas = await api.getSemanas();
     if (semanas.length === 0) {
@@ -1117,6 +1230,67 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
         <div class="import-missing-list">${tags}</div>
       `;
     }
+    resultPanel.classList.remove('hidden');
+  } catch (err) {
+    resultPanel.className = 'import-result result-warn';
+    resultPanel.innerHTML = `<div class="import-result-title warn">Error</div>${err.message}`;
+    resultPanel.classList.remove('hidden');
+  } finally {
+    btn.disabled = files.length === 0;
+    btn.textContent = 'Importar picks';
+  }
+});
+
+// ── Admin: Importar DIARCO ─────────────────────────────────────────────────
+document.getElementById('diarco-file-input').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files);
+  const list = document.getElementById('diarco-upload-list');
+  list.innerHTML = files.map((f) => `
+    <div class="upload-file-item">
+      <span class="upload-file-name">${f.name}</span>
+      <span class="upload-file-size">${(f.size / 1024).toFixed(1)} KB</span>
+    </div>
+  `).join('');
+  document.getElementById('btn-importar-diarco').disabled = files.length === 0;
+});
+
+document.getElementById('btn-importar-diarco').addEventListener('click', async () => {
+  const nombre = document.getElementById('diarco-semana-nombre').value.trim();
+  const fechaDesde = document.getElementById('diarco-fecha-desde').value.replace(/-/g, '');
+  const fechaHasta = document.getElementById('diarco-fecha-hasta').value.replace(/-/g, '');
+  const files = document.getElementById('diarco-file-input').files;
+
+  if (!nombre) { showToast('Ingresá un nombre para el pick', 'error'); return; }
+  if (!fechaDesde || !fechaHasta) { showToast('Seleccioná las fechas', 'error'); return; }
+  if (files.length === 0) { showToast('Seleccioná al menos un archivo MobileAssistantBU.db', 'error'); return; }
+
+  const semanas = await api.getSemanas();
+  if (semanas.some((s) => s.nombre === nombre)) {
+    const ok = await confirmar(`La semana "${nombre}" ya existe. ¿Querés reemplazarla con los nuevos datos?`);
+    if (!ok) return;
+  }
+
+  const formData = new FormData();
+  formData.append('nombre', nombre);
+  formData.append('fecha_desde', fechaDesde);
+  formData.append('fecha_hasta', fechaHasta);
+  for (const file of files) formData.append('archivos', file);
+
+  const btn = document.getElementById('btn-importar-diarco');
+  btn.disabled = true;
+  btn.textContent = 'Importando...';
+  const resultPanel = document.getElementById('import-result');
+
+  try {
+    const res = await api.importarSemana(formData);
+    await loadSemanas();
+    loadStats();
+    loadSemanasAdmin();
+    resultPanel.className = 'import-result result-ok';
+    resultPanel.innerHTML = `
+      <div class="import-result-title ok">Importación exitosa</div>
+      ${res.picks_importados} picks cargados para <strong>${res.semana}</strong> — ${res.clientes} clientes.
+    `;
     resultPanel.classList.remove('hidden');
   } catch (err) {
     resultPanel.className = 'import-result result-warn';

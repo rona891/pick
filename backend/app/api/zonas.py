@@ -1,8 +1,14 @@
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Zonas y Repartos — COMPARTIDOS entre Yaguar y Diarco.
+# Las zonas físicas (MERLO, SANTA ROSA, etc.) y los repartos (Sur Abajo,
+# Sur Arriba, etc.) son los mismos para ambos mayoristas.
+# Endpoint: /api/zonas/
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.db.database import get_db
 
-router = APIRouter(prefix="/zonas", tags=["zonas"])
+router = APIRouter(prefix="/zonas", tags=["Zonas y Repartos (compartido)"])
 
 
 class ZonaIn(BaseModel):
@@ -57,14 +63,14 @@ def create_zona(data: ZonaIn):
     if not nombre:
         raise HTTPException(400, "El nombre no puede estar vacío")
     with get_db() as cur:
-        try:
-            cur.execute(
-                "INSERT INTO zonas (nombre, reparto) VALUES (%s, %s) RETURNING id, nombre, reparto",
-                (nombre, data.reparto or None),
-            )
-            return dict(cur.fetchone())
-        except Exception:
+        cur.execute("SELECT id FROM zonas WHERE nombre = %s", (nombre,))
+        if cur.fetchone():
             raise HTTPException(400, "Ya existe una zona con ese nombre")
+        cur.execute(
+            "INSERT INTO zonas (nombre, reparto) VALUES (%s, %s) RETURNING id, nombre, reparto",
+            (nombre, data.reparto or None),
+        )
+        return dict(cur.fetchone())
 
 
 @router.put("/{id}")
