@@ -938,7 +938,28 @@ function initAdmin() {
     adminUnlocked = true;
     document.getElementById('admin-lock').classList.add('hidden');
     document.getElementById('admin-panel').classList.remove('hidden');
-    loadClientes();
+
+    // En DIARCO los clientes se importan desde el .db, no se gestionan manualmente
+    const esDiarco = getMayorista() === 'diarco';
+    const btnClientes = document.querySelector('.admin-tab-btn[data-admin-tab="clientes"]');
+    const panelClientes = document.querySelector('.admin-tab-panel[data-admin-panel="clientes"]');
+    if (btnClientes) btnClientes.classList.toggle('hidden', esDiarco);
+    if (panelClientes) panelClientes.classList.toggle('hidden', esDiarco);
+
+    if (esDiarco) {
+      // Activar la primera tab visible (Semanas)
+      document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.add('hidden'));
+      const firstBtn = document.querySelector('.admin-tab-btn:not(.hidden)');
+      if (firstBtn) {
+        firstBtn.classList.add('active');
+        const target = firstBtn.dataset.adminTab;
+        document.querySelector(`.admin-tab-panel[data-admin-panel="${target}"]`)?.classList.remove('hidden');
+        if (target === 'nueva-semana') loadSemanasAdmin();
+      }
+    } else {
+      loadClientes();
+    }
   } else {
     document.getElementById('admin-lock').classList.remove('hidden');
     document.getElementById('admin-panel').classList.add('hidden');
