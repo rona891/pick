@@ -34,6 +34,10 @@ DESCRIP_EXCLUIDAS = [
     "heladera exhibidora",
 ]
 
+# Precio con IVA de la Heladera Exhibidora Inelro por unidad.
+# Se descuenta del total con IVA de cada cliente por cada unidad pedida.
+PRECIO_HELADERA_CON_IVA = 1375796.713
+
 def _es_item_real(cod_art: str, descrip: str) -> bool:
     """Devuelve False para items de sistema o equipamiento de DIARCO que no se pickean."""
     if not cod_art.strip().lstrip('-').isdigit():
@@ -194,29 +198,14 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                 uxb, qty_en_bultos, descrip_limpia = _parse_pack(item["STEPSelDesc"])
                 if not _es_item_real(cod_art, descrip_limpia):
                     # Ítem excluido del pick (heladera exhibidora, semáforo, etc.)
-                    # Por cada unidad pedida se resta su precio con IVA del total del cliente.
-                    # Solo aplica a ítems con cod_art numérico (los de sistema como Semaforo = 0 precio).
+                    # Por cada unidad pedida se resta PRECIO_HELADERA_CON_IVA del total del cliente.
+                    # Solo aplica a ítems con cod_art numérico (Semaforo y similares no tienen precio).
                     if cod_art.isdigit():
                         try:
                             qty_excluido = int(float(item["Value2"] or 0))
                         except (ValueError, TypeError):
                             qty_excluido = 0
-                        if qty_excluido > 0:
-                            # Precio con IVA por unidad: buscar en mWTARep del cliente.
-                            # mWTARep.Value1 = precio sin IVA, Value9 = cat. IVA ('2'→10.5%, '1'→21%)
-                            rep = conn.execute(
-                                "SELECT Value1, Value9 FROM mWTARep "
-                                "WHERE TRIM(STEPUID)=? AND TRIM(Key2)=? "
-                                "AND CAST(TRIM(Value1) AS REAL) > 0 LIMIT 1",
-                                (cod_art, cod_cliente.strip()),
-                            ).fetchone()
-                            if rep:
-                                try:
-                                    precio_sin_iva = float(rep["Value1"])
-                                    iva_factor = 1.105 if str(rep["Value9"] or "").strip() == "2" else 1.21
-                                    importe_excluidos_con_iva += precio_sin_iva * iva_factor * qty_excluido
-                                except (ValueError, TypeError):
-                                    pass
+                        importe_excluidos_con_iva += PRECIO_HELADERA_CON_IVA * qty_excluido
                     continue
                 try:
                     qty = int(float(item["Value2"] or 0))
