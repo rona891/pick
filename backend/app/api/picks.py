@@ -142,6 +142,7 @@ def _by_art(mayorista: str, cod_art: str, semana: Optional[str]):
 
 
 def _by_barcode(mayorista: str, cod_bar: str, semana: Optional[str]):
+    """Busca picks por barcode EAN-13 (unidad) o EAN-14 (bulto cerrado)."""
     with get_db() as cur:
         if semana:
             cur.execute("""
@@ -149,18 +150,20 @@ def _by_barcode(mayorista: str, cod_bar: str, semana: Optional[str]):
                 FROM pick p
                 LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
                 LEFT JOIN repartos r ON z.reparto = r.nombre
-                WHERE p.cod_bar = %s AND p.semana = %s AND p.mayorista = %s
+                WHERE (p.cod_bar = %s OR p.cod_bar_bulto = %s)
+                  AND p.semana = %s AND p.mayorista = %s
                 ORDER BY _reparto_orden ASC, p.localidad ASC, p.nombre ASC
-            """, (cod_bar, semana, mayorista))
+            """, (cod_bar, cod_bar, semana, mayorista))
         else:
             cur.execute("""
                 SELECT p.*, COALESCE(r.orden, 99) AS _reparto_orden
                 FROM pick p
                 LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
                 LEFT JOIN repartos r ON z.reparto = r.nombre
-                WHERE p.cod_bar = %s AND p.mayorista = %s
+                WHERE (p.cod_bar = %s OR p.cod_bar_bulto = %s)
+                  AND p.mayorista = %s
                 ORDER BY _reparto_orden ASC, p.localidad ASC, p.nombre ASC
-            """, (cod_bar, mayorista))
+            """, (cod_bar, cod_bar, mayorista))
         rows = cur.fetchall()
     if not rows:
         raise HTTPException(status_code=404, detail="No se encontraron picks para este código")

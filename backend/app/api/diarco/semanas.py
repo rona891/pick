@@ -1,18 +1,23 @@
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # DIARCO — Importación de semanas/picks
 # Lee archivos MobileAssistantBU.db generados por la app de DIARCO (SQLite
-# con estructura propia: mWTAMTrx, mWTATrx).
+# con estructura propia: mWTAMTrx, mWTATrx, mWTARep).
 #
 # Estructura relevante del .db de DIARCO:
 #   mWTAMTrx  → una fila por pedido: TRANSID, DATE (YYYYMMDDHHMMSS), STATUS
 #   mWTATrx   → pasos de cada pedido:
-#     STEPCode='CTE'      → STEPSelDesc = nombre del cliente
-#     STEPCode='GWS'      → STEPDesc = "Pedido para: {cod} {nombre}", Value3 = total $
-#     STEPCode='DIR'      → Value3 = "CIUDAD, Provincia" (localidad del cliente)
-#     STEPCode='GWS.ELEM' → STEPUID = código DIARCO del artículo,
-#                           STEPSelDesc = descripción con "(fp: X / YB)",
-#                           Value2 = cantidad pedida,
-#                           Value3 = precio unitario
+#     STEPCode='CTE'         → STEPSelDesc = nombre oficial del cliente en DIARCO
+#     STEPCode='OBSERVACION' → STEPSelDesc = nombre propio del local (ej: 'PARAVATTI "A"')
+#                              Se usa como nombre en el pick; fallback a CTE si está vacío.
+#     STEPCode='GWS'         → STEPDesc = "Pedido para: {cod} {nombre}", Value3 = total $
+#     STEPCode='DIR'         → Value3 = "CIUDAD, Provincia" (localidad del cliente)
+#     STEPCode='GWS.ELEM'    → STEPUID = código DIARCO del artículo,
+#                              STEPSelDesc = descripción con "(fp: X / YB)",
+#                              Value2 = cantidad pedida
+#   mWTARep WHERE Key1='CDB' → barcodes por artículo:
+#     STEPUID (13 dígitos) = EAN-13 de la unidad  → pick.cod_bar
+#     STEPUID (14 dígitos) = EAN-14 del bulto cerrado → pick.cod_bar_bulto
+#     Value1 = código DIARCO del artículo (STEPUID de GWS.ELEM)
 #
 # Endpoint: POST /api/diarco/semanas/importar
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -95,6 +100,21 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
         conn = sqlite3.connect(tmp_path)
         conn.row_factory = sqlite3.Row
 
+        # ── Barcodes: construir lookup cod_art → (EAN-13, EAN-14) ──────────
+        # mWTARep con Key1='CDB': STEPUID = barcode, Value1 = cod_art DIARCO
+        barcodes_13: dict = {}  # cod_art → EAN-13 (unidad)
+        barcodes_14: dict = {}  # cod_art → EAN-14 (bulto cerrado)
+        for row in conn.execute(
+            "SELECT TRIM(STEPUID) AS ean, TRIM(Value1) AS cod FROM mWTARep WHERE Key1='CDB'"
+        ).fetchall():
+            ean, cod = row["ean"], row["cod"]
+            if not ean or not ean.isdigit() or int(ean) == 0:
+                continue
+            if len(ean) == 13 and cod not in barcodes_13:
+                barcodes_13[cod] = ean
+            elif len(ean) == 14 and cod not in barcodes_14:
+                barcodes_14[cod] = ean
+
         # Obtener todos los pedidos dentro del rango de fechas
         # STATUS='1' = pedido tomado, STATUS='S' = sincronizado (enviado al servidor)
         # Ambos representan pedidos válidos y completos
@@ -106,14 +126,23 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
         for tr in trans_rows:
             transid = tr["TRANSID"]
 
-            # Nombre del cliente (paso CTE)
+            # Nombre oficial del cliente (paso CTE)
             cte = conn.execute(
                 "SELECT STEPSelDesc FROM mWTATrx WHERE TRANSID=? AND STEPCode='CTE' LIMIT 1",
                 (transid,),
             ).fetchone()
             if not cte:
                 continue
-            nombre_cliente = (cte["STEPSelDesc"] or "").strip()
+            nombre_cte = (cte["STEPSelDesc"] or "").strip()
+
+            # Nombre propio del local (paso OBSERVACION) — puesto por el vendedor.
+            # Ej: 'PARAVATTI "A"', 'GAUCHITO CORTADERAS "A"'. Fallback al nombre de CTE.
+            obs = conn.execute(
+                "SELECT STEPSelDesc FROM mWTATrx WHERE TRANSID=? AND STEPCode='OBSERVACION' LIMIT 1",
+                (transid,),
+            ).fetchone()
+            nombre_obs = (obs["STEPSelDesc"] or "").strip() if obs else ""
+            nombre_cliente = nombre_obs if nombre_obs else nombre_cte
 
             # Localidad (paso DIR → Value3 = "CIUDAD, Provincia")
             dir_row = conn.execute(
@@ -164,15 +193,16 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                 bul = uni // uxb if uxb > 0 else 0
 
                 picks.append({
-                    "cod_bar":  None,           # Sin barcode en Fase 1
-                    "cod_art":  cod_art,
-                    "descrip":  descrip_limpia,
-                    "nombre":   nombre_cliente,
-                    "cliente":  cod_cliente,
-                    "localidad": localidad,
-                    "uni":      uni,
-                    "bul":      bul,
-                    "uxb":      uxb,
+                    "cod_bar":       barcodes_13.get(cod_art),   # EAN-13 (unidad)
+                    "cod_bar_bulto": barcodes_14.get(cod_art),   # EAN-14 (bulto cerrado)
+                    "cod_art":       cod_art,
+                    "descrip":       descrip_limpia,
+                    "nombre":        nombre_cliente,
+                    "cliente":       cod_cliente,
+                    "localidad":     localidad,
+                    "uni":           uni,
+                    "bul":           bul,
+                    "uxb":           uxb,
                 })
 
         conn.close()
@@ -254,12 +284,13 @@ async def importar_semana_diarco(
             cur.execute(
                 """
                 INSERT INTO pick
-                    (cod_bar, cod_art, descrip, nombre, cliente, localidad,
+                    (cod_bar, cod_bar_bulto, cod_art, descrip, nombre, cliente, localidad,
                      uni, bul, uxb, cantidad_pickeada, estado, semana, importe_total, mayorista)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, 'diarco')
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, 'diarco')
                 """,
                 (
                     p["cod_bar"],
+                    p["cod_bar_bulto"],
                     p["cod_art"],
                     p["descrip"],
                     p["nombre"],

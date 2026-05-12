@@ -213,14 +213,36 @@ document.getElementById('search-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const val = document.getElementById('barcode-input').value.trim();
   if (!val) return;
-  // DIARCO no tiene barcodes: buscar por código de artículo DIARCO
+  // Para DIARCO: primero intenta por barcode (EAN-13/EAN-14), luego por cod_art DIARCO
   if (getMayorista() === 'diarco') {
-    await searchByCodArt(val);
+    await searchDiarco(val);
   } else {
     await searchBarcode(val);
   }
 });
 
+
+async function searchDiarco(val) {
+  // Intenta por barcode EAN (unidad o bulto), si falla busca por código DIARCO
+  const results = document.getElementById('results');
+  results.innerHTML = '<p class="loading">Buscando...</p>';
+  try {
+    const picks = await api.getByBarcode(val, semanaActual);
+    addToHistorial(val, picks[0]?.descrip || val);
+    renderPicks(picks, results);
+    loadStats();
+  } catch {
+    // Fallback: buscar por código de artículo DIARCO
+    try {
+      const picks = await api.getByCodArt(val, semanaActual);
+      addToHistorial(val, picks[0]?.descrip || val);
+      renderPicks(picks, results);
+      loadStats();
+    } catch {
+      results.innerHTML = `<p class="error-msg">Producto no encontrado</p>`;
+    }
+  }
+}
 
 async function searchByCodArt(codArt) {
   const results = document.getElementById('results');
@@ -292,7 +314,7 @@ function renderHistorial() {
     chip.addEventListener('click', () => {
       const cod = chip.dataset.cod;
       document.getElementById('barcode-input').value = cod;
-      if (getMayorista() === 'diarco') searchByCodArt(cod);
+      if (getMayorista() === 'diarco') searchDiarco(cod);
       else searchBarcode(cod);
     });
   });
@@ -668,7 +690,7 @@ function onScanResult(result) {
   if (navigator.vibrate) navigator.vibrate(80);
   stopScanner();
   if (getMayorista() === 'diarco') {
-    searchByCodArt(code);
+    searchDiarco(code);
   } else {
     searchBarcode(code);
   }
