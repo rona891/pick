@@ -193,21 +193,29 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                     continue
                 uxb, qty_en_bultos, descrip_limpia = _parse_pack(item["STEPSelDesc"])
                 if not _es_item_real(cod_art, descrip_limpia):
-                    # Ítem excluido: calcular su precio con IVA desde mWTARep para restar del total
-                    # mWTARep.Value1 = precio sin IVA del ítem para este cliente (Key2=cod_cliente)
-                    # mWTARep.Value9 = categoría IVA: '1' → 21%, '2' → 10.5%
-                    rep = conn.execute(
-                        "SELECT Value1, Value9 FROM mWTARep WHERE STEPUID=? AND Key2=? LIMIT 1",
-                        (cod_art, cod_cliente),
-                    ).fetchone()
-                    if rep and rep["Value1"]:
+                    # Ítem excluido del pick (heladera exhibidora, semáforo, etc.)
+                    # Por cada unidad pedida se resta su precio con IVA del total del cliente.
+                    # Solo aplica a ítems con cod_art numérico (los de sistema como Semaforo = 0 precio).
+                    if cod_art.isdigit():
                         try:
-                            precio_sin_iva = float(rep["Value1"])
-                            iva_cat = str(rep["Value9"] or "1").strip()
-                            iva_factor = 1.105 if iva_cat == "2" else 1.21
-                            importe_excluidos_con_iva += precio_sin_iva * iva_factor
+                            qty_excluido = int(float(item["Value2"] or 0))
                         except (ValueError, TypeError):
-                            pass
+                            qty_excluido = 0
+                        if qty_excluido > 0:
+                            # Precio con IVA por unidad: buscar en mWTARep del cliente.
+                            # mWTARep.Value1 = precio sin IVA, Value9 = cat. IVA ('2'→10.5%, '1'→21%)
+                            rep = conn.execute(
+                                "SELECT Value1, Value9 FROM mWTARep "
+                                "WHERE TRIM(STEPUID)=? AND TRIM(Key2)=? LIMIT 1",
+                                (cod_art, cod_cliente.strip()),
+                            ).fetchone()
+                            if rep and rep["Value1"]:
+                                try:
+                                    precio_sin_iva = float(rep["Value1"])
+                                    iva_factor = 1.105 if str(rep["Value9"] or "").strip() == "2" else 1.21
+                                    importe_excluidos_con_iva += precio_sin_iva * iva_factor * qty_excluido
+                                except (ValueError, TypeError):
+                                    pass
                     continue
                 try:
                     qty = int(float(item["Value2"] or 0))
