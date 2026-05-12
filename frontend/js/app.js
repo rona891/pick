@@ -15,6 +15,7 @@ let currentCameraIndex = 0;
 
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  aplicarModo();
   if (getToken()) {
     if (mayoristaCaducado()) {
       showMayoristaSelector();
@@ -66,6 +67,23 @@ function showApp() {
   renderHistorial();
   setTimeout(() => document.getElementById('barcode-input').focus(), 200);
 }
+
+// ── Modo claro / oscuro ────────────────────────────────────────────────────
+function esLightMode() {
+  return localStorage.getItem('lightMode') === '1';
+}
+
+function aplicarModo() {
+  const light = esLightMode();
+  document.body.classList.toggle('light-mode', light);
+  const btn = document.getElementById('btn-theme');
+  if (btn) btn.textContent = light ? '🌙' : '☀';
+}
+
+document.getElementById('btn-theme').addEventListener('click', () => {
+  localStorage.setItem('lightMode', esLightMode() ? '0' : '1');
+  aplicarModo();
+});
 
 // ── Selector de mayorista ──────────────────────────────────────────────────
 function aplicarTema(mayorista) {

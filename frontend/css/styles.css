@@ -51,6 +51,36 @@ body.theme-diarco {
   --parcial-bg: #1a0800;
 }
 
+/* ── Modo claro ────────────────────────────────────────────────────────────── */
+body.light-mode {
+  --bg: #f0f0f0;
+  --surface: #ffffff;
+  --border: #d0d0d0;
+  --text: #111111;
+  --muted: #777777;
+  --completed-border: #2d7a4f;
+  --completed-bg: #e6f5ee;
+  --parcial-bg: #fff8e6;
+}
+
+/* Yaguar claro: el amarillo #F2E205 es ilegible en fondo blanco → usar olive #8C862E */
+body.theme-yaguar.light-mode {
+  --surface: #fffde8;
+  --border: #d4c400;
+  --muted: #8C862E;
+  --accent: #8C862E;
+  --orange: #b89000;
+  --parcial-bg: #fffbcc;
+}
+
+/* Diarco claro: el rojo se mantiene legible en fondo claro */
+body.theme-diarco.light-mode {
+  --surface: #fff8f5;
+  --border: #e0c0a8;
+  --muted: #7a5515;
+  --parcial-bg: #fff3e8;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -270,6 +300,7 @@ input:focus, select:focus { border-color: var(--accent); }
 .topbar-logo:active { opacity: .6; }
 
 .topbar-actions { display: flex; gap: 8px; }
+.btn-theme { font-size: 16px; }
 
 .topbar-usuario {
   flex: 1;
@@ -752,7 +783,7 @@ input:focus, select:focus { border-color: var(--accent); }
 
 .badge-completo { background: var(--completed-border); color: var(--green); }
 .badge-incompleto { background: #2a1e0d; color: var(--orange); }
-.badge-pendiente { background: #1a1a1a; color: var(--muted); }
+.badge-pendiente { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
 
 /* ── Admin tab ────────────────────────────────────────────────────────────── */
 .admin-lock-form {
