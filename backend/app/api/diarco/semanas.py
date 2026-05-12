@@ -45,15 +45,21 @@ MAYORISTA = "diarco"
 
 def _parse_pack(descrip: str):
     """
-    Extrae info de pack del formato '(fp: X / YB)' en la descripción DIARCO.
-    Retorna (uxb, bul_from_qty_fn, descrip_limpia).
-    uxb = unidades por bulto = X / Y
+    Extrae uxb (unidades por bulto) del formato '(fp: X / YB)' en la descripción DIARCO.
+
+    Reglas:
+      - X == Y → factor=1 (no hay caja madre): uxb = X
+                  Ej: fp: 24/24B → uxb=24, cada bulto trae 24 unidades
+      - X >  Y → factor>1: uxb = X ÷ Y
+                  Ej: fp: 72/6B  → uxb=12, 6 bultos forman una caja madre de 72 unidades
+
+    Value2 de DIARCO siempre está en unidades, no en bultos.
     """
     match = re.search(r'\(fp:\s*(\d+)\s*/\s*(\d+)B\)', descrip or "")
     if match:
-        total = int(match.group(1))
-        boxes = int(match.group(2))
-        uxb = total // boxes if boxes > 0 else total
+        x = int(match.group(1))
+        y = int(match.group(2))
+        uxb = x if x == y else (x // y if y > 0 else x)
         clean = descrip[:match.start()].strip()
         return uxb, clean
     return 0, (descrip or "").strip()
