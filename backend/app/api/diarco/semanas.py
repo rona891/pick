@@ -45,24 +45,27 @@ MAYORISTA = "diarco"
 
 def _parse_pack(descrip: str):
     """
-    Extrae uxb (unidades por bulto) del formato '(fp: X / YB)' en la descripción DIARCO.
+    Extrae uxb y el flag 'valor en bultos' del formato '(fp: X / YB)' en la descripción DIARCO.
 
-    Reglas:
-      - X == Y → factor=1 (no hay caja madre): uxb = X
-                  Ej: fp: 24/24B → uxb=24, cada bulto trae 24 unidades
-      - X >  Y → factor>1: uxb = X ÷ Y
-                  Ej: fp: 72/6B  → uxb=12, 6 bultos forman una caja madre de 72 unidades
+    Reglas del campo Value2 en mWTATrx GWS.ELEM:
+      - X == Y → factor=1 (no hay caja madre): Value2 está en UNIDADES, uxb = X
+                  Ej: fp: 24/24B → uxb=24, Value2=24 → uni=24 (1 bulto)
+      - X >  Y → factor>1: Value2 está en BULTOS, uxb = X ÷ Y
+                  Ej: fp: 72/6B  → uxb=12, Value2=3 → uni=3×12=36 (3 bultos)
 
-    Value2 de DIARCO siempre está en unidades, no en bultos.
+    Retorna: (uxb, qty_en_bultos, descrip_limpia)
+      qty_en_bultos=True  → multiplicar Value2 × uxb para obtener uni
+      qty_en_bultos=False → Value2 ya es uni
     """
     match = re.search(r'\(fp:\s*(\d+)\s*/\s*(\d+)B\)', descrip or "")
     if match:
         x = int(match.group(1))
         y = int(match.group(2))
-        uxb = x if x == y else (x // y if y > 0 else x)
+        factor_mayor_a_uno = x > y
+        uxb = x if not factor_mayor_a_uno else (x // y if y > 0 else x)
         clean = descrip[:match.start()].strip()
-        return uxb, clean
-    return 0, (descrip or "").strip()
+        return uxb, factor_mayor_a_uno, clean
+    return 0, False, (descrip or "").strip()
 
 
 def _extract_city(location_str: str):
@@ -145,15 +148,17 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                 cod_art = (item["STEPUID"] or "").strip()
                 if not cod_art:
                     continue
-                uxb, descrip_limpia = _parse_pack(item["STEPSelDesc"])
+                uxb, qty_en_bultos, descrip_limpia = _parse_pack(item["STEPSelDesc"])
                 if not _es_item_real(cod_art, descrip_limpia):
                     continue
                 try:
-                    uni = int(float(item["Value2"] or 0))
+                    qty = int(float(item["Value2"] or 0))
                 except (ValueError, TypeError):
-                    uni = 0
-                if uni <= 0:
+                    qty = 0
+                if qty <= 0:
                     continue
+                # Si factor>1: Value2 está en bultos → multiplicar por uxb para obtener unidades
+                uni = qty * uxb if qty_en_bultos and uxb > 0 else qty
                 bul = uni // uxb if uxb > 0 else 0
 
                 picks.append({
