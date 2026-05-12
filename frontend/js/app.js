@@ -190,6 +190,19 @@ document.getElementById('search-form').addEventListener('submit', async (e) => {
 });
 
 
+async function searchByCodArt(codArt) {
+  const results = document.getElementById('results');
+  results.innerHTML = '<p class="loading">Buscando...</p>';
+  try {
+    const picks = await api.getByCodArt(codArt, semanaActual);
+    addToHistorial(codArt, picks[0]?.descrip || codArt);
+    renderPicks(picks, results);
+    loadStats();
+  } catch (err) {
+    results.innerHTML = `<p class="error-msg">Producto no encontrado</p>`;
+  }
+}
+
 async function searchBarcode(codBar) {
   const results = document.getElementById('results');
   results.innerHTML = '<p class="loading">Buscando...</p>';
@@ -562,19 +575,25 @@ async function buscarPorDescrip(q) {
       container.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
     } else {
       container.innerHTML = items.map((item) => `
-        <div class="descrip-item" data-codbar="${item.cod_bar}">
+        <div class="descrip-item" data-codbar="${item.cod_bar ?? ''}" data-codart="${item.cod_art ?? ''}">
           <span class="descrip-item-name">${item.descrip ?? ''}</span>
           <span class="descrip-item-code">${item.cod_art ?? ''}</span>
         </div>
       `).join('');
       container.querySelectorAll('.descrip-item').forEach((el) => {
-        el.addEventListener('click', () => {
+        el.addEventListener('click', async () => {
           const codBar = el.dataset.codbar;
+          const codArt = el.dataset.codart;
           const descrip = el.querySelector('.descrip-item-name').textContent;
           document.getElementById('descrip-input').value = descrip;
-          document.getElementById('barcode-input').value = codBar;
           hideDescripResults();
-          searchBarcode(codBar);
+          if (codBar) {
+            document.getElementById('barcode-input').value = codBar;
+            searchBarcode(codBar);
+          } else {
+            document.getElementById('barcode-input').value = codArt;
+            await searchByCodArt(codArt);
+          }
         });
       });
     }

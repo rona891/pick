@@ -114,6 +114,33 @@ def _buscar(mayorista: str, q: str, semana: Optional[str]):
         return [dict(r) for r in cur.fetchall()]
 
 
+def _by_art(mayorista: str, cod_art: str, semana: Optional[str]):
+    """Búsqueda por código de artículo — usado por DIARCO (sin barcodes)."""
+    with get_db() as cur:
+        if semana:
+            cur.execute("""
+                SELECT p.*, COALESCE(r.orden, 99) AS _reparto_orden
+                FROM pick p
+                LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+                LEFT JOIN repartos r ON z.reparto = r.nombre
+                WHERE p.cod_art = %s AND p.semana = %s AND p.mayorista = %s
+                ORDER BY _reparto_orden ASC, p.localidad ASC, p.nombre ASC
+            """, (cod_art, semana, mayorista))
+        else:
+            cur.execute("""
+                SELECT p.*, COALESCE(r.orden, 99) AS _reparto_orden
+                FROM pick p
+                LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+                LEFT JOIN repartos r ON z.reparto = r.nombre
+                WHERE p.cod_art = %s AND p.mayorista = %s
+                ORDER BY _reparto_orden ASC, p.localidad ASC, p.nombre ASC
+            """, (cod_art, mayorista))
+        rows = cur.fetchall()
+    if not rows:
+        raise HTTPException(status_code=404, detail="No se encontraron picks para este artículo")
+    return [{k: v for k, v in dict(r).items() if k != "_reparto_orden"} for r in rows]
+
+
 def _by_barcode(mayorista: str, cod_bar: str, semana: Optional[str]):
     with get_db() as cur:
         if semana:
@@ -178,6 +205,10 @@ def yaguar_buscar(q: str = Query(..., min_length=2), semana: Optional[str] = Que
 def yaguar_by_barcode(cod_bar: str, semana: Optional[str] = Query(None)):
     return _by_barcode("yaguar", cod_bar, semana)
 
+@router_yaguar.get("/art/{cod_art}", response_model=List[Pick])
+def yaguar_by_art(cod_art: str, semana: Optional[str] = Query(None)):
+    return _by_art("yaguar", cod_art, semana)
+
 @router_yaguar.put("/{id}/quantity")
 def yaguar_update_quantity(id: int, update: QuantityUpdate):
     return _update_quantity(id, update)
@@ -204,6 +235,10 @@ def diarco_buscar(q: str = Query(..., min_length=2), semana: Optional[str] = Que
 @router_diarco.get("/barcode/{cod_bar}", response_model=List[Pick])
 def diarco_by_barcode(cod_bar: str, semana: Optional[str] = Query(None)):
     return _by_barcode("diarco", cod_bar, semana)
+
+@router_diarco.get("/art/{cod_art}", response_model=List[Pick])
+def diarco_by_art(cod_art: str, semana: Optional[str] = Query(None)):
+    return _by_art("diarco", cod_art, semana)
 
 @router_diarco.put("/{id}/quantity")
 def diarco_update_quantity(id: int, update: QuantityUpdate):
