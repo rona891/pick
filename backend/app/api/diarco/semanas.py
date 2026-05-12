@@ -151,15 +151,34 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
             ).fetchone()
             localidad = _extract_city(dir_row["Value3"] if dir_row else None)
 
-            # Código de cliente (paso GWS)
+            # Código de cliente (paso GWS) + total sin IVA de la orden completa
             gws = conn.execute(
-                "SELECT STEPDesc FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS' LIMIT 1",
+                "SELECT STEPDesc, Formula FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS' LIMIT 1",
                 (transid,),
             ).fetchone()
             cod_cliente = ""
+            total_orden_sin_iva = 0.0
             if gws:
                 desc_parts = (gws["STEPDesc"] or "").replace("Pedido para:", "").strip().split(" ", 1)
                 cod_cliente = desc_parts[0] if desc_parts else ""
+                try:
+                    total_orden_sin_iva = float(gws["Formula"] or 0)
+                except (ValueError, TypeError):
+                    pass
+
+            # IVA total de la orden (paso V:IVAFINAL)
+            iva_row = conn.execute(
+                "SELECT Formula FROM mWTATrx WHERE TRANSID=? AND STEPCode='V:IVAFINAL' LIMIT 1",
+                (transid,),
+            ).fetchone()
+            iva_total = 0.0
+            if iva_row:
+                try:
+                    iva_total = float(iva_row["Formula"] or 0)
+                except (ValueError, TypeError):
+                    pass
+
+            importe_trans_sin_iva = 0.0  # acumula solo los ítems reales de esta transacción
 
             # Artículos del pedido (pasos GWS.ELEM)
             # Formula × V2 × V4 = total sin IVA del ítem (verificado contra V:TOTAL)
@@ -188,16 +207,15 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                 uni = qty * uxb if qty_en_bultos and uxb > 0 else qty
                 bul = uni // uxb if uxb > 0 else 0
 
-                # Total del ítem sin IVA = Formula × V2 × V4 (verificado: suma = V:TOTAL)
-                # Solo se acumula para ítems reales → excluye heladera y semáforo automáticamente
+                # Total del ítem sin IVA = Formula × V2 × V4
                 try:
                     v2 = float(item["Value2"] or 0)
                     v4 = float(item["Value4"] or 0)
                     formula = float(item["Formula"] or 0)
-                    importe_item = formula * v2 * v4
+                    importe_item_sin_iva = formula * v2 * v4
                 except (ValueError, TypeError):
-                    importe_item = 0.0
-                totales[nombre_cliente] = totales.get(nombre_cliente, 0.0) + importe_item
+                    importe_item_sin_iva = 0.0
+                importe_trans_sin_iva += importe_item_sin_iva
 
                 picks.append({
                     "cod_bar":       barcodes_13.get(cod_art),   # EAN-13 (unidad)
@@ -211,6 +229,16 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                     "bul":           bul,
                     "uxb":           uxb,
                 })
+
+            # Aplicar IVA proporcional: iva_real = iva_total × (real_sin_iva / orden_sin_iva)
+            # Esto distribuye el IVA correctamente cuando se excluyen ítems (heladera, etc.)
+            if total_orden_sin_iva > 0 and iva_total > 0:
+                proporcion = min(importe_trans_sin_iva / total_orden_sin_iva, 1.0)
+                importe_trans_con_iva = importe_trans_sin_iva + iva_total * proporcion
+            else:
+                importe_trans_con_iva = importe_trans_sin_iva
+
+            totales[nombre_cliente] = totales.get(nombre_cliente, 0.0) + importe_trans_con_iva
 
         conn.close()
     finally:
