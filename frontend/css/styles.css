@@ -1393,12 +1393,21 @@ input[type="date"]:focus { border-color: var(--accent); }
 .btn-step-plus:active  { color: var(--green); border-color: var(--green); }
 
 .step-value {
-  min-width: 36px;
+  width: 56px;
   text-align: center;
   font-size: 18px;
   font-weight: 600;
   color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 4px;
+  font-family: var(--font);
+  -moz-appearance: textfield;
 }
+.step-value::-webkit-inner-spin-button,
+.step-value::-webkit-outer-spin-button { -webkit-appearance: none; }
+.step-value:focus { border-color: var(--accent); outline: none; }
 
 .btn-save {
   flex: 1;

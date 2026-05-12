@@ -392,27 +392,43 @@ function renderControls(card, cantidad, isCompleted) {
       <button class="btn-entregado">${entLabel}</button>
       <div class="pick-stepper">
         <button class="btn-step-minus">−</button>
-        <span class="step-value">${current}</span>
+        <input class="step-value" type="number" min="0" max="${uni}" value="${current}" inputmode="numeric" />
         <button class="btn-step-plus">+</button>
         <button class="btn-save">Guardar</button>
       </div>
     `;
 
-    const valueEl = ctrl.querySelector('.step-value');
+    const inputEl = ctrl.querySelector('.step-value');
+
+    const syncFromInput = () => {
+      let v = parseInt(inputEl.value);
+      if (isNaN(v) || v < 0) v = 0;
+      if (v > uni) v = uni;
+      current = v;
+      inputEl.value = current;
+    };
 
     ctrl.querySelector('.btn-entregado').addEventListener('click', () => saveQuantity(id, uni, card));
 
     ctrl.querySelector('.btn-step-minus').addEventListener('click', () => {
+      syncFromInput();
       current = Math.max(0, current - 1);
-      valueEl.textContent = current;
+      inputEl.value = current;
     });
 
     ctrl.querySelector('.btn-step-plus').addEventListener('click', () => {
+      syncFromInput();
       current = Math.min(uni, current + 1);
-      valueEl.textContent = current;
+      inputEl.value = current;
     });
 
-    ctrl.querySelector('.btn-save').addEventListener('click', () => saveQuantity(id, current, card));
+    inputEl.addEventListener('change', syncFromInput);
+    inputEl.addEventListener('blur', syncFromInput);
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { syncFromInput(); saveQuantity(id, current, card); }
+    });
+
+    ctrl.querySelector('.btn-save').addEventListener('click', () => { syncFromInput(); saveQuantity(id, current, card); });
   }
 }
 
