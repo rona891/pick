@@ -212,7 +212,13 @@ function switchTab(tab) {
 document.getElementById('search-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const val = document.getElementById('barcode-input').value.trim();
-  if (val) await searchBarcode(val);
+  if (!val) return;
+  // DIARCO no tiene barcodes: buscar por código de artículo DIARCO
+  if (getMayorista() === 'diarco') {
+    await searchByCodArt(val);
+  } else {
+    await searchBarcode(val);
+  }
 });
 
 
@@ -659,7 +665,11 @@ function onScanResult(result) {
   document.getElementById('barcode-input').value = code;
   if (navigator.vibrate) navigator.vibrate(80);
   stopScanner();
-  searchBarcode(code);
+  if (getMayorista() === 'diarco') {
+    searchByCodArt(code);
+  } else {
+    searchBarcode(code);
+  }
 }
 
 async function startScanner(deviceId = null) {
