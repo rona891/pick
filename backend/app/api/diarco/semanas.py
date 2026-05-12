@@ -96,8 +96,10 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
         conn.row_factory = sqlite3.Row
 
         # Obtener todos los pedidos dentro del rango de fechas
+        # STATUS='1' = pedido tomado, STATUS='S' = sincronizado (enviado al servidor)
+        # Ambos representan pedidos válidos y completos
         trans_rows = conn.execute(
-            "SELECT TRANSID FROM mWTAMTrx WHERE SUBSTR(DATE,1,8) BETWEEN ? AND ? AND STATUS='1'",
+            "SELECT TRANSID FROM mWTAMTrx WHERE SUBSTR(DATE,1,8) BETWEEN ? AND ? AND STATUS != ''",
             (fecha_desde, fecha_hasta),
         ).fetchall()
 
