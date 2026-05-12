@@ -290,8 +290,10 @@ function renderHistorial() {
   chips.innerHTML = hist.map(e => `<span class="hist-chip" data-cod="${e.cod}">${e.descrip}</span>`).join('');
   chips.querySelectorAll('.hist-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
-      document.getElementById('barcode-input').value = chip.dataset.cod;
-      searchBarcode(chip.dataset.cod);
+      const cod = chip.dataset.cod;
+      document.getElementById('barcode-input').value = cod;
+      if (getMayorista() === 'diarco') searchByCodArt(cod);
+      else searchBarcode(cod);
     });
   });
 }
