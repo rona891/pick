@@ -162,9 +162,12 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                 cod_cliente = desc_parts[0] if desc_parts else ""
 
             # Artículos del pedido (pasos GWS.ELEM)
-            # Formula = precio unitario del ítem (del SQL original del pick)
+            # Formula × V2 × V4 = total sin IVA del ítem (verificado contra V:TOTAL)
+            #   Formula = precio unitario sin IVA
+            #   V2      = cantidad (bultos o unidades según factor)
+            #   V4      = factor de conversión (uxb desde DIARCO)
             items = conn.execute(
-                "SELECT STEPUID, STEPSelDesc, Value2, Formula FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS.ELEM'",
+                "SELECT STEPUID, STEPSelDesc, Value2, Value4, Formula FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS.ELEM'",
                 (transid,),
             ).fetchall()
 
@@ -185,12 +188,16 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                 uni = qty * uxb if qty_en_bultos and uxb > 0 else qty
                 bul = uni // uxb if uxb > 0 else 0
 
-                # Total acumulado solo de ítems reales (excluye heladeras, semáforos, etc.)
+                # Total del ítem sin IVA = Formula × V2 × V4 (verificado: suma = V:TOTAL)
+                # Solo se acumula para ítems reales → excluye heladera y semáforo automáticamente
                 try:
-                    precio_unitario = float(item["Formula"] or 0)
+                    v2 = float(item["Value2"] or 0)
+                    v4 = float(item["Value4"] or 0)
+                    formula = float(item["Formula"] or 0)
+                    importe_item = formula * v2 * v4
                 except (ValueError, TypeError):
-                    precio_unitario = 0.0
-                totales[nombre_cliente] = totales.get(nombre_cliente, 0.0) + precio_unitario * uni
+                    importe_item = 0.0
+                totales[nombre_cliente] = totales.get(nombre_cliente, 0.0) + importe_item
 
                 picks.append({
                     "cod_bar":       barcodes_13.get(cod_art),   # EAN-13 (unidad)
