@@ -223,8 +223,8 @@ input:focus, select:focus { border-color: var(--accent); }
 }
 
 .topbar-logo {
-  height: 32px;
-  max-width: 110px;
+  height: 44px;
+  max-width: 130px;
   object-fit: contain;
   cursor: pointer;
   flex-shrink: 0;
