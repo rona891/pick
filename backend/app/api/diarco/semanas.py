@@ -25,6 +25,7 @@ import sqlite3
 import tempfile
 import os
 import re
+import unicodedata
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 
 # Items que DIARCO usa internamente y no forman parte del picking real.
@@ -50,6 +51,52 @@ from app.db.database import get_db
 router = APIRouter(prefix="/diarco/semanas", tags=["Diarco - Semanas"])
 
 MAYORISTA = "diarco"
+
+
+def _norm(texto: str) -> str:
+    """Normaliza texto para comparación: mayúsculas, sin acentos, sin puntuación."""
+    texto = texto.strip().upper()
+    texto = ''.join(
+        c for c in unicodedata.normalize('NFD', texto)
+        if unicodedata.category(c) != 'Mn'
+    )
+    return re.sub(r'\s+', ' ', re.sub(r'[^A-Z0-9 ]', ' ', texto)).strip()
+
+
+def _extraer_zona_obs(obs: str, zonas_norm: dict) -> tuple:
+    """
+    Intenta extraer la zona del campo OBSERVACION si el vendedor la anotó
+    con un separador al final (ej: 'GAUCHITO.MERLO', 'MOCHO-merlo', 'FAMA_CARP').
+
+    Separadores aceptados: . - _ / (se usa el último que aparezca).
+    La zona se normaliza y se busca entre las zonas existentes:
+      1. Match exacto (normalizado)
+      2. Match parcial: la zona conocida empieza con el candidato o viceversa
+
+    Retorna: (nombre_cliente, zona_nombre | None)
+      zona_nombre = None si no hay separador o no se puede determinar la zona.
+    """
+    match = re.search(r'[.\-_/]([^.\-_/]{1,20})$', obs)
+    if not match:
+        return obs.strip(), None
+
+    candidato = _norm(match.group(1))
+    nombre = obs[:match.start()].strip()
+
+    if not candidato or len(candidato) < 2:
+        return obs.strip(), None
+
+    # 1. Match exacto
+    if candidato in zonas_norm:
+        return nombre, zonas_norm[candidato]
+
+    # 2. Match parcial: alguna zona conocida empieza con el candidato o viceversa
+    for zona_norm, zona_orig in zonas_norm.items():
+        if zona_norm.startswith(candidato) or candidato.startswith(zona_norm):
+            return nombre, zona_orig
+
+    # No encontrada → devolver el candidato como zona nueva (se creará al importar)
+    return nombre, candidato
 
 
 def _parse_pack(descrip: str):
@@ -84,7 +131,7 @@ def _extract_city(location_str: str):
     return location_str.split(",")[0].strip().upper() or None
 
 
-def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
+def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_norm: dict = None):
     """
     Lee un MobileAssistantBU.db de DIARCO y extrae todos los picks
     dentro del rango de fechas dado (formato YYYYMMDD).
@@ -146,14 +193,23 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
                 (transid,),
             ).fetchone()
             nombre_obs = (obs["STEPSelDesc"] or "").strip() if obs else ""
-            nombre_cliente = nombre_obs if nombre_obs else nombre_cte
 
-            # Localidad (paso DIR → Value3 = "CIUDAD, Provincia")
-            dir_row = conn.execute(
-                "SELECT Value3 FROM mWTATrx WHERE TRANSID=? AND STEPCode='DIR' LIMIT 1",
-                (transid,),
-            ).fetchone()
-            localidad = _extract_city(dir_row["Value3"] if dir_row else None)
+            # Localidad: intentar extraer del sufijo en OBSERVACION (ej: "GAUCHITO.MERLO")
+            # Si no hay sufijo o no matchea, usar el paso DIR como fallback
+            zona_desde_obs = None
+            if nombre_obs and zonas_norm is not None:
+                nombre_cliente, zona_desde_obs = _extraer_zona_obs(nombre_obs, zonas_norm)
+            else:
+                nombre_cliente = nombre_obs if nombre_obs else nombre_cte
+
+            if zona_desde_obs:
+                localidad = zona_desde_obs
+            else:
+                dir_row = conn.execute(
+                    "SELECT Value3 FROM mWTATrx WHERE TRANSID=? AND STEPCode='DIR' LIMIT 1",
+                    (transid,),
+                ).fetchone()
+                localidad = _extract_city(dir_row["Value3"] if dir_row else None)
 
             # Código de cliente (paso GWS) + total sin IVA de la orden completa
             gws = conn.execute(
@@ -267,12 +323,18 @@ async def importar_semana_diarco(
     if len(fecha_hasta) != 8 or not fecha_hasta.isdigit():
         raise HTTPException(400, "fecha_hasta debe estar en formato AAAAMMDD (ej: 20260508)")
 
+    # Cargar zonas existentes para el matching del sufijo en OBSERVACION
+    with get_db() as cur:
+        cur.execute("SELECT nombre FROM zonas")
+        zonas_existentes = [r["nombre"] for r in cur.fetchall()]
+    zonas_norm = {_norm(z): z for z in zonas_existentes}
+
     all_picks: list = []
     totales_por_cliente: dict = {}
 
     for archivo in archivos:
         content = await archivo.read()
-        picks, totales = _query_diarco_db(content, fecha_desde, fecha_hasta)
+        picks, totales = _query_diarco_db(content, fecha_desde, fecha_hasta, zonas_norm)
         all_picks.extend(picks)
         for cliente, monto in totales.items():
             totales_por_cliente[cliente] = totales_por_cliente.get(cliente, 0.0) + monto
@@ -281,9 +343,7 @@ async def importar_semana_diarco(
         raise HTTPException(400, "No se encontraron pedidos en ese rango de fechas. Verificá las fechas.")
 
     with get_db() as cur:
-        # Lookup de todas las zonas (compartidas entre mayoristas)
-        cur.execute("SELECT nombre FROM zonas")
-        zonas_diarco = {r["nombre"] for r in cur.fetchall()}
+        zonas_diarco = set(zonas_existentes)
 
         # Crear o reemplazar la semana
         cur.execute(
