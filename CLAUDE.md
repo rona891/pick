@@ -6,15 +6,9 @@ Leer este archivo al inicio de cada sesión. Contiene todo el contexto necesario
 
 ## Descripción del proyecto
 
-**Picking App** es una aplicación web para operarios de depósito que realizan el proceso de *picking*: separación de mercadería por cliente para su despacho.
+**Picking App** es una aplicación web para operarios de depósito que realizan picking de mercadería para dos mayoristas: **Yaguar** y **DIARCO**. Los operarios la usan desde el celular durante su turno.
 
-- Los operarios la usan desde el **celular** durante su turno de trabajo.
-- Escanean o ingresan el código de barras de un artículo y ven los items a pickear para ese código.
-- Registran la cantidad pickeada y la app calcula si el item está completo o pendiente.
-- También tienen una vista de resumen por operario para ver el avance general de la jornada.
-- El panel de Admin (protegido por contraseña secundaria) permite gestionar el directorio de clientes.
-
-**Premisa de diseño**: la UI debe ser simple, rápida y funcionar bien en pantallas chicas. Siempre tener esto presente al tomar decisiones técnicas.
+Al abrir la app, el usuario elige con qué mayorista trabaja. Cada mayorista tiene sus propios picks, clientes y semanas — completamente separados. Zonas, repartos y usuarios son compartidos.
 
 ---
 
@@ -25,125 +19,258 @@ frontend/ (HTML/CSS/JS + nginx)  ──►  backend/ (FastAPI Python)  ──►
         puerto 3000                         puerto 8000                  puerto 5432
 ```
 
-Todo corre en Docker. Hay tres entornos: dev, qa, prod.
+Todo corre en Docker. Hay tres entornos: dev, qa, prod. Se usa **ngrok** para exponer el puerto 3000 al exterior (nginx usa HTTPS con cert autofirmado, ngrok debe tunelizar a `https://localhost:3000`).
 
-### Estructura de archivos
+### Estructura de archivos clave
 
 ```
 pick/
 ├── frontend/
-│   ├── index.html              # SPA — toda la UI en un solo archivo HTML
-│   ├── css/styles.css          # Todos los estilos
+│   ├── index.html              # SPA completa
+│   ├── css/styles.css          # Estilos + temas Yaguar/Diarco + modo claro/oscuro
 │   ├── js/
-│   │   ├── api.js              # Cliente HTTP (wrapper de fetch con JWT)
-│   │   └── app.js              # Toda la lógica de UI y estado
-│   ├── nginx.conf              # Sirve el frontend en puerto 3000
-│   └── Dockerfile              # nginx:alpine
+│   │   ├── api.js              # Cliente HTTP — todas las rutas usan getMayorista()
+│   │   └── app.js              # Lógica UI, selector de mayorista, temas
+│   ├── yaguar.png              # Logo Yaguar (topbar + selector)
+│   ├── diarco.png              # Logo DIARCO sin fondo
+│   └── nginx.conf              # SSL en puerto 3000, client_max_body_size 100M
 ├── backend/
-│   ├── main.py                 # App FastAPI: CORS, lifespan, include_router
-│   ├── config.py               # Settings vía pydantic-settings (lee .env)
-│   ├── requirements.txt
-│   ├── Dockerfile              # python:3.12-slim + uvicorn
-│   ├── .env.example            # Variables de entorno requeridas
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── auth.py         # POST /api/auth/login, /logout, PUT /password
-│   │   │   ├── picks.py        # GET /api/picks/stats, /resumen, /barcode/{cod}, PUT /{id}/quantity
-│   │   │   ├── clientes.py     # CRUD /api/clientes/ (PostgreSQL)
-│   │   │   ├── semanas.py      # GET /api/semanas/, POST /importar (importa .db de Yaguar)
-│   │   │   ├── admin.py        # POST /api/admin/verify (verifica contraseña de admin)
-│   │   │   └── health.py       # GET /health
-│   │   ├── auth/
-│   │   │   └── jwt.py          # hash_password, verify_password, create_access_token, verify_token
-│   │   ├── db/
-│   │   │   └── database.py     # Pool psycopg2 (ThreadedConnectionPool 1–10), context manager get_db()
-│   │   └── models/
-│   │       └── schemas.py      # Modelos Pydantic: Pick, QuantityUpdate, LoginRequest/Response, etc.
-├── database/
-│   ├── init.sql                # DDL: crea tablas users, pick, semanas, clientes_yaguar
-│   └── seed.sql                # Datos iniciales: clientes, picks de ejemplo, usuario admin
-├── docker-compose.yml          # Entorno dev (db + backend + frontend)
-├── docker-compose.qa.yml       # Overrides para QA (extiende docker-compose.yml)
-├── docker-compose.prod.yml     # Overrides para producción
-└── .gitignore
+│   ├── main.py                 # FastAPI: routers, migraciones al arrancar
+│   ├── app/api/
+│   │   ├── yaguar/
+│   │   │   └── semanas.py      # Import .db de Yaguar → /api/yaguar/semanas/
+│   │   ├── diarco/
+│   │   │   └── semanas.py      # Import MobileAssistantBU.db → /api/diarco/semanas/
+│   │   ├── picks.py            # Dos routers: router_yaguar + router_diarco
+│   │   ├── clientes.py         # Dos routers: router_yaguar + router_diarco
+│   │   ├── export.py           # Dos routers: exportar Excel por mayorista
+│   │   ├── zonas.py            # Compartido: zonas y repartos
+│   │   ├── auth.py             # Usuarios, roles (operario/admin/superadmin)
+│   │   └── admin.py            # Verificación contraseña admin (legacy)
+│   └── requirements.txt        # incluye openpyxl
+└── database/
+    ├── init.sql                # DDL base
+    └── seed.sql                # Usuarios MIA y NAHU (pass: hello), ADMIN (pass: hello2)
 ```
-
-### Stack tecnológico
-
-| Capa | Tecnología | Versión |
-|------|-----------|---------|
-| Frontend | HTML / CSS / JavaScript puro | — |
-| Frontend server | nginx | alpine |
-| Barcode scanner | ZXing `@zxing/library` | 0.21.3 (CDN) |
-| Backend | Python | 3.12 |
-| Backend framework | FastAPI | 0.115.6 |
-| ASGI server | Uvicorn | 0.32.1 |
-| Settings | pydantic-settings | 2.7.0 |
-| DB driver | psycopg2-binary | 2.9.10 |
-| Auth | python-jose (JWT) + bcrypt | 3.3.0 / 4.2.1 |
-| Base de datos | PostgreSQL | 16 (Alpine) |
-| Infraestructura | Docker + Docker Compose | — |
 
 ---
 
-## Lógica de negocio
+## Separación por mayorista
+
+### Rutas API
+```
+/api/yaguar/picks/...           /api/diarco/picks/...
+/api/yaguar/clientes/...        /api/diarco/clientes/...
+/api/yaguar/semanas/...         /api/diarco/semanas/...
+/api/yaguar/export/picks        /api/diarco/export/picks
+/api/yaguar/export/clientes     (exporta códigos libres Yaguar)
+/api/zonas/...                  (compartido)
+/api/auth/...                   (compartido)
+```
 
 ### Tabla `pick`
-Cada fila es un artículo que debe ser pickeado para un cliente.
+Columna `mayorista = 'yaguar' | 'diarco'` — los picks nunca se mezclan.
+`pick.cliente` = código del cliente (id_yaguar para Yaguar, cod DIARCO para DIARCO).
+
+### Frontend
+`getMayorista()` en `api.js` retorna `'yaguar'` o `'diarco'` desde localStorage. Todas las llamadas API usan esta función. El selector aparece al iniciar (o tras 30 min de inactividad). Tocar el logo del topbar cambia de mayorista.
+
+---
+
+## Temas visuales
+
+- `body.theme-yaguar` → amarillo `#F2E205`, negro `#0D0D0D`
+- `body.theme-diarco` → rojo `#F22233`, naranja `#F2A516`
+- `body.light-mode` → fondo claro, superficies blancas
+- Botón ☀/🌙 en el topbar para cambiar modo (se guarda en localStorage)
+
+---
+
+## Sistema de roles
+
+| Rol | Ve Admin | Puede cambiar roles | Se puede eliminar |
+|-----|----------|--------------------|--------------------|
+| `operario` | ✗ | — | ✓ |
+| `admin` | ✓ | ✗ | ✓ |
+| `superadmin` | ✓ | ✓ | ✗ |
+
+- Usuario `ADMIN` (superadmin) se crea automáticamente al arrancar con contraseña = `ADMIN_PASSWORD` del `.env`
+- Solo el superadmin puede cambiar roles de otros usuarios
+
+---
+
+## Importación Yaguar
+
+Archivos `.db` exportados de la app Yaguar (SQLite con `hpedidosCabecera`, `hpedidosDetalle`, `articulos`, `clientes`). Un archivo por vendedor. Endpoint: `POST /api/yaguar/semanas/importar`.
+
+### Matching de clientes
+Al importar, se busca el código de cliente (`SUBSTR(c.CLI_ID, -6)`) en `clientes_yaguar WHERE id_yaguar IS NOT NULL`. Si el cliente no tiene nombre asignado (estado=libre) o no existe, va a `clientes_no_encontrados`. Después del import salta el modal para cargar datos del cliente.
+
+### Estado de códigos Yaguar (`clientes_yaguar.estado`)
+- `'ocupado'` — tiene cliente asignado y apareció en alguna de las últimas 10 semanas
+- `'libre'` — disponible para asignar a un nuevo cliente
+- `'no_apto'` — código de factura A (no Consumidor Final), nunca se usa
+
+**Reglas:**
+- Al crear cliente nuevo: modal de verificación pregunta si el código es Consumidor Final. Si no → se marca `no_apto` y se elige otro automáticamente.
+- Códigos `no_apto` nunca aparecen en la lista de libres ni en la UI de clientes.
+- El status update post-import SOLO modifica códigos que tienen historial en picks (no toca libres manuales ni clientes nuevos sin picks aún).
+- Códigos ya marcados `no_apto`: `609608` (NO SE UTILIZA), `605212` (NO ASIGNAR ES MONOTRIBUBTO).
+
+### Export de códigos libres
+`GET /api/yaguar/export/clientes` → Excel con códigos `estado='libre'`: Código, Cliente, Zona, Vendedor.
+
+---
+
+## Importación DIARCO
+
+Archivo `MobileAssistantBU.db` de la app DIARCO (SQLite con `mWTATrx`, `mWTAMTrx`, `mWTARep`).
+
+### Campos extraídos de `mWTATrx`
+- `CTE` → nombre oficial del cliente en DIARCO (**nunca se usa**, es incorrecto)
+- `OBSERVACION` → nombre real del local puesto por el vendedor (ej: `"GAUCHITO CORTADERAS.MERLO"`)
+- `GWS.STEPDesc` → código de cliente DIARCO (formato: `"Pedido para: {cod} {nombre}"`)
+- `GWS.Value3` → total con IVA del pedido
+- `GWS.Formula` → total sin IVA del pedido
+- `GWS.ELEM` → artículos: `STEPUID`=cod_art, `Value2`=qty, `Value4`=factor, `Formula`=precio sin IVA
+- `DIR` → localidad — **SIEMPRE INCORRECTA, nunca usar**
+
+### Matching de clientes DIARCO
+Al importar, se busca el cod_cliente en `clientes_yaguar WHERE mayorista='diarco' AND id_yaguar=cod`. Si hay match con nombre → se usa el nombre y localidad del admin. Si no hay match → se usa OBSERVACION como nombre temporal y localidad=NULL. Los sin match van a `clientes_sin_datos` y salta el modal post-import.
+
+**Importante:** La localidad del DB de DIARCO (campo DIR) es siempre incorrecta. Solo se usa la localidad ingresada manualmente por el admin en la tabla de clientes. Para clientes sin registrar, localidad=NULL hasta que el admin la asigne.
+
+### Zona desde OBSERVACION
+El vendedor escribe la zona como sufijo: `"NOMBRE.ZONA"`, `"NOMBRE-zona"`, `"NOMBRE_ZONA"`. El importer normaliza y busca match en zonas existentes. Fallback: localidad=NULL (nunca usar DIR).
+
+### Ítems excluidos
+- `STEPUID` no numérico (ej: `'Semaforo'`) → sistema interno, sin precio
+- Descripción contiene `"heladera exhibidora"` → equipamiento, sin pickear
+
+### Cálculo de importe con IVA (excluyendo ítems excluidos)
+```
+excluidos_sin_iva = sum(Formula × Value2 × Value4) para ítems excluidos con cod_art numérico
+ratio_iva = GWS.Value3 / GWS.Formula
+excluidos_con_iva = excluidos_sin_iva × ratio_iva
+importe_neto = GWS.Value3 - excluidos_con_iva
+```
+Garantizado no-negativo: los excluidos son parte del total, nunca pueden superarlo.
+
+### Barcodes
+- `mWTARep WHERE Key1='CDB'`: `STEPUID`=barcode, `Value1`=cod_art DIARCO
+- EAN-13 (13 dígitos) → `pick.cod_bar`
+- EAN-14 (14 dígitos) → `pick.cod_bar_bulto`
+
+### Lógica de bultos DIARCO
+- `fp: X/YB` en descripción: si X==Y → factor=1 (qty en unidades); si X>Y → factor=X/Y (qty en bultos)
+- `uni = qty * uxb` cuando factor>1, `uni = qty` cuando factor=1
+
+---
+
+## Tabla `clientes_yaguar` — campos principales
 
 | Campo | Descripción |
 |-------|-------------|
-| `cod_bar` | Código de barras del artículo (llave de búsqueda) |
-| `cod_art` | Código interno del artículo |
-| `descrip` | Descripción del artículo |
-| `nombre` | Nombre del cliente (display name, ej: "SUPER EL MORENO 619464") |
-| `cliente` | ID del cliente en Yaguar (ej: "619464") |
-| `localidad` | Localidad del cliente |
-| `uni` | Unidades requeridas (objetivo) |
-| `bul` | Bultos |
-| `uxb` | Unidades por bulto (ART_UNI_BULTO de Yaguar) |
-| `cantidad_pickeada` | Unidades ya pickeadas (actualizado por operario) |
-| `estado` | Calculado: `completado: X/Y UNI` o `pendiente: X/Y UNI` |
-| `semana` | Semana de despacho |
+| `id_yaguar` | Código del cliente (UNIQUE). Para Yaguar: código del pool de Yaguar. Para DIARCO: cod de GWS.STEPDesc |
+| `nombre` | Nombre del negocio |
+| `localidad` | Zona asignada manualmente por el admin |
+| `direccion` | Dirección |
+| `telefono` | Teléfono |
+| `contacto` | Persona de contacto |
+| `vendedor` | Vendedor asignado |
+| `flete` | Porcentaje de flete (ej: 0.08 = 8%) |
+| `estado` | `'ocupado'` / `'libre'` / `'no_apto'` (solo Yaguar) |
+| `mayorista` | `'yaguar'` o `'diarco'` |
 
-### Flujo principal del operario
-1. Login con email/contraseña → recibe JWT → guardado en `localStorage`.
-2. Escanea o ingresa código de barras → `GET /api/picks/barcode/{cod_bar}`.
-3. Ve cards con los items de ese código → ajusta cantidad con stepper → `PUT /api/picks/{id}/quantity`.
-4. El backend calcula el `estado` y lo guarda.
-5. El frontend actualiza la card y recarga las stats del header.
-
-### Resumen (tab "Clientes")
-- `GET /api/picks/resumen` agrupa por `nombre` (cliente) y calcula cuántos items tiene completos/pendientes.
-- Estados posibles: `completo`, `incompleto`, `pendiente`.
-- Filtrable por estado en el frontend.
+**Al editar un cliente, los picks existentes se actualizan automáticamente** con el nuevo nombre y localidad (via `UPDATE pick SET nombre=... WHERE cliente=id_yaguar AND mayorista=...`).
 
 ---
 
-## Estado actual del proyecto
+## Tabla `pick` — campos principales
 
-### Funcionalidades implementadas
-- Login/logout con JWT (expira en 24h)
-- Búsqueda de picks por código de barras (manual y por cámara con ZXing)
-- Cards de picks con stepper para actualizar cantidad
-- Stats globales (total / completados / pendientes)
-- Vista resumen por operario con filtros
-- Panel admin con CRUD completo de `clientes_yaguar` (protegido por contraseña secundaria)
-- Health check: `GET /health`
-- Tres entornos Docker: dev / qa / prod
-- **Importación de picks desde archivos `.db` de Yaguar** (Admin → Nueva Semana): sube los .db de cada vendedor, ingresá el rango de fechas y nombre de semana, el sistema corre el SQL de extracción y crea todos los picks automáticamente
-- **Selector de semana** en la pantalla principal para filtrar picks, stats y resumen por semana
-- **Búsqueda por descripción** en la tab Pick (campo de texto con autocompletado)
-- **Botón "Entregado"** en cada pick card + display inteligente de bultos vs unidades
-- **Vista de picks por cliente** en la tab Clientes: tap en un cliente → bottom-sheet con todos sus items
-- **HTTPS** en el frontend (certificado autofirmado en nginx) para permitir uso de cámara desde celular
-- **Scanner de cámara** mejorado: pantalla completa, cámara trasera por defecto, tap-to-focus, cambio de cámara, persiste última cámara usada
+| Campo | Descripción |
+|-------|-------------|
+| `cod_bar` | Barcode EAN-13 (unidad) |
+| `cod_bar_bulto` | Barcode EAN-14 (bulto cerrado) — solo DIARCO |
+| `cod_art` | Código del artículo |
+| `descrip` | Descripción limpia (sin `fp:`) |
+| `nombre` | Nombre del cliente |
+| `cliente` | Código del cliente (id_yaguar para Yaguar, cod DIARCO para DIARCO) |
+| `localidad` | Ciudad/zona — determina el orden por reparto |
+| `uni` | Unidades totales requeridas |
+| `bul` | Bultos completos |
+| `uxb` | Unidades por bulto |
+| `cantidad_pickeada` | Actualizado por el operario |
+| `estado` | `entregado: X/Y UNI` o `completado: X/Y UNI` |
+| `semana` | Nombre de la semana de picking |
+| `importe_total` | Total del pedido con IVA, sin ítems excluidos |
+| `mayorista` | `'yaguar'` o `'diarco'` |
 
-### Deuda técnica conocida
+---
 
-1. **Rutas sin autenticación**: `verify_token()` existe en `jwt.py` pero **no se usa como dependencia** en ninguna ruta. Todos los endpoints de picks, stats y resumen son públicos (el cliente envía el JWT pero el backend no lo valida).
+## Admin → Clientes (ambos mayoristas)
 
-2. **Límite duro de 200 filas**: `list_picks()` usa `LIMIT 200` sin paginación.
+### Tabla de clientes
+- Columnas Yaguar: Código, Nombre, Localidad, Teléfono, Contacto, Vendedor, Flete (en %), Acciones
+- Columnas DIARCO: Nombre, Localidad, Teléfono, Contacto, Vendedor, Acciones
+- Click en fila → abre formulario de edición con todos los datos
+- Los clientes `libre` y `no_apto` no aparecen en la lista (solo `ocupado`)
+
+### Sección "Sin registrar"
+Aparece sobre la tabla cuando hay picks importados cuyo código de cliente no tiene nombre asignado. Permite hacer clic en "Registrar" para cargar los datos y asociar el código al cliente. Una vez registrado, desaparece de esta sección.
+
+### Crear nuevo cliente — Yaguar
+1. Clic en `+ Nuevo` → abre modal de verificación con un código libre auto-asignado
+2. El admin verifica en la app Yaguar si ese código es **Consumidor Final**
+3. Si NO es CF → botón rojo "Este cod. NO ES cons. final" → marca como `no_apto`, asigna otro
+4. Si SÍ es CF → "Continuar" → abre formulario con el código pre-cargado (readonly)
+
+### Crear nuevo cliente — DIARCO
+- Clic en `+ Nuevo` → abre formulario directamente
+- El campo "Código DIARCO" es editable (el admin ingresa el código manualmente)
+
+### Modal post-import (clientes sin datos)
+Salta automáticamente al terminar el import si hay clientes sin datos. Muestra código + nombre del pick (OBSERVACION para DIARCO, código para Yaguar). Para DIARCO el nombre viene pre-rellenado con OBSERVACION. Zona y vendedor son obligatorios. Botón "Cargar más tarde" para posponer.
+
+**Yaguar:** incluye aviso de verificar monotributo.
+**DIARCO:** no incluye aviso de monotributo. Si el código no es Consumidor Final, hay que hablar con Yaguar para regularizar.
+
+---
+
+## Zonas y Repartos
+
+- Tabla `zonas`: nombres de localidades, asignadas a un reparto
+- Tabla `repartos`: Sur Abajo, Sur Arriba, Merlo, Córdoba, San Luis — con orden editable desde Admin → Zonas
+- Los picks se ordenan por `repartos.orden ASC, localidad ASC, nombre ASC`
+- Zonas nuevas se crean automáticamente al importar; asignar reparto desde Admin → Zonas
+
+---
+
+## Estado actual — branch activa
+
+**Branch:** `feature/diarco-fase2-barcodes` (basada en `qa`)
+
+### Funcionalidades completadas en esta rama
+- Selector de mayorista con logos + timeout 30 min
+- Temas visuales por mayorista + modo claro/oscuro
+- Sistema de roles (operario/admin/superadmin)
+- Nombre de usuario en topbar
+- Importador DIARCO con barcodes EAN-13/EAN-14
+- Nombre de cliente desde OBSERVACION (nunca CTE)
+- Zona desde sufijo en OBSERVACION con normalización y fuzzy match
+- Importe con IVA proporcional (excluyendo heladera exhibidora)
+- Gestión completa de clientes Yaguar: códigos libre/ocupado/no_apto, flete, verificación CF
+- Gestión de clientes DIARCO: tab en admin, campo id, sección sin-registrar
+- Modal post-import para registrar clientes desconocidos (Yaguar y DIARCO)
+- Propagación automática de cambios de nombre/zona de cliente a todos sus picks
+- Sección "Sin registrar" en Admin → Clientes para ambos mayoristas
+- Export Excel de códigos libres Yaguar
+- Stepper con input editable para cantidades
+- Resaltado naranja en cards con entrega parcial
+- Checkbox "papel separado" en tab Clientes (localStorage)
+- Ordenado siempre por importe descendente en tab Clientes
+- Clientes siempre ordenados por mayor importe
+- Confirmaciones con modal personalizado (no browser nativo)
 
 ---
 
@@ -151,169 +278,54 @@ Cada fila es un artículo que debe ser pickeado para un cliente.
 
 > **NUNCA hacer commits ni push directamente a `main` o `qa`. Son ramas protegidas.**
 
-### Para cada tarea nueva:
 ```bash
-# 1. Pararse sobre qa actualizado
-git checkout qa
-git pull origin qa
-
-# 2. Crear branch nueva
+# Para cada tarea nueva:
+git checkout qa && git pull origin qa
 git checkout -b feature/nombre-funcionalidad
-# o
-git checkout -b fix/descripcion-del-bug
 
-# 3. Trabajar, commitear con mensajes claros
-git add <archivos>
-git commit -m "feat: descripción clara de qué hace este commit"
-
-# 4. Push al remote
+# Al terminar:
 git push origin feature/nombre-funcionalidad
-
-# 5. Abrir Pull Request hacia qa (nunca hacia main)
-gh pr create --base qa --title "..." --body "..."
-
-# 6. Esperar aprobación del equipo. NUNCA mergear el PR uno mismo.
+gh pr create --base qa ...
+# Esperar aprobación. NUNCA mergear uno mismo.
 ```
-
-### Convención de nombres de branches
-- `feature/nombre-funcionalidad` — nueva funcionalidad
-- `fix/descripcion-bug` — corrección de bug
-- `refactor/descripcion` — refactors sin cambio de comportamiento
-- `chore/descripcion` — tareas de mantenimiento (deps, config, etc.)
 
 ---
 
 ## Setup del entorno de desarrollo
 
-### Requisitos previos
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado y corriendo
-- Git
-
-### Pasos
-
-**1. Clonar el repo y pararse en la branch correcta**
 ```bash
-git clone https://github.com/mia-m64/pick.git
-cd pick
-git checkout qa          # o la branch de feature en la que vas a trabajar
-```
-
-**2. Levantar el proyecto**
-```bash
+# Levantar
 docker compose up --build
-```
 
-El primer arranque descarga imágenes, instala dependencias, crea el schema y carga los datos de seed. Puede tardar un par de minutos.
+# Frontend: https://localhost:3000 (aceptar cert autofirmado)
+# Ngrok: ngrok http https://localhost:3000  (para acceso externo)
+# API docs: http://localhost:8000/docs
 
-**3. Verificar que todo funciona**
-- Frontend: **https://localhost:3000** (aceptar el certificado autofirmado la primera vez)
-- Backend API docs: http://localhost:8000/docs
-- Health check: https://localhost:3000/health
+# Usuarios seed:
+#   MIA / hello
+#   NAHU / hello
+#   ADMIN / hello2 (superadmin)
 
-> **Desde celular** usar `https://<IP-local>:3000`. Aceptar el aviso de certificado autofirmado la primera vez.
-
-El seed ya incluye:
-- Usuario de acceso: `admin@picking.local` / `admin123`
-- Directorio completo de clientes de Yaguar
-- Semana de ejemplo: "PICK 28-04-2026" con picks reales
-
-**4. Importar una semana nueva (cuando sea necesario)**
-
-Desde Admin → Nueva Semana: subir los archivos `.db` de cada vendedor, completar nombre y fechas, y presionar "Importar picks".
-
-### Comandos útiles
-
-```bash
-# Ver logs en tiempo real
-docker compose logs -f
-
-# Solo logs del backend
-docker compose logs -f backend
-
-# ⚠️ IMPORTANTE: restart NO reconstruye la imagen
-# Para aplicar cambios en código Python o frontend usar --build:
+# Rebuild tras cambios:
 docker compose up --build backend -d
 docker compose up --build frontend -d
-# O ambos:
-docker compose up --build -d
-
-# restart solo reinicia el contenedor sin copiar código nuevo (NO usar para desplegar cambios)
-docker compose restart backend
-
-# Destruir todo (incluyendo datos de la DB)
-docker compose down -v
-
-# Entrar al contenedor del backend
-docker compose exec backend bash
-
-# Entrar a PostgreSQL
-docker compose exec db psql -U picking -d picking
-```
-
-### Entornos QA y producción
-
-```bash
-# QA (usa backend/.env.qa)
-docker compose -f docker-compose.yml -f docker-compose.qa.yml up --build
-
-# Producción (usa backend/.env.prod)
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
 ```
 
 ---
 
 ## Variables de entorno requeridas
 
-| Variable | Requerida | Descripción |
-|----------|-----------|-------------|
-| `DATABASE_URL` | Sí | Connection string PostgreSQL |
-| `SECRET_KEY` | Sí | Secreto para firmar JWT |
-| `ENVIRONMENT` | No | `development` / `qa` / `production` |
-| `DEBUG` | No | `True` / `False` |
-| `API_PORT` | No | Puerto del backend (default: 8000) |
-| `ADMIN_PASSWORD` | Sí | Contraseña del panel admin |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | No | Expiración JWT (default: 1440) |
-
-> El archivo `backend/.env` está versionado con valores de desarrollo. Solo `backend/.env.qa` y `backend/.env.prod` son gitignoreados (tienen credenciales reales).
-
----
-
-## Convenciones del proyecto
-
-### Código Python (backend)
-- Sin type hints explícitos en funciones simples; sí en las que los tienen actualmente.
-- Endpoints sincrónicos (`def`) — toda la DB es psycopg2 síncrono.
-- El context manager `get_db()` maneja automáticamente commit/rollback.
-- Los schemas Pydantic van todos en `models/schemas.py`.
-- Sin comentarios excepto cuando el `por qué` no es obvio.
-
-### Código JavaScript (frontend)
-- Vanilla JS, sin frameworks ni bundlers.
-- Todo el estado de la app en variables globales al tope de `app.js`.
-- El objeto `api` en `api.js` es el único punto de contacto con el backend.
-- El token JWT se guarda en `localStorage` como `'token'`.
-- Los toasts se muestran con `showToast(mensaje, tipo)` donde tipo es `'success'`, `'error'` o `'info'`.
-
-### Estilos
-- Un solo archivo CSS (`frontend/css/styles.css`).
-- Tipografías: Bebas Neue (títulos) y DM Mono (datos/código).
-- Mobile-first. Sin media queries complejos — la app es para celular.
-
-### Base de datos
-- `database/init.sql` define el schema completo para setups frescos.
-- `main.py` (`lifespan`) también aplica las migraciones con `ALTER TABLE IF NOT EXISTS` al arrancar, lo que permite actualizar volúmenes existentes sin necesidad de `down -v`.
-- Para agregar una columna nueva: actualizá `init.sql` Y agregá el `ALTER TABLE` en el lifespan de `main.py`.
-- No hay ORM — todas las queries son SQL directo con psycopg2.
+| Variable | Descripción |
+|----------|-------------|
+| `DATABASE_URL` | Connection string PostgreSQL |
+| `SECRET_KEY` | Secreto JWT |
+| `ADMIN_PASSWORD` | Contraseña del panel admin Y del usuario ADMIN (superadmin) |
+| `ENVIRONMENT` | `development` / `qa` / `production` |
 
 ---
 
 ## Contexto de negocio
 
-La app es para **operarios de depósito** de una empresa distribuidora (Yaguar). El proceso de picking es físico: el operario camina por el depósito con el celular, escanea artículos y registra cuántas unidades separa para cada cliente. Al final del día, los bultos pickeados están listos para ser despachados.
+Operarios de depósito de una distribuidora (Yaguar + DIARCO). Caminan por el galpón con el celular, escanean artículos y registran unidades separadas por cliente. Al final del día los bultos quedan listos para despacho.
 
-**Implicaciones de diseño que siempre hay que tener en cuenta:**
-- La UI debe funcionar con una mano, en movimiento, con guantes si es necesario.
-- Los botones deben ser grandes y fáciles de tocar.
-- El flujo principal (escanear → ver items → guardar cantidad) debe ser el mínimo de pasos posible.
-- La app debe funcionar aunque la conexión sea lenta o inestable (operarios en galpones con WiFi débil).
-- Los textos deben ser legibles en pantallas con brillo bajo o luz solar directa.
+**Diseño mobile-first:** botones grandes, una mano, WiFi inestable, pantallas en luz solar.

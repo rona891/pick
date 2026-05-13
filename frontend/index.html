@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=9" />
+  <link rel="stylesheet" href="css/styles.css?v=10" />
 </head>
 <body>
 
@@ -153,7 +153,6 @@
         <button class="filter-btn" data-filter="completo">Completo</button>
         <button class="filter-btn" data-filter="incompleto">Incompleto</button>
         <button class="filter-btn" data-filter="pendiente">Pendiente</button>
-        <button id="sort-importe-btn" class="filter-btn">$ Mayor</button>
       </div>
       <div id="resumen-list"></div>
     </div>
@@ -187,17 +186,21 @@
           <p class="admin-tab-desc">Acá podés ver todos los clientes de la empresa. Usá el botón <strong>+ Nuevo</strong> para agregar uno, o tocá <strong>Editar</strong> para modificar los datos de uno existente. Cada cliente necesita tener una zona y un vendedor asignado.</p>
           <div class="admin-header">
             <input type="text" id="admin-clientes-search" class="clientes-search-input" placeholder="Buscar cliente..." autocomplete="off" style="flex:1; margin-right:8px" />
+            <button id="btn-exportar-clientes" class="btn-secondary hidden" style="margin-right:8px">Exportar</button>
             <button id="btn-nuevo-cliente" class="btn-search">+ Nuevo</button>
           </div>
+          <div id="sin-registrar-section"></div>
           <div class="table-wrap">
             <table class="clientes-table">
               <thead>
                 <tr>
+                  <th id="th-codigo-yaguar">Cód.</th>
                   <th>Nombre</th>
                   <th>Localidad</th>
                   <th>Teléfono</th>
                   <th>Contacto</th>
                   <th>Vendedor</th>
+                  <th id="th-flete-yaguar">Flete</th>
                   <th></th>
                 </tr>
               </thead>
@@ -245,6 +248,9 @@
           <!-- ── Importar Diarco ───────────────────────────────────────── -->
           <div id="import-diarco" class="hidden">
             <div class="admin-section-title">Importar nueva semana</div>
+            <p class="admin-section-desc" style="margin-bottom:16px">
+              💡 Los importes por cliente que muestra la app <strong>incluyen IVA</strong>, calculados proporcionalmente sobre los artículos pickeables (se excluyen ítems de sistema como heladeras exhibidoras).
+            </p>
             <div class="form-group">
               <label>Nombre del pick</label>
               <input type="text" id="diarco-semana-nombre" placeholder="Ej: DIARCO 06-05-2026" autocomplete="off" />
@@ -403,14 +409,61 @@
         <button id="modal-close" class="modal-close">✕</button>
       </div>
       <form id="cliente-form">
+        <div id="cf-id-yaguar-wrap" class="form-group"><label id="cf-id-label">Código Yaguar</label><input type="text" id="cf-id_yaguar" placeholder="Ej: 123456" autocomplete="off" /></div>
         <div class="form-group"><label>Nombre</label><input type="text" id="cf-nombre" required /></div>
         <div class="form-group"><label>Zona *</label><select id="cf-localidad" required><option value="">— Seleccioná una zona —</option></select></div>
         <div class="form-group"><label>Dirección</label><input type="text" id="cf-direccion" /></div>
         <div class="form-group"><label>Teléfono</label><input type="text" id="cf-telefono" /></div>
         <div class="form-group"><label>Contacto</label><input type="text" id="cf-contacto" /></div>
         <div class="form-group"><label>Vendedor *</label><input type="text" id="cf-vendedor" required /></div>
+        <div id="cf-flete-wrap" class="form-group"><label>Flete</label><input type="number" id="cf-flete" step="0.001" min="0" placeholder="Ej: 0.08" /></div>
         <button type="submit" class="btn-primary">Guardar</button>
       </form>
+    </div>
+  </div>
+
+  <!-- ── Modal: clientes sin datos post-import ─────────────────────────────── -->
+  <div id="clientes-faltantes-modal" class="modal-overlay hidden">
+    <div class="modal cfm-modal">
+
+      <div class="modal-header">
+        <span id="cfm-title">Cliente sin datos</span>
+        <button id="cfm-close" class="modal-close">✕</button>
+      </div>
+
+      <!-- Código destacado -->
+      <div class="cfm-codigo-header">
+        <div>
+          <div class="cfm-codigo-sublabel">Código Yaguar</div>
+          <input type="text" id="cfm-id_yaguar" readonly class="cfm-codigo-input" />
+        </div>
+        <div id="cfm-progreso" class="cfm-progreso"></div>
+      </div>
+
+      <!-- Alerta monotributo (solo Yaguar) -->
+      <div id="cfm-alerta" class="cfm-alerta">
+        <span class="cfm-alerta-icon">⚠</span>
+        <span>Verificá en la app Yaguar que este número esté asignado a <strong>Consumidor Final</strong>. Si no lo es, significa que alguien tomó un pedido usando un código que no corresponde a Consumidor Final — en ese caso <strong>no cargues el cliente</strong> y contactate con Yaguar para regularizar la situación.</span>
+      </div>
+
+      <form id="cfm-form" class="cfm-body">
+        <div class="form-group"><label>Nombre *</label><input type="text" id="cfm-nombre" required autocomplete="off" /></div>
+        <div class="form-group"><label>Zona *</label><select id="cfm-localidad" required><option value="">— Seleccioná una zona —</option></select></div>
+        <div class="form-group"><label>Dirección</label><input type="text" id="cfm-direccion" autocomplete="off" /></div>
+        <div class="form-group"><label>Teléfono</label><input type="text" id="cfm-telefono" autocomplete="off" /></div>
+        <div class="form-group"><label>Contacto</label><input type="text" id="cfm-contacto" autocomplete="off" /></div>
+        <div class="form-group">
+          <label>Vendedor *</label>
+          <select id="cfm-vendedor" required>
+            <option value="">— Seleccioná un vendedor —</option>
+          </select>
+        </div>
+        <div class="cfm-actions">
+          <button type="button" id="cfm-skip" class="btn-secondary">Cargar más tarde</button>
+          <button type="submit" class="btn-primary">Guardar</button>
+        </div>
+      </form>
+
     </div>
   </div>
 
@@ -430,6 +483,27 @@
     </div>
   </div>
 
+  <!-- ── Modal: verificar código Yaguar antes de crear cliente ─────────────── -->
+  <div id="verify-codigo-modal" class="modal-overlay hidden">
+    <div class="modal verify-modal">
+      <div class="modal-header">
+        <span>Verificar código Yaguar</span>
+        <button id="verify-close" class="modal-close">✕</button>
+      </div>
+      <div class="verify-body">
+        <div class="verify-codigo-wrap">
+          <div class="verify-codigo-label">Código a asignar</div>
+          <div id="verify-codigo-display" class="verify-codigo-num">—</div>
+        </div>
+        <p class="verify-instruccion">Verificá en la app Yaguar que este código esté asignado a <strong>Consumidor Final</strong>. Si no lo es, presioná el botón rojo para descartarlo y elegir otro automáticamente.</p>
+      </div>
+      <div class="verify-actions">
+        <button id="verify-no-apto" class="btn-no-apto">Este cod. NO ES cons. final</button>
+        <button id="verify-confirmar" class="btn-primary">Es Consumidor Final — Continuar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
@@ -445,7 +519,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=9"></script>
-  <script src="js/app.js?v=9"></script>
+  <script src="js/api.js?v=10"></script>
+  <script src="js/app.js?v=10"></script>
 </body>
 </html>
