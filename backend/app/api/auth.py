@@ -3,15 +3,20 @@ from app.models.schemas import LoginRequest, LoginResponse, ChangePasswordReques
 from app.db.database import get_db
 from app.auth.jwt import verify_password, create_access_token, hash_password, verify_token
 from typing import List
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+class RolUpdate(BaseModel):
+    rol: str  # 'operario' | 'admin'
 
 
 @router.post("/login", response_model=LoginResponse)
 def login(request: LoginRequest):
     with get_db() as cur:
         cur.execute(
-            "SELECT id, username, password_hash FROM users WHERE username = %s",
+            "SELECT id, username, password_hash, rol FROM users WHERE username = %s",
             (request.username,),
         )
         user = cur.fetchone()
@@ -19,7 +24,10 @@ def login(request: LoginRequest):
     if not user or not verify_password(request.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
-    return {"access_token": create_access_token(user["id"], user["username"])}
+    return {
+        "access_token": create_access_token(user["id"], user["username"]),
+        "rol": user["rol"],
+    }
 
 
 @router.post("/logout")
@@ -39,9 +47,8 @@ def change_password(request: ChangePasswordRequest, authorization: str = Header(
     if not user or not verify_password(request.current_password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Contraseña actual incorrecta")
 
-    new_hash = hash_password(request.new_password)
     with get_db() as cur:
-        cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (new_hash, user["id"]))
+        cur.execute("UPDATE users SET password_hash = %s WHERE id = %s", (hash_password(request.new_password), user["id"]))
 
     return {"message": "Contraseña actualizada"}
 
@@ -70,7 +77,10 @@ def change_username(request: ChangeUsernameRequest, authorization: str = Header(
 @router.get("/users", response_model=List[UserOut])
 def list_users():
     with get_db() as cur:
-        cur.execute("SELECT id, username, created_at FROM users ORDER BY created_at")
+        cur.execute("""
+            SELECT id, username, rol, created_at FROM users
+            ORDER BY CASE rol WHEN 'superadmin' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, created_at
+        """)
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -81,19 +91,44 @@ def create_user(data: UserCreate):
         if cur.fetchone():
             raise HTTPException(status_code=400, detail="Usuario ya registrado")
         cur.execute(
-            "INSERT INTO users (username, password_hash) VALUES (%s, %s) RETURNING id, username, created_at",
+            "INSERT INTO users (username, password_hash) VALUES (%s, %s) RETURNING id, username, rol, created_at",
             (data.username, hash_password(data.password)),
         )
+        return dict(cur.fetchone())
+
+
+@router.put("/users/{id}/rol")
+def update_rol(id: int, data: RolUpdate, authorization: str = Header(...)):
+    payload = verify_token(authorization)
+    with get_db() as cur:
+        cur.execute("SELECT rol FROM users WHERE id = %s", (payload.get("sub"),))
+        caller = cur.fetchone()
+    if not caller or caller["rol"] != "superadmin":
+        raise HTTPException(403, "Solo el superadmin puede cambiar roles")
+    if data.rol not in ("operario", "admin"):
+        raise HTTPException(400, "Rol inválido. Valores permitidos: operario, admin")
+    with get_db() as cur:
+        cur.execute("SELECT rol FROM users WHERE id = %s", (id,))
+        user = cur.fetchone()
+        if not user:
+            raise HTTPException(404, "Usuario no encontrado")
+        if user["rol"] == "superadmin":
+            raise HTTPException(403, "No se puede modificar el rol del superadmin")
+        cur.execute("UPDATE users SET rol = %s WHERE id = %s RETURNING id, username, rol, created_at", (data.rol, id))
         return dict(cur.fetchone())
 
 
 @router.delete("/users/{id}")
 def delete_user(id: int):
     with get_db() as cur:
+        cur.execute("SELECT rol FROM users WHERE id = %s", (id,))
+        user = cur.fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        if user["rol"] == "superadmin":
+            raise HTTPException(status_code=403, detail="No se puede eliminar al superadmin")
         cur.execute("SELECT COUNT(*) AS n FROM users")
         if cur.fetchone()["n"] <= 1:
             raise HTTPException(status_code=400, detail="No se puede eliminar el único usuario")
-        cur.execute("DELETE FROM users WHERE id = %s RETURNING id", (id,))
-        if not cur.fetchone():
-            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+        cur.execute("DELETE FROM users WHERE id = %s", (id,))
     return {"message": "Usuario eliminado"}

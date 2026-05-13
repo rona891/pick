@@ -6,7 +6,13 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from app.db.database import get_db
 
-router = APIRouter(prefix="/export", tags=["export"])
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Export — rutas separadas por mayorista.
+#   Yaguar → /api/yaguar/export/picks
+#   Diarco → /api/diarco/export/picks
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+router_yaguar = APIRouter(prefix="/yaguar/export", tags=["Yaguar - Export"])
+router_diarco = APIRouter(prefix="/diarco/export", tags=["Diarco - Export"])
 
 HEADERS = [
     ("Semana",           "semana"),
@@ -38,17 +44,16 @@ def _thin_border():
     return Border(left=s, right=s, top=s, bottom=s)
 
 
-@router.get("/picks")
-def export_picks(semana: str = Query(...)):
+def _export_picks(semana: str, mayorista: str):
     with get_db() as cur:
         cur.execute("""
             SELECT p.*, COALESCE(z.reparto, '') AS reparto_zona
             FROM pick p
             LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
             LEFT JOIN repartos r ON z.reparto = r.nombre
-            WHERE p.semana = %s
+            WHERE p.semana = %s AND p.mayorista = %s
             ORDER BY COALESCE(r.orden, 99) ASC, p.localidad ASC, p.nombre ASC, p.descrip ASC
-        """, (semana,))
+        """, (semana, mayorista))
         rows = cur.fetchall()
 
     wb = Workbook()
@@ -148,3 +153,81 @@ def export_picks(semana: str = Query(...)):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router_yaguar.get("/picks")
+def yaguar_export(semana: str = Query(...)):
+    return _export_picks(semana, "yaguar")
+
+
+@router_yaguar.get("/clientes")
+def yaguar_export_clientes():
+    with get_db() as cur:
+        cur.execute("""
+            SELECT id_yaguar, nombre, localidad, vendedor, estado
+            FROM clientes_yaguar
+            WHERE id_yaguar IS NOT NULL AND estado = 'libre'
+            ORDER BY id_yaguar
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+
+    HEADERS_CL = [
+        ("Código Yaguar", "id_yaguar"),
+        ("Cliente",       "nombre"),
+        ("Zona",          "localidad"),
+        ("Vendedor",      "vendedor"),
+    ]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Códigos Libres"
+
+    header_font  = Font(name="Calibri", bold=True, color=DARK_BG, size=10)
+    header_fill  = PatternFill("solid", fgColor=ACCENT)
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    for col, (label, _) in enumerate(HEADERS_CL, start=1):
+        cell = ws.cell(row=1, column=col, value=label)
+        cell.font      = header_font
+        cell.fill      = header_fill
+        cell.alignment = header_align
+        cell.border    = _thin_border()
+    ws.row_dimensions[1].height = 30
+
+    data_font  = Font(name="Calibri", size=10, color="E8E8E8")
+    alt_fill   = PatternFill("solid", fgColor="1C1C1C")
+    base_fill  = PatternFill("solid", fgColor=HEADER_BG)
+    ok_font    = Font(name="Calibri", size=10, color=GREEN)
+    muted_font = Font(name="Calibri", size=10, color=MUTED)
+    center     = Alignment(horizontal="center", vertical="center")
+    left       = Alignment(horizontal="left",   vertical="center")
+
+    for row_idx, row in enumerate(rows, start=2):
+        fill = alt_fill if row_idx % 2 == 0 else base_fill
+        for col_idx, (label, field) in enumerate(HEADERS_CL, start=1):
+            value = row.get(field) or ""
+            cell  = ws.cell(row=row_idx, column=col_idx, value=value)
+            cell.fill      = fill
+            cell.border    = _thin_border()
+            cell.alignment = center if label == "Código Yaguar" else left
+            cell.font      = data_font
+
+    for i, width in enumerate([16, 40, 22, 25], start=1):
+        ws.column_dimensions[get_column_letter(i)].width = width
+
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="codigos_libres_yaguar.xlsx"'},
+    )
+
+
+@router_diarco.get("/picks")
+def diarco_export(semana: str = Query(...)):
+    return _export_picks(semana, "diarco")

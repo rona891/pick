@@ -31,6 +31,7 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     access_token: str
+    rol: str
 
 
 class StatsResponse(BaseModel):
@@ -57,15 +58,23 @@ class Cliente(BaseModel):
     contacto: Optional[str] = None
     vendedor: Optional[str] = None
     id_yaguar: Optional[str] = None
+    flete: Optional[float] = None
 
 
 class ClienteCreate(BaseModel):
-    nombre: str
+    nombre: Optional[str] = None
     localidad: Optional[str] = None
     direccion: Optional[str] = None
     telefono: Optional[str] = None
     contacto: Optional[str] = None
     vendedor: Optional[str] = None
+    mayorista: str = 'yaguar'
+    id_yaguar: Optional[str] = None
+    flete: Optional[float] = None
+
+
+class MarcarNoAptoIn(BaseModel):
+    codigo: str
 
 
 class AdminVerify(BaseModel):
@@ -80,6 +89,7 @@ class UserCreate(BaseModel):
 class UserOut(BaseModel):
     id: int
     username: str
+    rol: str = 'operario'
     created_at: Optional[datetime] = None
 
 
