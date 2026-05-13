@@ -19,7 +19,7 @@ frontend/ (HTML/CSS/JS + nginx)  ──►  backend/ (FastAPI Python)  ──►
         puerto 3000                         puerto 8000                  puerto 5432
 ```
 
-Todo corre en Docker. Hay tres entornos: dev, qa, prod.
+Todo corre en Docker. Hay tres entornos: dev, qa, prod. Se usa **ngrok** para exponer el puerto 3000 al exterior (nginx usa HTTPS con cert autofirmado, ngrok debe tunelizar a `https://localhost:3000`).
 
 ### Estructura de archivos clave
 
@@ -33,7 +33,7 @@ pick/
 │   │   └── app.js              # Lógica UI, selector de mayorista, temas
 │   ├── yaguar.png              # Logo Yaguar (topbar + selector)
 │   ├── diarco.png              # Logo DIARCO sin fondo
-│   └── nginx.conf              # client_max_body_size 100M
+│   └── nginx.conf              # SSL en puerto 3000, client_max_body_size 100M
 ├── backend/
 │   ├── main.py                 # FastAPI: routers, migraciones al arrancar
 │   ├── app/api/
@@ -49,7 +49,7 @@ pick/
 │   │   └── admin.py            # Verificación contraseña admin (legacy)
 │   └── requirements.txt        # incluye openpyxl
 └── database/
-    ├── init.sql                # DDL completo
+    ├── init.sql                # DDL base
     └── seed.sql                # Usuarios MIA y NAHU (pass: hello), ADMIN (pass: hello2)
 ```
 
@@ -59,16 +59,18 @@ pick/
 
 ### Rutas API
 ```
-/api/yaguar/picks/...      /api/diarco/picks/...
-/api/yaguar/clientes/...   /api/diarco/clientes/...
-/api/yaguar/semanas/...    /api/diarco/semanas/...
-/api/yaguar/export/picks   /api/diarco/export/picks
-/api/zonas/...             (compartido)
-/api/auth/...              (compartido)
+/api/yaguar/picks/...           /api/diarco/picks/...
+/api/yaguar/clientes/...        /api/diarco/clientes/...
+/api/yaguar/semanas/...         /api/diarco/semanas/...
+/api/yaguar/export/picks        /api/diarco/export/picks
+/api/yaguar/export/clientes     (exporta códigos libres Yaguar)
+/api/zonas/...                  (compartido)
+/api/auth/...                   (compartido)
 ```
 
 ### Tabla `pick`
 Columna `mayorista = 'yaguar' | 'diarco'` — los picks nunca se mezclan.
+`pick.cliente` = código del cliente (id_yaguar para Yaguar, cod DIARCO para DIARCO).
 
 ### Frontend
 `getMayorista()` en `api.js` retorna `'yaguar'` o `'diarco'` desde localStorage. Todas las llamadas API usan esta función. El selector aparece al iniciar (o tras 30 min de inactividad). Tocar el logo del topbar cambia de mayorista.
@@ -94,13 +96,29 @@ Columna `mayorista = 'yaguar' | 'diarco'` — los picks nunca se mezclan.
 
 - Usuario `ADMIN` (superadmin) se crea automáticamente al arrancar con contraseña = `ADMIN_PASSWORD` del `.env`
 - Solo el superadmin puede cambiar roles de otros usuarios
-- Toggle switch en Admin → Usuarios para promover/degradar
 
 ---
 
 ## Importación Yaguar
 
 Archivos `.db` exportados de la app Yaguar (SQLite con `hpedidosCabecera`, `hpedidosDetalle`, `articulos`, `clientes`). Un archivo por vendedor. Endpoint: `POST /api/yaguar/semanas/importar`.
+
+### Matching de clientes
+Al importar, se busca el código de cliente (`SUBSTR(c.CLI_ID, -6)`) en `clientes_yaguar WHERE id_yaguar IS NOT NULL`. Si el cliente no tiene nombre asignado (estado=libre) o no existe, va a `clientes_no_encontrados`. Después del import salta el modal para cargar datos del cliente.
+
+### Estado de códigos Yaguar (`clientes_yaguar.estado`)
+- `'ocupado'` — tiene cliente asignado y apareció en alguna de las últimas 10 semanas
+- `'libre'` — disponible para asignar a un nuevo cliente
+- `'no_apto'` — código de factura A (no Consumidor Final), nunca se usa
+
+**Reglas:**
+- Al crear cliente nuevo: modal de verificación pregunta si el código es Consumidor Final. Si no → se marca `no_apto` y se elige otro automáticamente.
+- Códigos `no_apto` nunca aparecen en la lista de libres ni en la UI de clientes.
+- El status update post-import SOLO modifica códigos que tienen historial en picks (no toca libres manuales ni clientes nuevos sin picks aún).
+- Códigos ya marcados `no_apto`: `609608` (NO SE UTILIZA), `605212` (NO ASIGNAR ES MONOTRIBUBTO).
+
+### Export de códigos libres
+`GET /api/yaguar/export/clientes` → Excel con códigos `estado='libre'`: Código, Cliente, Zona, Vendedor.
 
 ---
 
@@ -109,32 +127,62 @@ Archivos `.db` exportados de la app Yaguar (SQLite con `hpedidosCabecera`, `hped
 Archivo `MobileAssistantBU.db` de la app DIARCO (SQLite con `mWTATrx`, `mWTAMTrx`, `mWTARep`).
 
 ### Campos extraídos de `mWTATrx`
-- `CTE` → nombre oficial del cliente en DIARCO
-- `OBSERVACION` → nombre propio del local (ej: `"GAUCHITO CORTADERAS.MERLO"`)
-- `DIR` → localidad fallback si OBSERVACION no tiene zona
-- `GWS` → total con IVA (`Value3`) y código de cliente (`STEPDesc`)
+- `CTE` → nombre oficial del cliente en DIARCO (**nunca se usa**, es incorrecto)
+- `OBSERVACION` → nombre real del local puesto por el vendedor (ej: `"GAUCHITO CORTADERAS.MERLO"`)
+- `GWS.STEPDesc` → código de cliente DIARCO (formato: `"Pedido para: {cod} {nombre}"`)
+- `GWS.Value3` → total con IVA del pedido
+- `GWS.Formula` → total sin IVA del pedido
 - `GWS.ELEM` → artículos: `STEPUID`=cod_art, `Value2`=qty, `Value4`=factor, `Formula`=precio sin IVA
+- `DIR` → localidad — **SIEMPRE INCORRECTA, nunca usar**
 
-### Zona desde OBSERVACION (Opción B)
-El vendedor escribe la zona como sufijo en la observación: `"NOMBRE.ZONA"`, `"NOMBRE-zona"`, `"NOMBRE_ZONA"`. El importer normaliza (mayúsculas, sin acentos) y busca match en la tabla de zonas. Fallback al paso DIR si no hay sufijo.
+### Matching de clientes DIARCO
+Al importar, se busca el cod_cliente en `clientes_yaguar WHERE mayorista='diarco' AND id_yaguar=cod`. Si hay match con nombre → se usa el nombre y localidad del admin. Si no hay match → se usa OBSERVACION como nombre temporal y localidad=NULL. Los sin match van a `clientes_sin_datos` y salta el modal post-import.
+
+**Importante:** La localidad del DB de DIARCO (campo DIR) es siempre incorrecta. Solo se usa la localidad ingresada manualmente por el admin en la tabla de clientes. Para clientes sin registrar, localidad=NULL hasta que el admin la asigne.
+
+### Zona desde OBSERVACION
+El vendedor escribe la zona como sufijo: `"NOMBRE.ZONA"`, `"NOMBRE-zona"`, `"NOMBRE_ZONA"`. El importer normaliza y busca match en zonas existentes. Fallback: localidad=NULL (nunca usar DIR).
+
+### Ítems excluidos
+- `STEPUID` no numérico (ej: `'Semaforo'`) → sistema interno, sin precio
+- Descripción contiene `"heladera exhibidora"` → equipamiento, sin pickear
+
+### Cálculo de importe con IVA (excluyendo ítems excluidos)
+```
+excluidos_sin_iva = sum(Formula × Value2 × Value4) para ítems excluidos con cod_art numérico
+ratio_iva = GWS.Value3 / GWS.Formula
+excluidos_con_iva = excluidos_sin_iva × ratio_iva
+importe_neto = GWS.Value3 - excluidos_con_iva
+```
+Garantizado no-negativo: los excluidos son parte del total, nunca pueden superarlo.
 
 ### Barcodes
 - `mWTARep WHERE Key1='CDB'`: `STEPUID`=barcode, `Value1`=cod_art DIARCO
 - EAN-13 (13 dígitos) → `pick.cod_bar`
 - EAN-14 (14 dígitos) → `pick.cod_bar_bulto`
-- Buscar por cualquiera de los dos da el mismo resultado
-
-### Ítems excluidos
-- `STEPUID` no numérico (ej: `'Semaforo'`) → sistema interno, sin precio
-- Descripción contiene `"heladera exhibidora"` → equipamiento, sin pickear
-- `PRECIO_HELADERA_CON_IVA = 1375796.713` se resta del total por unidad pedida
 
 ### Lógica de bultos DIARCO
-- `fp: X/YB` en descripción: si X==Y → factor=1 (qty en unidades), si X>Y → factor=X/Y (qty en bultos)
+- `fp: X/YB` en descripción: si X==Y → factor=1 (qty en unidades); si X>Y → factor=X/Y (qty en bultos)
 - `uni = qty * uxb` cuando factor>1, `uni = qty` cuando factor=1
 
-### STATUS en mWTAMTrx
-- `'1'` = pedido tomado, `'S'` = sincronizado — ambos se importan
+---
+
+## Tabla `clientes_yaguar` — campos principales
+
+| Campo | Descripción |
+|-------|-------------|
+| `id_yaguar` | Código del cliente (UNIQUE). Para Yaguar: código del pool de Yaguar. Para DIARCO: cod de GWS.STEPDesc |
+| `nombre` | Nombre del negocio |
+| `localidad` | Zona asignada manualmente por el admin |
+| `direccion` | Dirección |
+| `telefono` | Teléfono |
+| `contacto` | Persona de contacto |
+| `vendedor` | Vendedor asignado |
+| `flete` | Porcentaje de flete (ej: 0.08 = 8%) |
+| `estado` | `'ocupado'` / `'libre'` / `'no_apto'` (solo Yaguar) |
+| `mayorista` | `'yaguar'` o `'diarco'` |
+
+**Al editar un cliente, los picks existentes se actualizan automáticamente** con el nuevo nombre y localidad (via `UPDATE pick SET nombre=... WHERE cliente=id_yaguar AND mayorista=...`).
 
 ---
 
@@ -146,7 +194,8 @@ El vendedor escribe la zona como sufijo en la observación: `"NOMBRE.ZONA"`, `"N
 | `cod_bar_bulto` | Barcode EAN-14 (bulto cerrado) — solo DIARCO |
 | `cod_art` | Código del artículo |
 | `descrip` | Descripción limpia (sin `fp:`) |
-| `nombre` | Nombre del cliente (OBSERVACION para DIARCO, lookup para Yaguar) |
+| `nombre` | Nombre del cliente |
+| `cliente` | Código del cliente (id_yaguar para Yaguar, cod DIARCO para DIARCO) |
 | `localidad` | Ciudad/zona — determina el orden por reparto |
 | `uni` | Unidades totales requeridas |
 | `bul` | Bultos completos |
@@ -154,8 +203,37 @@ El vendedor escribe la zona como sufijo en la observación: `"NOMBRE.ZONA"`, `"N
 | `cantidad_pickeada` | Actualizado por el operario |
 | `estado` | `entregado: X/Y UNI` o `completado: X/Y UNI` |
 | `semana` | Nombre de la semana de picking |
-| `importe_total` | Total del pedido del cliente con IVA (sin heladera) |
+| `importe_total` | Total del pedido con IVA, sin ítems excluidos |
 | `mayorista` | `'yaguar'` o `'diarco'` |
+
+---
+
+## Admin → Clientes (ambos mayoristas)
+
+### Tabla de clientes
+- Columnas Yaguar: Código, Nombre, Localidad, Teléfono, Contacto, Vendedor, Flete (en %), Acciones
+- Columnas DIARCO: Nombre, Localidad, Teléfono, Contacto, Vendedor, Acciones
+- Click en fila → abre formulario de edición con todos los datos
+- Los clientes `libre` y `no_apto` no aparecen en la lista (solo `ocupado`)
+
+### Sección "Sin registrar"
+Aparece sobre la tabla cuando hay picks importados cuyo código de cliente no tiene nombre asignado. Permite hacer clic en "Registrar" para cargar los datos y asociar el código al cliente. Una vez registrado, desaparece de esta sección.
+
+### Crear nuevo cliente — Yaguar
+1. Clic en `+ Nuevo` → abre modal de verificación con un código libre auto-asignado
+2. El admin verifica en la app Yaguar si ese código es **Consumidor Final**
+3. Si NO es CF → botón rojo "Este cod. NO ES cons. final" → marca como `no_apto`, asigna otro
+4. Si SÍ es CF → "Continuar" → abre formulario con el código pre-cargado (readonly)
+
+### Crear nuevo cliente — DIARCO
+- Clic en `+ Nuevo` → abre formulario directamente
+- El campo "Código DIARCO" es editable (el admin ingresa el código manualmente)
+
+### Modal post-import (clientes sin datos)
+Salta automáticamente al terminar el import si hay clientes sin datos. Muestra código + nombre del pick (OBSERVACION para DIARCO, código para Yaguar). Para DIARCO el nombre viene pre-rellenado con OBSERVACION. Zona y vendedor son obligatorios. Botón "Cargar más tarde" para posponer.
+
+**Yaguar:** incluye aviso de verificar monotributo.
+**DIARCO:** no incluye aviso de monotributo. Si el código no es Consumidor Final, hay que hablar con Yaguar para regularizar.
 
 ---
 
@@ -171,7 +249,6 @@ El vendedor escribe la zona como sufijo en la observación: `"NOMBRE.ZONA"`, `"N
 ## Estado actual — branch activa
 
 **Branch:** `feature/diarco-fase2-barcodes` (basada en `qa`)
-**Próximo paso:** Testeo el viernes con picks reales y sufijos `.zona` en OBSERVACION de DIARCO
 
 ### Funcionalidades completadas en esta rama
 - Selector de mayorista con logos + timeout 30 min
@@ -179,15 +256,21 @@ El vendedor escribe la zona como sufijo en la observación: `"NOMBRE.ZONA"`, `"N
 - Sistema de roles (operario/admin/superadmin)
 - Nombre de usuario en topbar
 - Importador DIARCO con barcodes EAN-13/EAN-14
-- Nombre de cliente desde campo OBSERVACION
+- Nombre de cliente desde OBSERVACION (nunca CTE)
 - Zona desde sufijo en OBSERVACION con normalización y fuzzy match
-- Importe con IVA (GWS.Value3 - heladera × $1,375,796.713)
-- Tab Clientes oculta en admin modo DIARCO
+- Importe con IVA proporcional (excluyendo heladera exhibidora)
+- Gestión completa de clientes Yaguar: códigos libre/ocupado/no_apto, flete, verificación CF
+- Gestión de clientes DIARCO: tab en admin, campo id, sección sin-registrar
+- Modal post-import para registrar clientes desconocidos (Yaguar y DIARCO)
+- Propagación automática de cambios de nombre/zona de cliente a todos sus picks
+- Sección "Sin registrar" en Admin → Clientes para ambos mayoristas
+- Export Excel de códigos libres Yaguar
 - Stepper con input editable para cantidades
 - Resaltado naranja en cards con entrega parcial
 - Checkbox "papel separado" en tab Clientes (localStorage)
-- Ordenado por reparto al escanear
-- Export Excel por semana y mayorista
+- Ordenado siempre por importe descendente en tab Clientes
+- Clientes siempre ordenados por mayor importe
+- Confirmaciones con modal personalizado (no browser nativo)
 
 ---
 
@@ -215,6 +298,7 @@ gh pr create --base qa ...
 docker compose up --build
 
 # Frontend: https://localhost:3000 (aceptar cert autofirmado)
+# Ngrok: ngrok http https://localhost:3000  (para acceso externo)
 # API docs: http://localhost:8000/docs
 
 # Usuarios seed:

@@ -35,10 +35,6 @@ DESCRIP_EXCLUIDAS = [
     "heladera exhibidora",
 ]
 
-# Precio con IVA de la Heladera Exhibidora Inelro por unidad.
-# Se descuenta del total con IVA de cada cliente por cada unidad pedida.
-PRECIO_HELADERA_CON_IVA = 1375796.713
-
 def _es_item_real(cod_art: str, descrip: str) -> bool:
     """Devuelve False para items de sistema o equipamiento de DIARCO que no se pickean."""
     if not cod_art.strip().lstrip('-').isdigit():
@@ -197,10 +193,15 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
             # Localidad: intentar extraer del sufijo en OBSERVACION (ej: "GAUCHITO.MERLO")
             # Si no hay sufijo o no matchea, usar el paso DIR como fallback
             zona_desde_obs = None
+            nombre_obs_limpio = ""  # OBSERVACION sin sufijo de zona (nunca CTE)
             if nombre_obs and zonas_norm is not None:
                 nombre_cliente, zona_desde_obs = _extraer_zona_obs(nombre_obs, zonas_norm)
+                nombre_obs_limpio = nombre_cliente  # OBSERVACION con zona removida
             else:
+                # Si OBSERVACION está vacía usamos CTE como nombre de display,
+                # pero nombre_obs_limpio queda vacío (no queremos mostrar el CTE en sin-registrar)
                 nombre_cliente = nombre_obs if nombre_obs else nombre_cte
+                nombre_obs_limpio = nombre_obs  # puede ser ""
 
             if zona_desde_obs:
                 localidad = zona_desde_obs
@@ -238,7 +239,7 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
                 except (ValueError, TypeError):
                     pass
 
-            importe_excluidos_con_iva = 0.0  # acumula el con-IVA de ítems excluidos (heladera, etc.)
+            importe_excluidos_sin_iva = 0.0  # acumula sin IVA de ítems excluidos
 
             # Artículos del pedido (pasos GWS.ELEM)
             # Formula × V2 × V4 = total sin IVA del ítem
@@ -253,15 +254,15 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
                     continue
                 uxb, qty_en_bultos, descrip_limpia = _parse_pack(item["STEPSelDesc"])
                 if not _es_item_real(cod_art, descrip_limpia):
-                    # Ítem excluido del pick (heladera exhibidora, semáforo, etc.)
-                    # Por cada unidad pedida se resta PRECIO_HELADERA_CON_IVA del total del cliente.
-                    # Solo aplica a ítems con cod_art numérico (Semaforo y similares no tienen precio).
+                    # Ítem excluido: acumular su precio SIN IVA usando Formula × V2 × V4
                     if cod_art.isdigit():
                         try:
-                            qty_excluido = int(float(item["Value2"] or 0))
+                            excl_sin_iva = (float(item["Formula"] or 0)
+                                            * float(item["Value2"] or 0)
+                                            * float(item["Value4"] or 1))
+                            importe_excluidos_sin_iva += excl_sin_iva
                         except (ValueError, TypeError):
-                            qty_excluido = 0
-                        importe_excluidos_con_iva += PRECIO_HELADERA_CON_IVA * qty_excluido
+                            pass
                     continue
                 try:
                     qty = int(float(item["Value2"] or 0))
@@ -276,23 +277,30 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
                 pass  # el total real se calcula al final por diferencia con los excluidos
 
                 picks.append({
-                    "cod_bar":       barcodes_13.get(cod_art),   # EAN-13 (unidad)
-                    "cod_bar_bulto": barcodes_14.get(cod_art),   # EAN-14 (bulto cerrado)
+                    "cod_bar":       barcodes_13.get(cod_art),
+                    "cod_bar_bulto": barcodes_14.get(cod_art),
                     "cod_art":       cod_art,
                     "descrip":       descrip_limpia,
-                    "nombre":        nombre_cliente,
+                    "nombre":        nombre_cliente,   # OBSERVACION o CTE como fallback
+                    "nombre_obs":    nombre_obs_limpio, # solo OBSERVACION, nunca CTE
                     "cliente":       cod_cliente,
-                    "localidad":     localidad,
+                    "localidad":     localidad,        # del sufijo en OBSERVACION (no DIR)
                     "uni":           uni,
                     "bul":           bul,
                     "uxb":           uxb,
                 })
 
-            # Total real con IVA = total_orden_con_iva − excluidos_con_iva
-            # Los precios de ítems excluidos se obtienen de mWTARep (precio catálogo × factor IVA)
-            # Esto replica exactamente: importe_total + IVA - heladera_c_iva
+            # Convertir excluidos a con-IVA proporcionalmente:
+            # excluidos_con_iva = excluidos_sin_iva × (total_con_iva / total_sin_iva)
+            # Así nunca puede dar negativo: los excluidos son parte del total,
+            # por lo que excluidos_sin_iva ≤ total_sin_iva siempre.
+            if total_orden_sin_iva > 0 and importe_excluidos_sin_iva > 0:
+                iva_ratio = total_orden_con_iva / total_orden_sin_iva
+                importe_excluidos_con_iva = importe_excluidos_sin_iva * iva_ratio
+            else:
+                importe_excluidos_con_iva = 0.0
             importe_trans_con_iva = total_orden_con_iva - importe_excluidos_con_iva
-            totales[nombre_cliente] = totales.get(nombre_cliente, 0.0) + importe_trans_con_iva
+            totales[cod_cliente] = totales.get(cod_cliente, 0.0) + importe_trans_con_iva
 
         conn.close()
     finally:
@@ -345,6 +353,12 @@ async def importar_semana_diarco(
     with get_db() as cur:
         zonas_diarco = set(zonas_existentes)
 
+        # Mapa de clientes DIARCO registrados: cod → {nombre, localidad}
+        cur.execute(
+            "SELECT id_yaguar, nombre, localidad FROM clientes_yaguar WHERE id_yaguar IS NOT NULL AND mayorista = 'diarco'"
+        )
+        clientes_diarco = {str(r["id_yaguar"]): r for r in cur.fetchall()}
+
         # Crear o reemplazar la semana
         cur.execute(
             """
@@ -359,7 +373,24 @@ async def importar_semana_diarco(
         # Borrar picks previos de esta semana
         cur.execute("DELETE FROM pick WHERE semana = %s", (nombre,))
 
-        # Agregar zonas nuevas que no existan en DIARCO
+        # Resolver nombre y localidad por cliente
+        # La localidad del DB de DIARCO es incorrecta — solo se usa la que ingresó el admin.
+        sin_datos: dict = {}  # {cod: nombre_observacion} — clientes sin nombre en nuestra DB
+        for p in all_picks:
+            cod = str(p["cliente"]) if p["cliente"] else ""
+            info = clientes_diarco.get(cod)
+            if info and info["nombre"]:
+                p["nombre"] = info["nombre"]
+                p["localidad"] = info["localidad"]  # localidad ingresada por admin (correcta)
+            else:
+                # Cliente sin registrar: usar OBSERVACION como nombre temporal.
+                # Localidad = NULL hasta que el admin la asigne (la del DIARCO es incorrecta).
+                p["nombre"] = p["nombre_obs"]
+                p["localidad"] = None
+                if cod and cod not in sin_datos:
+                    sin_datos[cod] = p["nombre_obs"]
+
+        # Agregar zonas nuevas que no existan
         localidades_nuevas = {
             p["localidad"] for p in all_picks
             if p["localidad"] and p["localidad"] not in zonas_diarco
@@ -373,7 +404,8 @@ async def importar_semana_diarco(
         inserted = 0
         for p in all_picks:
             uni = p["uni"]
-            importe_total = totales_por_cliente.get(p["nombre"], 0.0)
+            cod = str(p["cliente"]) if p["cliente"] else ""
+            importe_total = totales_por_cliente.get(cod, 0.0)
             cur.execute(
                 """
                 INSERT INTO pick
@@ -399,11 +431,14 @@ async def importar_semana_diarco(
             )
             inserted += 1
 
+    clientes_sin_datos = [{"id": cod, "nombre": obs} for cod, obs in sin_datos.items()]
+
     return {
         "picks_importados": inserted,
         "semana": nombre,
         "mayorista": MAYORISTA,
         "clientes": len(totales_por_cliente),
+        "clientes_sin_datos": clientes_sin_datos,
     }
 
 

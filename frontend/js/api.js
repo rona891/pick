@@ -86,6 +86,10 @@ const api = {
   createCliente: (data) => request('POST', `/api/${getMayorista()}/clientes/`, data),
   updateCliente: (id, data) => request('PUT', `/api/${getMayorista()}/clientes/${id}`, data),
   deleteCliente: (id) => request('DELETE', `/api/${getMayorista()}/clientes/${id}`),
+  getVendedoresYaguar: () => request('GET', `/api/${getMayorista()}/clientes/vendedores`),
+  getSinRegistrar: () => request('GET', `/api/${getMayorista()}/clientes/sin-registrar`),
+  getCodigoLibreYaguar: () => request('GET', '/api/yaguar/clientes/codigo-libre'),
+  marcarNoApto: (codigo) => request('PUT', '/api/yaguar/clientes/marcar-no-apto', { codigo }),
 
   // Admin
   verifyAdmin: (password) => request('POST', '/api/admin/verify', { password }),

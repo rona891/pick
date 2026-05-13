@@ -123,6 +123,37 @@ async def lifespan(app: FastAPI):
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_pick_semana ON pick(semana)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_clientes_yaguar_id_yaguar ON clientes_yaguar(id_yaguar)")
+        # Estado de códigos Yaguar (ocupado/libre/no_apto según últimas 10 semanas)
+        cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS estado VARCHAR")
+        cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS flete NUMERIC")
+        # Marcar códigos conocidos como no aptos para factura B
+        cur.execute("""
+            UPDATE clientes_yaguar SET estado = 'no_apto'
+            WHERE mayorista = 'yaguar'
+              AND nombre IN ('NO ASIGNAR ES MONOTRIBUBTO', 'NO SE UTILIZA', 'NO ASIGNAR ES MONOTRIBUTO')
+        """)
+        # Unique constraint en id_yaguar — primero eliminar duplicados (queda el de mayor id)
+        cur.execute("""
+            DELETE FROM clientes_yaguar
+            WHERE id_yaguar IS NOT NULL
+              AND id NOT IN (
+                SELECT MAX(id) FROM clientes_yaguar
+                WHERE id_yaguar IS NOT NULL
+                GROUP BY id_yaguar
+              )
+        """)
+        cur.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'clientes_yaguar_id_yaguar_key'
+                ) THEN
+                    ALTER TABLE clientes_yaguar
+                    ADD CONSTRAINT clientes_yaguar_id_yaguar_key UNIQUE (id_yaguar);
+                END IF;
+            END $$;
+        """)
     yield
 
 

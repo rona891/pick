@@ -8,7 +8,7 @@ let soloPendientes = false;
 let wakeLock = null;
 let resumenData = [];
 let filtroActivo = 'todos';
-let sortByImporte = false;
+const sortByImporte = true;
 let descripTimer = null;
 let cameras = [];
 let currentCameraIndex = 0;
@@ -268,6 +268,14 @@ async function searchBarcode(codBar) {
     const todosEntregados = picks.length > 0 && picks.every(p => (p.estado || '').startsWith('completado'));
 
     if (todosEntregados) {
+      // Ocultar y resetear el botón solo-pendientes — el banner tiene su propio toggle
+      const spBtn = document.getElementById('solo-pendientes-btn');
+      spBtn.classList.add('hidden');
+      if (soloPendientes) {
+        soloPendientes = false;
+        spBtn.classList.remove('active');
+        spBtn.textContent = 'Solo pendientes';
+      }
       results.innerHTML = `
         <div class="entregado-banner">
           <span>✓ Este producto ya fue entregado a todos los clientes</span>
@@ -282,10 +290,12 @@ async function searchBarcode(codBar) {
         this.textContent = isHidden ? 'Ver items' : 'Ocultar items';
       });
     } else {
+      document.getElementById('solo-pendientes-btn').classList.remove('hidden');
       renderPicks(picks);
       aplicarFiltroPendientes(results);
     }
   } catch (err) {
+    document.getElementById('solo-pendientes-btn').classList.remove('hidden');
     const noEncontrado = err.message.includes('No se encontraron picks');
     results.innerHTML = `<p class="error-msg">${noEncontrado ? 'Producto no encontrado' : err.message}</p>`;
   }
@@ -439,7 +449,7 @@ function renderControls(card, cantidad, isCompleted) {
   if (isCompleted) {
     ctrl.innerHTML = `<button class="btn-undo">Desmarcar</button>`;
     ctrl.querySelector('.btn-undo').addEventListener('click', async () => {
-      if (!confirm('¿Desmarcar este pick y volver a 0?')) return;
+      if (!await confirmar('¿Desmarcar este pick y volver a 0?', 'Sí, desmarcar')) return;
       await saveQuantity(id, 0, card);
     });
   } else {
@@ -814,11 +824,6 @@ document.querySelectorAll('.filter-btn[data-filter]').forEach((btn) => {
   });
 });
 
-document.getElementById('sort-importe-btn').addEventListener('click', () => {
-  sortByImporte = !sortByImporte;
-  document.getElementById('sort-importe-btn').classList.toggle('active', sortByImporte);
-  renderResumen(document.getElementById('clientes-search').value.trim().toLowerCase());
-});
 
 document.getElementById('clientes-search').addEventListener('input', (e) => {
   renderResumen(e.target.value.trim().toLowerCase());
@@ -939,12 +944,7 @@ function initAdmin() {
     document.getElementById('admin-lock').classList.add('hidden');
     document.getElementById('admin-panel').classList.remove('hidden');
 
-    // En DIARCO los clientes se importan desde el .db, no se gestionan manualmente
     const esDiarco = getMayorista() === 'diarco';
-    const btnClientes = document.querySelector('.admin-tab-btn[data-admin-tab="clientes"]');
-    const panelClientes = document.querySelector('.admin-tab-panel[data-admin-panel="clientes"]');
-    if (btnClientes) btnClientes.classList.toggle('hidden', esDiarco);
-    if (panelClientes) panelClientes.classList.toggle('hidden', esDiarco);
 
     if (esDiarco) {
       // Activar la primera tab visible (Semanas)
@@ -956,6 +956,7 @@ function initAdmin() {
         const target = firstBtn.dataset.adminTab;
         document.querySelector(`.admin-tab-panel[data-admin-panel="${target}"]`)?.classList.remove('hidden');
         if (target === 'nueva-semana') loadSemanasAdmin();
+        if (target === 'clientes') loadClientes();
       }
     } else {
       loadClientes();
@@ -983,7 +984,49 @@ document.getElementById('admin-unlock-form').addEventListener('submit', async (e
   }
 });
 
-document.getElementById('btn-nuevo-cliente').addEventListener('click', () => openClienteForm(null));
+async function loadSinRegistrar() {
+  const sec = document.getElementById('sin-registrar-section');
+  if (!sec) return;
+  try {
+    const pendientes = await api.getSinRegistrar();
+    if (!pendientes.length) { sec.innerHTML = ''; return; }
+    const esc = (s) => (s || '').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+    sec.innerHTML = `
+      <div class="sin-reg-wrap">
+        <div class="admin-section-title sin-reg-title">
+          Sin registrar <span class="sin-reg-count">${pendientes.length}</span>
+        </div>
+        <p class="admin-tab-desc">Estos clientes aparecieron en picks importados pero no tienen datos completos. Hacé clic en "Registrar" para cargarlos.</p>
+        <div class="table-wrap" style="margin-bottom:0">
+          <table class="clientes-table">
+            <thead><tr><th>Código</th><th>Nombre en el pick</th><th></th></tr></thead>
+            <tbody>${pendientes.map((p) => `
+              <tr onclick="registrarClientePendiente('${esc(p.id)}','${esc(p.nombre_obs)}')">
+                <td class="td-full">${p.id}</td>
+                <td class="td-full">${p.nombre_obs || '—'}</td>
+                <td onclick="event.stopPropagation()"><div class="td-actions">
+                  <button class="btn-edit" onclick="registrarClientePendiente('${esc(p.id)}','${esc(p.nombre_obs)}')">Registrar</button>
+                </div></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div class="admin-divider"></div>
+      </div>`;
+  } catch { sec.innerHTML = ''; }
+}
+
+function registrarClientePendiente(codigo, nombreObs) {
+  openClienteForm(null, codigo, nombreObs);
+}
+
+document.getElementById('btn-nuevo-cliente').addEventListener('click', () => {
+  if (getMayorista() === 'yaguar') {
+    abrirVerificacionCodigo();
+  } else {
+    openClienteForm(null);
+  }
+});
 
 // ── Admin búsqueda de clientes ─────────────────────────────────────────────
 document.getElementById('admin-clientes-search').addEventListener('input', (e) => {
@@ -994,23 +1037,22 @@ document.getElementById('admin-clientes-search').addEventListener('input', (e) =
 });
 
 async function loadClientes() {
+  const m = getMayorista();
+  const esYaguar = m === 'yaguar';
+  document.getElementById('th-codigo-yaguar').style.display = esYaguar ? '' : 'none';
+  document.getElementById('th-flete-yaguar').style.display = esYaguar ? '' : 'none';
+  document.getElementById('btn-exportar-clientes').classList.toggle('hidden', !esYaguar);
+  const colspan = esYaguar ? 8 : 6;
   const tbody = document.getElementById('clientes-tbody');
-  tbody.innerHTML = '<tr><td colspan="6" class="loading">Cargando...</td></tr>';
+  tbody.innerHTML = `<tr><td colspan="${colspan}" class="loading">Cargando...</td></tr>`;
   try {
     const clientes = await api.getClientes();
-    tbody.innerHTML = clientes.map((c) => `
-      <tr data-id="${c.id}">
-        <td>${c.nombre ?? ''}</td>
-        <td>${c.localidad ?? ''}</td>
-        <td>${c.telefono ?? ''}</td>
-        <td>${c.contacto ?? ''}</td>
-        <td>${c.vendedor ?? ''}</td>
-        <td class="td-actions">
-          <button class="btn-edit" onclick="openClienteForm(${c.id})">Editar</button>
-          <button class="btn-del" onclick="deleteCliente(${c.id})">Eliminar</button>
-        </td>
-      </tr>
-    `).join('');
+    const dn = 'display:none';
+    tbody.innerHTML = clientes.map((c) => {
+      const flete = c.flete != null ? (Math.round(c.flete * 10000) / 100) + '%' : '';
+      const yHide = esYaguar ? '' : dn;
+      return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})"><td class="td-full" style="${yHide}">${c.id_yaguar ?? ''}</td><td class="td-full">${c.nombre ?? ''}</td><td>${c.localidad ?? ''}</td><td>${c.telefono ?? ''}</td><td>${c.contacto ?? ''}</td><td>${c.vendedor ?? ''}</td><td style="${yHide}">${flete}</td><td onclick="event.stopPropagation()"><div class="td-actions"><button class="btn-edit" onclick="openClienteForm(${c.id})">Editar</button><button class="btn-del" onclick="deleteCliente(${c.id})">Eliminar</button></div></td></tr>`;
+    }).join('');
     // Reaplicar filtro de búsqueda si hay texto
     const q = document.getElementById('admin-clientes-search').value.toLowerCase();
     if (q) {
@@ -1019,18 +1061,37 @@ async function loadClientes() {
       });
     }
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="6" class="error-msg">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${colspan}" class="error-msg">${err.message}</td></tr>`;
   }
+  loadSinRegistrar();
 }
 
-async function openClienteForm(id) {
+document.getElementById('btn-exportar-clientes').addEventListener('click', () => {
+  window.location.href = '/api/yaguar/export/clientes';
+});
+
+async function openClienteForm(id, codigoPreverificado = null, nombrePre = null) {
   editingClienteId = id;
   document.getElementById('modal-title').textContent = id ? 'Editar cliente' : 'Nuevo cliente';
 
+  const esYaguar = getMayorista() === 'yaguar';
+  const idInput = document.getElementById('cf-id_yaguar');
+
+  // Mostrar campo ID para ambos mayoristas con label correspondiente
+  document.getElementById('cf-id-yaguar-wrap').style.display = '';
+  document.getElementById('cf-id-label').textContent = esYaguar ? 'Código Yaguar' : 'Código DIARCO';
+  document.getElementById('cf-flete-wrap').style.display = esYaguar ? '' : 'none';
+
+  // Yaguar: readonly (auto-asignado). DIARCO: editable manualmente.
+  idInput.readOnly = esYaguar;
+  idInput.value = '';
+  idInput.placeholder = esYaguar ? '' : 'Ingresá el código DIARCO';
+
   const fields = ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'];
   fields.forEach((f) => { document.getElementById(`cf-${f}`).value = ''; });
+  document.getElementById('cf-flete').value = '';
+  if (nombrePre) document.getElementById('cf-nombre').value = nombrePre;
 
-  // Poblar dropdown de zonas
   const zonas = await api.getZonas().catch(() => []);
   const sel = document.getElementById('cf-localidad');
   sel.innerHTML = '<option value="">— Seleccioná una zona —</option>' +
@@ -1041,8 +1102,14 @@ async function openClienteForm(id) {
       const c = list.find((x) => x.id === id);
       if (c) {
         fields.forEach((f) => { document.getElementById(`cf-${f}`).value = c[f] ?? ''; });
+        idInput.value = c.id_yaguar ?? '';
+        document.getElementById('cf-flete').value = c.flete ?? '';
       }
     });
+  } else if (codigoPreverificado) {
+    idInput.value = codigoPreverificado;
+    // Si viene de sin-registrar, el código ya es conocido → readonly
+    if (nombrePre) idInput.readOnly = true;
   }
 
   document.getElementById('cliente-modal').classList.remove('hidden');
@@ -1058,9 +1125,17 @@ document.getElementById('cliente-form').addEventListener('submit', async (e) => 
   ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'].forEach((f) => {
     data[f] = document.getElementById(`cf-${f}`).value.trim() || null;
   });
+  data.id_yaguar = document.getElementById('cf-id_yaguar').value.trim() || null;
+  const fleteVal = document.getElementById('cf-flete').value.trim();
+  data.flete = fleteVal !== '' ? parseFloat(fleteVal) : null;
 
   if (!data.localidad) { showToast('Seleccioná una zona', 'error'); return; }
   if (!data.vendedor) { showToast('Ingresá el vendedor', 'error'); return; }
+
+  if (editingClienteId) {
+    const ok = await confirmar('¿Confirmás los cambios en este cliente?');
+    if (!ok) return;
+  }
 
   try {
     if (editingClienteId) {
@@ -1078,7 +1153,7 @@ document.getElementById('cliente-form').addEventListener('submit', async (e) => 
 });
 
 async function deleteCliente(id) {
-  if (!confirm('¿Eliminar este cliente?')) return;
+  if (!await confirmar('¿Eliminar este cliente?', 'Sí, eliminar')) return;
   try {
     await api.deleteCliente(id);
     showToast('Cliente eliminado', 'info');
@@ -1087,6 +1162,149 @@ async function deleteCliente(id) {
     showToast(err.message, 'error');
   }
 }
+
+// ── Modal: clientes faltantes post-import ──────────────────────────────────
+let _cfmPendientes = [];
+let _cfmNombres = {};   // {id: nombre_observacion} para pre-rellenar
+let _cfmEsYaguar = true;
+let _cfmIdx = 0;
+
+async function abrirModalClientesFaltantes(ids, nombres = {}, esYaguar = true) {
+  _cfmPendientes = ids;
+  _cfmNombres = nombres;
+  _cfmEsYaguar = esYaguar;
+  _cfmIdx = 0;
+  await _cfmMostrar();
+}
+
+async function _cfmMostrar() {
+  if (_cfmIdx >= _cfmPendientes.length) {
+    document.getElementById('clientes-faltantes-modal').classList.add('hidden');
+    loadClientes();
+    return;
+  }
+  const id = _cfmPendientes[_cfmIdx];
+  const total = _cfmPendientes.length;
+  document.getElementById('cfm-id_yaguar').value = id;
+  document.getElementById('cfm-progreso').textContent = `${_cfmIdx + 1} de ${total}`;
+
+  // Alerta de monotributo solo para Yaguar
+  document.getElementById('cfm-alerta').classList.toggle('hidden', !_cfmEsYaguar);
+
+  // Pre-rellenar nombre desde OBSERVACION si está disponible
+  document.getElementById('cfm-nombre').value = _cfmNombres[id] || '';
+  ['direccion', 'telefono', 'contacto'].forEach((f) => {
+    document.getElementById(`cfm-${f}`).value = '';
+  });
+
+  const [zonas, vendedores] = await Promise.all([
+    api.getZonas().catch(() => []),
+    api.getVendedoresYaguar().catch(() => []),
+  ]);
+
+  const selZona = document.getElementById('cfm-localidad');
+  selZona.innerHTML = '<option value="">— Seleccioná una zona —</option>' +
+    zonas.map((z) => `<option value="${z.nombre}">${z.nombre}</option>`).join('');
+
+  const selVend = document.getElementById('cfm-vendedor');
+  selVend.innerHTML = '<option value="">— Seleccioná un vendedor —</option>' +
+    vendedores.map((v) => `<option value="${v}">${v}</option>`).join('');
+
+  document.getElementById('clientes-faltantes-modal').classList.remove('hidden');
+}
+
+document.getElementById('cfm-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const data = { id_yaguar: document.getElementById('cfm-id_yaguar').value };
+  ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'].forEach((f) => {
+    data[f] = document.getElementById(`cfm-${f}`).value.trim() || null;
+  });
+  if (!data.nombre) { showToast('Ingresá el nombre', 'error'); return; }
+  try {
+    await api.createCliente(data);
+    showToast('Cliente guardado', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+    return;
+  }
+  _cfmIdx++;
+  await _cfmMostrar();
+});
+
+document.getElementById('cfm-skip').addEventListener('click', async () => {
+  _cfmIdx++;
+  await _cfmMostrar();
+});
+
+document.getElementById('cfm-close').addEventListener('click', () => {
+  document.getElementById('clientes-faltantes-modal').classList.add('hidden');
+  loadClientes();
+});
+
+// ── Modal: verificar código Yaguar antes de crear cliente ─────────────────
+let _codigoPendienteVerif = null;
+
+async function abrirVerificacionCodigo() {
+  _codigoPendienteVerif = null;
+  const display = document.getElementById('verify-codigo-display');
+  const btnConfirmar = document.getElementById('verify-confirmar');
+  const btnNoApto = document.getElementById('verify-no-apto');
+  display.textContent = 'Buscando...';
+  btnConfirmar.disabled = true;
+  btnNoApto.disabled = true;
+  document.getElementById('verify-codigo-modal').classList.remove('hidden');
+  try {
+    const res = await api.getCodigoLibreYaguar();
+    _codigoPendienteVerif = res.codigo;
+    display.textContent = res.codigo;
+    btnConfirmar.disabled = false;
+    btnNoApto.disabled = false;
+  } catch {
+    display.textContent = 'Sin códigos disponibles';
+    showToast('No hay códigos libres disponibles', 'error');
+  }
+}
+
+document.getElementById('verify-close').addEventListener('click', () => {
+  document.getElementById('verify-codigo-modal').classList.add('hidden');
+});
+
+document.getElementById('verify-no-apto').addEventListener('click', async () => {
+  if (!_codigoPendienteVerif) return;
+  const display = document.getElementById('verify-codigo-display');
+  const btnConfirmar = document.getElementById('verify-confirmar');
+  const btnNoApto = document.getElementById('verify-no-apto');
+  btnNoApto.disabled = true;
+  btnConfirmar.disabled = true;
+  const anterior = _codigoPendienteVerif;
+  display.textContent = 'Marcando...';
+  try {
+    const res = await api.marcarNoApto(anterior);
+    showToast(`Código ${anterior} descartado`, 'info');
+    if (res.nuevo_codigo) {
+      _codigoPendienteVerif = res.nuevo_codigo;
+      display.textContent = res.nuevo_codigo;
+      btnNoApto.disabled = false;
+      btnConfirmar.disabled = false;
+    } else {
+      display.textContent = 'Sin códigos disponibles';
+      showToast('No quedan más códigos libres', 'error');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+    display.textContent = anterior;
+    _codigoPendienteVerif = anterior;
+    btnNoApto.disabled = false;
+    btnConfirmar.disabled = false;
+  }
+});
+
+document.getElementById('verify-confirmar').addEventListener('click', () => {
+  if (!_codigoPendienteVerif) return;
+  const codigo = _codigoPendienteVerif;
+  document.getElementById('verify-codigo-modal').classList.add('hidden');
+  openClienteForm(null, codigo);
+});
 
 // ── Admin: Semanas ─────────────────────────────────────────────────────────
 async function loadSemanasAdmin() {
@@ -1121,7 +1339,7 @@ async function loadSemanasAdmin() {
 }
 
 async function deleteSemana(id, nombre) {
-  if (!confirm(`¿Eliminar "${nombre}" del selector?\n\nLos picks quedan guardados para análisis futuro.`)) return;
+  if (!await confirmar(`¿Eliminar "${nombre}" del selector? Los picks quedan guardados para análisis futuro.`, 'Sí, eliminar')) return;
   try {
     await api.deleteSemana(id);
     showToast(`Semana ${nombre} eliminada`, 'info');
@@ -1183,7 +1401,7 @@ async function toggleRol(id, rolActual, checkbox) {
 }
 
 async function deleteUser(id) {
-  if (!confirm('¿Eliminar este usuario?')) return;
+  if (!await confirmar('¿Eliminar este usuario?', 'Sí, eliminar')) return;
   try {
     await api.deleteUser(id);
     showToast('Usuario eliminado', 'info');
@@ -1269,9 +1487,10 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
         <div class="import-result-title warn">
           ${res.picks_importados} picks importados — ${res.clientes_no_encontrados.length} cliente${res.clientes_no_encontrados.length > 1 ? 's' : ''} sin datos
         </div>
-        Los siguientes IDs no están en la tabla de clientes. Andá a Admin → Clientes para agregarlos:
+        Los siguientes IDs no están en la tabla de clientes:
         <div class="import-missing-list">${tags}</div>
       `;
+      abrirModalClientesFaltantes(res.clientes_no_encontrados, {}, true);
     }
     resultPanel.classList.remove('hidden');
   } catch (err) {
@@ -1329,11 +1548,27 @@ document.getElementById('btn-importar-diarco').addEventListener('click', async (
     await loadSemanas();
     loadStats();
     loadSemanasAdmin();
-    resultPanel.className = 'import-result result-ok';
-    resultPanel.innerHTML = `
-      <div class="import-result-title ok">Importación exitosa</div>
-      ${res.picks_importados} picks cargados para <strong>${res.semana}</strong> — ${res.clientes} clientes.
-    `;
+    const sinDatos = res.clientes_sin_datos || [];
+    if (sinDatos.length > 0) {
+      const tags = sinDatos.map((c) => `<span class="import-missing-tag">${c.id}</span>`).join('');
+      resultPanel.className = 'import-result result-warn';
+      resultPanel.innerHTML = `
+        <div class="import-result-title warn">
+          ${res.picks_importados} picks importados — ${sinDatos.length} cliente${sinDatos.length > 1 ? 's' : ''} sin datos
+        </div>
+        Los siguientes IDs no tienen nombre asignado:
+        <div class="import-missing-list">${tags}</div>
+      `;
+      const ids = sinDatos.map((c) => c.id);
+      const nombres = Object.fromEntries(sinDatos.map((c) => [c.id, c.nombre]));
+      abrirModalClientesFaltantes(ids, nombres, false);
+    } else {
+      resultPanel.className = 'import-result result-ok';
+      resultPanel.innerHTML = `
+        <div class="import-result-title ok">Importación exitosa</div>
+        ${res.picks_importados} picks cargados para <strong>${res.semana}</strong> — ${res.clientes} clientes.
+      `;
+    }
     resultPanel.classList.remove('hidden');
   } catch (err) {
     resultPanel.className = 'import-result result-warn';
@@ -1532,12 +1767,13 @@ document.getElementById('nueva-zona-form').addEventListener('submit', async (e) 
 });
 
 // ── Modal de confirmación ──────────────────────────────────────────────────
-function confirmar(msg) {
+function confirmar(msg, btnLabel = 'Sí, confirmar') {
   return new Promise((resolve) => {
     const overlay = document.getElementById('confirm-modal');
     document.getElementById('confirm-msg').textContent = msg;
     overlay.classList.remove('hidden');
     const ok = document.getElementById('confirm-ok');
+    ok.textContent = btnLabel;
     const cancel = document.getElementById('confirm-cancel');
     function cleanup(result) {
       overlay.classList.add('hidden');

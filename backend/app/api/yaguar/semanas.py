@@ -134,10 +134,12 @@ async def importar_semana(
         for r in all_rows:
             cliente_id = str(r["cliente_id"])
             info = clientes.get(cliente_id)
-            nombre_cliente = info["nombre"] if info else cliente_id
+            # Si el código existe pero es libre (sin nombre), tratar igual que no encontrado
+            tiene_nombre = info and info["nombre"]
+            nombre_cliente = info["nombre"] if tiene_nombre else cliente_id
             localidad = info["localidad"] if info else None
 
-            if not info:
+            if not tiene_nombre:
                 no_encontrados.add(cliente_id)
 
             uni = int(r["uni"] or 0)
@@ -167,6 +169,35 @@ async def importar_semana(
                 ),
             )
             inserted += 1
+
+    # Actualizar estado ocupado/libre.
+    # Solo se tocan códigos que alguna vez aparecieron en picks
+    # (los libres manuales y clientes nuevos sin picks no se modifican)
+    with get_db() as cur:
+        cur.execute("""
+            WITH ultimas_semanas AS (
+                SELECT nombre FROM semanas
+                WHERE mayorista = 'yaguar'
+                ORDER BY created_at DESC
+                LIMIT 10
+            ),
+            codigos_activos AS (
+                SELECT DISTINCT cliente FROM pick
+                WHERE semana IN (SELECT nombre FROM ultimas_semanas)
+                  AND mayorista = 'yaguar' AND cliente IS NOT NULL
+            ),
+            codigos_con_historial AS (
+                SELECT DISTINCT cliente FROM pick
+                WHERE mayorista = 'yaguar' AND cliente IS NOT NULL
+            )
+            UPDATE clientes_yaguar
+            SET estado = CASE
+                WHEN id_yaguar IN (SELECT cliente FROM codigos_activos) THEN 'ocupado'
+                ELSE 'libre'
+            END
+            WHERE id_yaguar IS NOT NULL
+              AND id_yaguar IN (SELECT cliente FROM codigos_con_historial)
+        """)
 
     return {
         "picks_importados": inserted,
