@@ -101,13 +101,15 @@ def list_users():
 
 @router.post("/users", response_model=UserOut, status_code=201)
 def create_user(data: UserCreate):
+    if data.rol not in ("operario", "admin", "vendedor"):
+        raise HTTPException(400, "Rol inválido")
     with get_db() as cur:
         cur.execute("SELECT id FROM users WHERE username = %s", (data.username,))
         if cur.fetchone():
             raise HTTPException(status_code=400, detail="Usuario ya registrado")
         cur.execute(
-            "INSERT INTO users (username, password_hash) VALUES (%s, %s) RETURNING id, username, rol, created_at",
-            (data.username, hash_password(data.password)),
+            "INSERT INTO users (username, password_hash, rol) VALUES (%s, %s, %s) RETURNING id, username, rol, acceso_sobrantes, created_at",
+            (data.username, hash_password(data.password), data.rol),
         )
         return dict(cur.fetchone())
 

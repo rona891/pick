@@ -1449,8 +1449,9 @@ document.getElementById('nuevo-usuario-form').addEventListener('submit', async (
   e.preventDefault();
   const username = document.getElementById('nu-email').value.trim();
   const password = document.getElementById('nu-password').value;
+  const rol = document.getElementById('nu-rol').value;
   try {
-    await api.createUser(username, password);
+    await api.createUser(username, password, rol);
     showToast(`Usuario ${username} creado`, 'success');
     document.getElementById('nuevo-usuario-form').reset();
     loadUsers();

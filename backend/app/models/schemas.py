@@ -85,6 +85,7 @@ class AdminVerify(BaseModel):
 class UserCreate(BaseModel):
     username: str
     password: str
+    rol: str = 'operario'
 
 
 class UserUpdate(BaseModel):

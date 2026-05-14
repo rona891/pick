@@ -115,7 +115,7 @@ const api = {
 
   // Usuarios (admin)
   getUsers: () => request('GET', '/api/auth/users'),
-  createUser: (username, password) => request('POST', '/api/auth/users', { username, password }),
+  createUser: (username, password, rol = 'operario') => request('POST', '/api/auth/users', { username, password, rol }),
   deleteUser: (id) => request('DELETE', `/api/auth/users/${id}`),
   updateRol: (id, rol) => request('PUT', `/api/auth/users/${id}/rol`, { rol }),
   updateSobrantesAcceso: (id, acceso) => request('PUT', `/api/auth/users/${id}/sobrantes`, { acceso }),
