@@ -110,6 +110,15 @@ def _lookup(cod_bar: str, mayorista: str):
     return {"cod_art": None, "descrip": None, "found": False}
 
 
+def _search_descrip(q: str, mayorista: str):
+    with get_db() as cur:
+        cur.execute(
+            "SELECT DISTINCT cod_bar, cod_art, descrip FROM pick WHERE descrip ILIKE %s AND mayorista=%s ORDER BY descrip LIMIT 20",
+            (f"%{q}%", mayorista)
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
 def _export(lista: str, mayorista: str):
     with get_db() as cur:
         cur.execute(
@@ -173,6 +182,9 @@ def yaguar_delete_lista(lista: str): return _delete_lista(lista, "yaguar")
 @router_yaguar.get("/lookup/{cod_bar}")
 def yaguar_lookup(cod_bar: str): return _lookup(cod_bar, "yaguar")
 
+@router_yaguar.get("/search")
+def yaguar_search(q: str): return _search_descrip(q, "yaguar")
+
 @router_yaguar.get("/{lista}/export")
 def yaguar_export(lista: str): return _export(lista, "yaguar")
 
@@ -205,6 +217,9 @@ def diarco_delete_lista(lista: str): return _delete_lista(lista, "diarco")
 
 @router_diarco.get("/lookup/{cod_bar}")
 def diarco_lookup(cod_bar: str): return _lookup(cod_bar, "diarco")
+
+@router_diarco.get("/search")
+def diarco_search(q: str): return _search_descrip(q, "diarco")
 
 @router_diarco.get("/{lista}/export")
 def diarco_export(lista: str): return _export(lista, "diarco")

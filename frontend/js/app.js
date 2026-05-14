@@ -1961,6 +1961,61 @@ document.getElementById('sob-barcode-input').addEventListener('keydown', (e) => 
   if (e.key === 'Enter') { e.preventDefault(); sobBuscar(e.target.value); }
 });
 
+// Búsqueda por descripción
+let _sobDescripTimer = null;
+document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
+  clearTimeout(_sobDescripTimer);
+  const q = e.target.value.trim();
+  const results = document.getElementById('sob-descrip-results');
+  if (q.length < 2) { results.classList.add('hidden'); return; }
+  _sobDescripTimer = setTimeout(async () => {
+    try {
+      const items = await api.sobSearch(q);
+      if (!items.length) { results.classList.add('hidden'); return; }
+      results.innerHTML = items.map(i =>
+        `<div class="descrip-result-item" data-bar="${i.cod_bar || ''}" data-art="${i.cod_art || ''}" data-descrip="${(i.descrip || '').replace(/"/g, '&quot;')}">${i.descrip}</div>`
+      ).join('');
+      results.classList.remove('hidden');
+    } catch { results.classList.add('hidden'); }
+  }, 250);
+});
+
+document.getElementById('sob-descrip-results').addEventListener('click', async (e) => {
+  const item = e.target.closest('.descrip-result-item');
+  if (!item) return;
+  document.getElementById('sob-descrip-results').classList.add('hidden');
+  document.getElementById('sob-descrip-input').value = '';
+  const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
+  if (!lista) { showToast('Creá una lista primero', 'error'); return; }
+  try {
+    const res = await api.sobAddItem(lista, {
+      cod_bar: item.dataset.bar || null,
+      cod_art: item.dataset.art || null,
+      descrip: item.dataset.descrip || null,
+    });
+    if (res.action === 'existing') {
+      _sobItems = await api.sobGetItems(lista);
+      renderSobItems(_sobItems);
+      setTimeout(() => {
+        const el = document.querySelector(`.sob-item[data-id="${res.id}"]`);
+        if (el) { el.classList.add('highlight'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        setTimeout(() => el?.classList.remove('highlight'), 1500);
+      }, 50);
+    } else {
+      _sobItems = await api.sobGetItems(lista);
+      await loadSobListas();
+      renderSobItems(_sobItems);
+      setTimeout(() => document.querySelector('.sob-item')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#sob-descrip-input') && !e.target.closest('#sob-descrip-results')) {
+    document.getElementById('sob-descrip-results')?.classList.add('hidden');
+  }
+});
+
 // Nueva lista
 document.getElementById('sob-nueva-btn').addEventListener('click', async () => {
   const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
