@@ -2,8 +2,8 @@ CREATE TABLE IF NOT EXISTS users (
     id bigserial PRIMARY KEY,
     username varchar UNIQUE NOT NULL,
     password_hash varchar NOT NULL,
-    rol varchar NOT NULL DEFAULT 'operario',
-    created_at timestamptz DEFAULT now()
+    created_at timestamptz DEFAULT now(),
+    rol varchar NOT NULL DEFAULT 'operario'
 );
 
 CREATE TABLE IF NOT EXISTS pick (
@@ -30,8 +30,8 @@ CREATE TABLE IF NOT EXISTS pick (
 CREATE TABLE IF NOT EXISTS semanas (
     id bigserial PRIMARY KEY,
     nombre varchar NOT NULL,
-    mayorista varchar NOT NULL DEFAULT 'yaguar',
     created_at timestamptz DEFAULT now(),
+    mayorista varchar NOT NULL DEFAULT 'yaguar',
     UNIQUE (nombre, mayorista)
 );
 
@@ -46,9 +46,10 @@ CREATE TABLE IF NOT EXISTS repartos (
 CREATE TABLE IF NOT EXISTS zonas (
     id bigserial PRIMARY KEY,
     nombre varchar NOT NULL,
+    al_final boolean DEFAULT false,
+    created_at timestamptz DEFAULT now(),
     reparto varchar,
     mayorista varchar NOT NULL DEFAULT 'yaguar',
-    created_at timestamptz DEFAULT now(),
     UNIQUE (nombre, mayorista)
 );
 
@@ -60,7 +61,9 @@ CREATE TABLE IF NOT EXISTS clientes_yaguar (
     telefono varchar,
     contacto varchar,
     vendedor varchar,
-    mayorista varchar NOT NULL DEFAULT 'yaguar',
     created_at timestamptz DEFAULT now(),
-    id_yaguar varchar
+    id_yaguar varchar,
+    mayorista varchar NOT NULL DEFAULT 'yaguar',
+    estado varchar,
+    flete numeric
 );
