@@ -183,7 +183,15 @@
 
         <!-- Sub-panel: Clientes -->
         <div class="admin-tab-panel" data-admin-panel="clientes">
-          <p class="admin-tab-desc">Acá podés ver todos los clientes de la empresa. Usá el botón <strong>+ Nuevo</strong> para agregar uno, o tocá <strong>Editar</strong> para modificar los datos de uno existente. Cada cliente necesita tener una zona y un vendedor asignado.</p>
+          <div class="info-block">
+            <button class="info-btn">Ayuda</button>
+            <div class="info-content">
+              <p>Acá se gestionan todos los clientes. Cada cliente tiene un <strong>código Yaguar</strong> único, un nombre, una zona y un vendedor asignado.</p>
+              <p>Usá <strong>+ Nuevo</strong> para registrar un cliente nuevo — el sistema asigna automáticamente el próximo código disponible. Tocá cualquier fila para editar los datos de un cliente existente.</p>
+              <p>Si modificás el nombre o la zona de un cliente, todos los picks de ese cliente se actualizan automáticamente.</p>
+              <p>Si aparece una sección <strong>Sin registrar</strong> arriba de la tabla, son clientes que tienen picks importados pero todavía no tienen datos cargados.</p>
+            </div>
+          </div>
           <div class="admin-header">
             <input type="text" id="admin-clientes-search" class="clientes-search-input" placeholder="Buscar cliente..." autocomplete="off" style="flex:1; margin-right:8px" />
             <button id="btn-exportar-clientes" class="btn-secondary hidden" style="margin-right:8px">Exportar</button>
@@ -211,7 +219,10 @@
 
         <!-- Sub-panel: Semanas (el contenido se renderiza dinámicamente según el mayorista activo) -->
         <div class="admin-tab-panel hidden" data-admin-panel="nueva-semana">
-          <p id="semanas-desc" class="admin-tab-desc"></p>
+          <div class="info-block" id="semanas-desc-block">
+            <button class="info-btn">Ayuda</button>
+            <div class="info-content" id="semanas-desc"></div>
+          </div>
 
           <!-- Semanas cargadas -->
           <div class="admin-section-title">Semanas cargadas</div>
@@ -236,9 +247,14 @@
                 <input type="date" id="semana-fecha-hasta" />
               </div>
             </div>
-            <p class="admin-section-desc">
-              Seleccioná los archivos <strong>.db</strong> exportados de la app Yaguar (uno por vendedor).
-            </p>
+            <div class="info-block">
+              <button class="info-btn">Ayuda</button>
+              <div class="info-content">
+                <p>Exportá el archivo desde la app Yaguar: <strong>Menú → Sincronizar → Exportar base de datos</strong>. Cada vendedor tiene su propio archivo.</p>
+                <p>Podés subir varios archivos a la vez — uno por vendedor. El sistema los procesa todos juntos y arma el pick completo de la semana.</p>
+                <p>Si reimportás una semana que ya existe con el mismo nombre, se reemplazan todos sus picks anteriores.</p>
+              </div>
+            </div>
             <input type="file" id="db-file-input" accept=".db" multiple class="hidden" />
             <label for="db-file-input" class="btn-upload">Seleccionar archivos .db</label>
             <div id="upload-file-list" class="upload-file-list"></div>
@@ -248,9 +264,14 @@
           <!-- ── Importar Diarco ───────────────────────────────────────── -->
           <div id="import-diarco" class="hidden">
             <div class="admin-section-title">Importar nueva semana</div>
-            <p class="admin-section-desc" style="margin-bottom:16px">
-              💡 Los importes por cliente que muestra la app <strong>incluyen IVA</strong>, calculados proporcionalmente sobre los artículos pickeables (se excluyen ítems de sistema como heladeras exhibidoras).
-            </p>
+            <div class="info-block" style="margin-bottom:16px">
+              <button class="info-btn">Ayuda</button>
+              <div class="info-content">
+                <p>Los importes que muestra la app <strong>incluyen IVA</strong> y se calculan proporcionalmente sobre los artículos que se pickean.</p>
+                <p>Se excluyen automáticamente los ítems de sistema que no se pickean físicamente, como <strong>heladeras exhibidoras</strong> y artículos sin código numérico.</p>
+                <p>Si reimportás una semana que ya existe con el mismo nombre, se reemplazan todos sus picks anteriores.</p>
+              </div>
+            </div>
             <div class="form-group">
               <label>Nombre del pick</label>
               <input type="text" id="diarco-semana-nombre" placeholder="Ej: DIARCO 06-05-2026" autocomplete="off" />
@@ -265,9 +286,13 @@
                 <input type="date" id="diarco-fecha-hasta" />
               </div>
             </div>
-            <p class="admin-section-desc">
-              Seleccioná el archivo <strong>MobileAssistantBU.db</strong> de la app DIARCO. Podés subir varios si tenés archivos de distintos vendedores.
-            </p>
+            <div class="info-block">
+              <button class="info-btn">Ayuda</button>
+              <div class="info-content">
+                <p>Exportá el archivo desde la app DIARCO: <strong>Menú → Backup → MobileAssistantBU.db</strong>.</p>
+                <p>Podés subir varios archivos si tenés backups de distintos vendedores — el sistema los combina automáticamente.</p>
+              </div>
+            </div>
             <input type="file" id="diarco-file-input" accept=".db" multiple class="hidden" />
             <label for="diarco-file-input" class="btn-upload">Seleccionar MobileAssistantBU.db</label>
             <div id="diarco-upload-list" class="upload-file-list"></div>
@@ -279,7 +304,16 @@
 
         <!-- Sub-panel: Usuarios -->
         <div class="admin-tab-panel hidden" data-admin-panel="usuarios">
-          <p class="admin-tab-desc">Acá podés ver y gestionar quiénes pueden iniciar sesión en la app. Cada operario del depósito debería tener su propio usuario. Usá <strong>Nuevo usuario</strong> para crear uno y el botón <strong>✕</strong> para eliminar uno que ya no se use.</p>
+          <div class="info-block">
+            <button class="info-btn">Ayuda</button>
+            <div class="info-content">
+              <p>Cada persona que usa la app necesita su propio usuario. Hay tres roles:</p>
+              <p><strong>Operario</strong> — solo ve los picks de su turno, no tiene acceso al panel Admin.</p>
+              <p><strong>Admin</strong> — puede importar semanas, gestionar clientes y exportar Excel, pero no puede cambiar roles de otros usuarios.</p>
+              <p><strong>Superadmin</strong> — acceso total, incluyendo cambiar roles. Solo puede haber uno (el usuario ADMIN).</p>
+              <p>Para eliminar un usuario tocá el <strong>✕</strong> en su fila. No se puede eliminar el superadmin ni el único usuario que quede.</p>
+            </div>
+          </div>
           <div class="admin-section-title" style="margin-bottom:16px">Usuarios activos</div>
           <div class="table-wrap" style="margin-bottom:24px">
             <table class="clientes-table">
@@ -311,7 +345,14 @@
 
         <!-- Sub-panel: Zonas -->
         <div class="admin-tab-panel hidden" data-admin-panel="zonas">
-          <p class="admin-tab-desc">Acá configurás las zonas de entrega y los repartos. Los <strong>repartos</strong> agrupan zonas que se entregan en el mismo vehículo — podés cambiar el orden en que aparecen usando las flechas ▲▼. Las <strong>zonas</strong> son las localidades de los clientes; cada una debe estar asignada a un reparto para que los picks se ordenen correctamente.</p>
+          <div class="info-block">
+            <button class="info-btn">Ayuda</button>
+            <div class="info-content">
+              <p>Las <strong>zonas</strong> son las localidades de los clientes (MERLO, VILLA LARCA, etc.). Cada zona debe estar asignada a un reparto para que los picks aparezcan en el orden correcto al pickear.</p>
+              <p>Los <strong>repartos</strong> agrupan zonas que salen en el mismo vehículo (Sur Abajo, Sur Arriba, Merlo, etc.). El orden de los repartos determina cómo se organizan los picks — usá las flechas <strong>▲▼</strong> para cambiarlo.</p>
+              <p>Cuando se importa una semana, las zonas nuevas que aparecen se crean automáticamente. Asignales un reparto acá para que queden ordenadas.</p>
+            </div>
+          </div>
           <div class="admin-section-title" style="margin-bottom:12px">Orden de repartos</div>
           <div id="repartos-orden-list" class="repartos-orden-list" style="margin-bottom:24px"></div>
 
@@ -440,10 +481,10 @@
         <div id="cfm-progreso" class="cfm-progreso"></div>
       </div>
 
-      <!-- Alerta monotributo (solo Yaguar) -->
-      <div id="cfm-alerta" class="cfm-alerta">
-        <span class="cfm-alerta-icon">⚠</span>
-        <span>Verificá en la app Yaguar que este número esté asignado a <strong>Consumidor Final</strong>. Si no lo es, significa que alguien tomó un pedido usando un código que no corresponde a Consumidor Final — en ese caso <strong>no cargues el cliente</strong> y contactate con Yaguar para regularizar la situación.</span>
+      <!-- Aviso cliente no consumidor final -->
+      <div id="cfm-no-cf-aviso" class="cfm-no-cf-aviso hidden">
+        <span>⚠</span>
+        <span>Este cliente no está registrado como Consumidor Final en Yaguar.</span>
       </div>
 
       <form id="cfm-form" class="cfm-body">
@@ -480,27 +521,6 @@
         </div>
       </div>
       <div id="cliente-picks-content" class="cliente-picks-content"></div>
-    </div>
-  </div>
-
-  <!-- ── Modal: verificar código Yaguar antes de crear cliente ─────────────── -->
-  <div id="verify-codigo-modal" class="modal-overlay hidden">
-    <div class="modal verify-modal">
-      <div class="modal-header">
-        <span>Verificar código Yaguar</span>
-        <button id="verify-close" class="modal-close">✕</button>
-      </div>
-      <div class="verify-body">
-        <div class="verify-codigo-wrap">
-          <div class="verify-codigo-label">Código a asignar</div>
-          <div id="verify-codigo-display" class="verify-codigo-num">—</div>
-        </div>
-        <p class="verify-instruccion">Verificá en la app Yaguar que este código esté asignado a <strong>Consumidor Final</strong>. Si no lo es, presioná el botón rojo para descartarlo y elegir otro automáticamente.</p>
-      </div>
-      <div class="verify-actions">
-        <button id="verify-no-apto" class="btn-no-apto">Este cod. NO ES cons. final</button>
-        <button id="verify-confirmar" class="btn-primary">Es Consumidor Final — Continuar</button>
-      </div>
     </div>
   </div>
 

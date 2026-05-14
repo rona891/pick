@@ -226,6 +226,7 @@ async def importar_semana(
         "picks_importados": inserted,
         "semana": nombre,
         "clientes_no_encontrados": sorted(no_encontrados),
+        "no_encontrados_no_cf": sorted(no_encontrados & codigos_no_cf),
         "codigos_marcados_no_apto": marcados_no_apto,
     }
 

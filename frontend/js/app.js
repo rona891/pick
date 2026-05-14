@@ -1020,12 +1020,27 @@ function registrarClientePendiente(codigo, nombreObs) {
   openClienteForm(null, codigo, nombreObs);
 }
 
-document.getElementById('btn-nuevo-cliente').addEventListener('click', () => {
+document.getElementById('btn-nuevo-cliente').addEventListener('click', async () => {
   if (getMayorista() === 'yaguar') {
-    abrirVerificacionCodigo();
+    try {
+      const res = await api.getCodigoLibreYaguar();
+      openClienteForm(null, res.codigo);
+    } catch {
+      showToast('No hay códigos libres disponibles', 'error');
+    }
   } else {
     openClienteForm(null);
   }
+});
+
+// ── Info-btn: toggle de ayuda contextual ──────────────────────────────────
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.info-btn');
+  if (!btn) return;
+  const content = btn.parentElement.querySelector('.info-content');
+  if (!content) return;
+  const visible = content.classList.toggle('visible');
+  btn.classList.toggle('active', visible);
 });
 
 // ── Admin búsqueda de clientes ─────────────────────────────────────────────
@@ -1165,14 +1180,16 @@ async function deleteCliente(id) {
 
 // ── Modal: clientes faltantes post-import ──────────────────────────────────
 let _cfmPendientes = [];
-let _cfmNombres = {};   // {id: nombre_observacion} para pre-rellenar
+let _cfmNombres = {};
 let _cfmEsYaguar = true;
+let _cfmNoCF = new Set();
 let _cfmIdx = 0;
 
-async function abrirModalClientesFaltantes(ids, nombres = {}, esYaguar = true) {
+async function abrirModalClientesFaltantes(ids, nombres = {}, esYaguar = true, noCF = []) {
   _cfmPendientes = ids;
   _cfmNombres = nombres;
   _cfmEsYaguar = esYaguar;
+  _cfmNoCF = new Set(noCF);
   _cfmIdx = 0;
   await _cfmMostrar();
 }
@@ -1188,8 +1205,7 @@ async function _cfmMostrar() {
   document.getElementById('cfm-id_yaguar').value = id;
   document.getElementById('cfm-progreso').textContent = `${_cfmIdx + 1} de ${total}`;
 
-  // Alerta de monotributo solo para Yaguar
-  document.getElementById('cfm-alerta').classList.toggle('hidden', !_cfmEsYaguar);
+  document.getElementById('cfm-no-cf-aviso').classList.toggle('hidden', !_cfmNoCF.has(id));
 
   // Pre-rellenar nombre desde OBSERVACION si está disponible
   document.getElementById('cfm-nombre').value = _cfmNombres[id] || '';
@@ -1241,70 +1257,6 @@ document.getElementById('cfm-close').addEventListener('click', () => {
   loadClientes();
 });
 
-// ── Modal: verificar código Yaguar antes de crear cliente ─────────────────
-let _codigoPendienteVerif = null;
-
-async function abrirVerificacionCodigo() {
-  _codigoPendienteVerif = null;
-  const display = document.getElementById('verify-codigo-display');
-  const btnConfirmar = document.getElementById('verify-confirmar');
-  const btnNoApto = document.getElementById('verify-no-apto');
-  display.textContent = 'Buscando...';
-  btnConfirmar.disabled = true;
-  btnNoApto.disabled = true;
-  document.getElementById('verify-codigo-modal').classList.remove('hidden');
-  try {
-    const res = await api.getCodigoLibreYaguar();
-    _codigoPendienteVerif = res.codigo;
-    display.textContent = res.codigo;
-    btnConfirmar.disabled = false;
-    btnNoApto.disabled = false;
-  } catch {
-    display.textContent = 'Sin códigos disponibles';
-    showToast('No hay códigos libres disponibles', 'error');
-  }
-}
-
-document.getElementById('verify-close').addEventListener('click', () => {
-  document.getElementById('verify-codigo-modal').classList.add('hidden');
-});
-
-document.getElementById('verify-no-apto').addEventListener('click', async () => {
-  if (!_codigoPendienteVerif) return;
-  const display = document.getElementById('verify-codigo-display');
-  const btnConfirmar = document.getElementById('verify-confirmar');
-  const btnNoApto = document.getElementById('verify-no-apto');
-  btnNoApto.disabled = true;
-  btnConfirmar.disabled = true;
-  const anterior = _codigoPendienteVerif;
-  display.textContent = 'Marcando...';
-  try {
-    const res = await api.marcarNoApto(anterior);
-    showToast(`Código ${anterior} descartado`, 'info');
-    if (res.nuevo_codigo) {
-      _codigoPendienteVerif = res.nuevo_codigo;
-      display.textContent = res.nuevo_codigo;
-      btnNoApto.disabled = false;
-      btnConfirmar.disabled = false;
-    } else {
-      display.textContent = 'Sin códigos disponibles';
-      showToast('No quedan más códigos libres', 'error');
-    }
-  } catch (err) {
-    showToast(err.message, 'error');
-    display.textContent = anterior;
-    _codigoPendienteVerif = anterior;
-    btnNoApto.disabled = false;
-    btnConfirmar.disabled = false;
-  }
-});
-
-document.getElementById('verify-confirmar').addEventListener('click', () => {
-  if (!_codigoPendienteVerif) return;
-  const codigo = _codigoPendienteVerif;
-  document.getElementById('verify-codigo-modal').classList.add('hidden');
-  openClienteForm(null, codigo);
-});
 
 // ── Admin: Semanas ─────────────────────────────────────────────────────────
 async function loadSemanasAdmin() {
@@ -1315,8 +1267,8 @@ async function loadSemanasAdmin() {
 
   // Descripción y formulario según mayorista
   document.getElementById('semanas-desc').innerHTML = m === 'diarco'
-    ? 'Acá se cargan los pedidos de DIARCO. Subí el archivo <strong>MobileAssistantBU.db</strong> de la app DIARCO, completá el nombre y las fechas, y presioná <strong>Importar picks</strong>.'
-    : 'Acá se cargan los pedidos de Yaguar. Subí los archivos <strong>.db</strong> exportados de la app Yaguar (uno por vendedor), completá el nombre y las fechas, y presioná <strong>Importar picks</strong>.';
+    ? '<p>Acá se cargan los pedidos de DIARCO. Completá el nombre de la semana, las fechas del pedido, y subí el archivo.</p><p>Si reimportás una semana con el mismo nombre, se reemplazan todos sus picks anteriores.</p>'
+    : '<p>Acá se cargan los pedidos de Yaguar. Completá el nombre de la semana, las fechas del pedido, y subí los archivos.</p><p>Si reimportás una semana con el mismo nombre, se reemplazan todos sus picks anteriores.</p>';
   document.getElementById('import-yaguar').classList.toggle('hidden', m === 'diarco');
   document.getElementById('import-diarco').classList.toggle('hidden', m !== 'diarco');
 
@@ -1490,7 +1442,7 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
         Los siguientes IDs no están en la tabla de clientes:
         <div class="import-missing-list">${tags}</div>
       `;
-      abrirModalClientesFaltantes(res.clientes_no_encontrados, {}, true);
+      abrirModalClientesFaltantes(res.clientes_no_encontrados, {}, true, res.no_encontrados_no_cf || []);
     }
     resultPanel.classList.remove('hidden');
   } catch (err) {
