@@ -107,6 +107,26 @@
 
     <!-- ── Panel: Pick ──────────────────────────────────────────────── -->
     <div class="tab-panel" data-panel="pick">
+
+      <div class="info-block" style="margin: 12px 16px 0">
+        <button class="info-btn">Ayuda</button>
+        <div class="info-content">
+          <p><strong>¿Qué es el picking?</strong> Es separar la mercadería del depósito en bultos para cada cliente. Esta pantalla te muestra todo lo que hay que juntar en el día.</p>
+          <p><strong>¿Cómo busco un artículo?</strong> Hay tres formas:<br>
+          — Escaneás el código de barras con el botón <strong>Escanear</strong> (apuntá la cámara al código del producto)<br>
+          — Escribís el código de barras a mano en la cajita y tocás <strong>Buscar</strong><br>
+          — Escribís parte del nombre del artículo en <strong>"Buscar por descripción..."</strong></p>
+          <p><strong>¿Qué hago con cada tarjeta?</strong> Cada tarjeta es un artículo para un cliente. Arriba dice el nombre del cliente, abajo el artículo. Usá los botones <strong>−</strong> y <strong>+</strong> para registrar cuántas unidades separaste, o tocá el número del medio para escribirlo directo.</p>
+          <p><strong>¿Qué significa el estado?</strong><br>
+          — <strong>Pendiente</strong>: todavía no separaste nada<br>
+          — <strong>Entregado parcial</strong> (tarjeta naranja): separaste menos de lo que pedía el cliente<br>
+          — <strong>Completado</strong>: separaste todo lo que pidió el cliente</p>
+          <p><strong>Botón "Solo pendientes":</strong> filtra la lista para mostrar únicamente los artículos que todavía no fueron tocados. Muy útil cuando ya van varios y querés ver lo que falta.</p>
+          <p><strong>"Recientes":</strong> los últimos artículos que buscaste aparecen como chips para volver a encontrarlos rápido sin tener que escribir de nuevo.</p>
+          <p><strong>La barra de arriba</strong> muestra el % del pick total completado entre todos los operarios.</p>
+        </div>
+      </div>
+
       <form id="search-form">
         <div class="search-row">
           <input type="text" id="barcode-input" placeholder="Código de barras..." autocomplete="off" />
@@ -147,6 +167,23 @@
 
     <!-- ── Panel: Clientes ──────────────────────────────────────────── -->
     <div class="tab-panel hidden" data-panel="clientes">
+
+      <div class="info-block" style="margin: 12px 16px 0">
+        <button class="info-btn">Ayuda</button>
+        <div class="info-content">
+          <p><strong>¿Para qué sirve esta pestaña?</strong> Muestra el resumen del pick agrupado por cliente. En lugar de ver artículo por artículo, acá ves cuánto lleva separado cada cliente de todo su pedido.</p>
+          <p><strong>¿Qué muestra cada fila?</strong> El nombre del cliente, su zona, el importe total del pedido, y una barrita de progreso que indica cuánto del pedido ya está separado.</p>
+          <p><strong>Los filtros de arriba:</strong><br>
+          — <strong>Todos</strong>: muestra todos los clientes de la semana<br>
+          — <strong>Completo</strong>: solo los clientes donde ya está todo separado<br>
+          — <strong>Incompleto</strong>: los clientes donde se separó algo pero no todo (entrega parcial)<br>
+          — <strong>Pendiente</strong>: los clientes donde todavía no se separó nada</p>
+          <p><strong>¿Para qué toco una fila?</strong> Al tocar un cliente se abre un desglose con todos los artículos de ese cliente y cuánto se separó de cada uno. Útil para revisar antes de cerrar el bulto.</p>
+          <p><strong>El buscador</strong> filtra por nombre de cliente. Si no te acordás bien cómo se escribe, con escribir dos o tres letras ya aparece.</p>
+          <p><strong>Los clientes están ordenados por importe</strong>, de mayor a menor. Los más importantes aparecen primero.</p>
+        </div>
+      </div>
+
       <input type="text" id="clientes-search" class="clientes-search-input" placeholder="Buscar cliente..." autocomplete="off" />
       <div class="filter-bar">
         <button class="filter-btn active" data-filter="todos">Todos</button>
