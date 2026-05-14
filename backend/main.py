@@ -14,6 +14,39 @@ from config import settings
 async def lifespan(app: FastAPI):
     init_pool()
     with get_db() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id bigserial PRIMARY KEY,
+                username varchar UNIQUE NOT NULL,
+                password_hash varchar NOT NULL,
+                rol varchar NOT NULL DEFAULT 'operario',
+                created_at timestamptz DEFAULT now()
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS pick (
+                id bigserial PRIMARY KEY,
+                cod_bar varchar, cod_art varchar, descrip varchar,
+                nombre varchar, cliente varchar, localidad varchar,
+                uni integer, bul integer,
+                cantidad_pickeada integer DEFAULT 0,
+                estado varchar, semana varchar,
+                updated_at timestamptz, created_at timestamptz DEFAULT now(),
+                uxb integer DEFAULT 0, importe_total numeric DEFAULT 0,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                cod_bar_bulto varchar
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS clientes_yaguar (
+                id bigserial PRIMARY KEY,
+                nombre varchar, localidad varchar, direccion varchar,
+                telefono varchar, contacto varchar, vendedor varchar,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                created_at timestamptz DEFAULT now(),
+                id_yaguar varchar, estado varchar, flete numeric
+            )
+        """)
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS rol VARCHAR NOT NULL DEFAULT 'operario'")
         # Crear superadmin si no existe ninguno
         cur.execute("SELECT COUNT(*) AS n FROM users WHERE rol = 'superadmin'")

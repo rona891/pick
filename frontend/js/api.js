@@ -1,4 +1,4 @@
-const API_BASE = '';
+const API_BASE = window.PICK_API_BASE || '';
 
 function getToken() {
   return localStorage.getItem('token');
