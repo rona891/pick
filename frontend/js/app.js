@@ -1341,6 +1341,9 @@ async function deleteSemana(id, nombre) {
 }
 
 // ── Admin: Usuarios ────────────────────────────────────────────────────────
+const ROL_COLORS = { superadmin: 'var(--accent)', admin: 'var(--green)', vendedor: '#7eb8ff', operario: 'var(--muted)' };
+const ROL_LABELS = { superadmin: 'Superadmin', admin: 'Admin', vendedor: 'Vendedor', operario: 'Operario' };
+
 async function loadUsers() {
   const tbody = document.getElementById('users-tbody');
   if (!tbody) return;
@@ -1349,38 +1352,65 @@ async function loadUsers() {
     const users = await api.getUsers();
     tbody.innerHTML = users.map((u) => {
       const esSuperadmin = u.rol === 'superadmin';
-      const esAdminUser = u.rol === 'admin';
-      const rolLabel = esSuperadmin ? '<span style="color:var(--accent)">Superadmin</span>'
-                     : esAdminUser  ? '<span style="color:var(--green)">Admin</span>'
-                     : u.rol === 'vendedor' ? '<span style="color:#7eb8ff">Vendedor</span>'
-                     :                '<span style="color:var(--muted)">Operario</span>';
-      const esSuperadminActual = getRol() === 'superadmin';
-      const toggleBtn = (esSuperadmin || !esSuperadminActual) ? '' : `
-        <label class="rol-switch" title="${esAdminUser ? 'Quitar admin' : 'Dar admin'}">
-          <input type="checkbox" ${esAdminUser ? 'checked' : ''} onchange="toggleRol(${u.id}, '${u.rol}', this)">
-          <span class="rol-switch-track"><span class="rol-switch-thumb"></span></span>
-          <span class="rol-switch-label">${esAdminUser ? 'Admin' : 'Op.'}</span>
-        </label>`;
-      const sobToggle = esSuperadmin ? '<span style="color:var(--accent);font-size:11px">Siempre</span>' : `
-        <label class="rol-switch" title="${u.acceso_sobrantes ? 'Quitar acceso' : 'Dar acceso'}">
-          <input type="checkbox" ${u.acceso_sobrantes ? 'checked' : ''} onchange="toggleSobrantes(${u.id}, this)">
-          <span class="rol-switch-track"><span class="rol-switch-thumb"></span></span>
-          <span class="rol-switch-label">${u.acceso_sobrantes ? 'Sí' : 'No'}</span>
-        </label>`;
-      const delBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
+      const rolLabel = `<span style="color:${ROL_COLORS[u.rol] || 'var(--muted)'}">${ROL_LABELS[u.rol] || u.rol}</span>`;
+      const sobLabel = esSuperadmin
+        ? '<span style="color:var(--accent);font-size:11px">Siempre</span>'
+        : `<span style="color:${u.acceso_sobrantes ? 'var(--green)' : 'var(--muted)'}">${u.acceso_sobrantes ? 'Sí' : 'No'}</span>`;
+      const actions = esSuperadmin ? '' : `
+        <button class="btn-edit" onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes})">Editar</button>
+        <button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
       return `
         <tr>
           <td>${u.username}</td>
           <td>${rolLabel}</td>
-          <td>${sobToggle}</td>
+          <td>${sobLabel}</td>
           <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
-          <td class="td-actions">${esSuperadmin ? '' : toggleBtn + delBtn}</td>
+          <td class="td-actions">${actions}</td>
         </tr>`;
     }).join('');
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="5" class="error-msg">${err.message}</td></tr>`;
   }
 }
+
+// ── Modal editar usuario ───────────────────────────────────────────────────
+function openEditUser(id, username, rol, accesoSobrantes) {
+  document.getElementById('edit-user-id').value = id;
+  document.getElementById('edit-username').value = username;
+  document.getElementById('edit-rol').value = rol;
+  document.getElementById('edit-sobrantes').checked = !!accesoSobrantes;
+  // Solo superadmin puede cambiar rol
+  document.getElementById('edit-rol-group').classList.toggle('hidden', getRol() !== 'superadmin');
+  document.getElementById('edit-user-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('edit-username').focus(), 50);
+}
+
+function closeEditUser() {
+  document.getElementById('edit-user-modal').classList.add('hidden');
+}
+
+document.getElementById('edit-user-close').addEventListener('click', closeEditUser);
+document.getElementById('edit-user-cancel').addEventListener('click', closeEditUser);
+
+document.getElementById('edit-user-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = parseInt(document.getElementById('edit-user-id').value);
+  const data = {
+    username: document.getElementById('edit-username').value.trim(),
+    acceso_sobrantes: document.getElementById('edit-sobrantes').checked,
+  };
+  if (getRol() === 'superadmin') {
+    data.rol = document.getElementById('edit-rol').value;
+  }
+  try {
+    await api.updateUser(id, data);
+    showToast('Usuario actualizado', 'success');
+    closeEditUser();
+    loadUsers();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
 
 async function toggleSobrantes(id, checkbox) {
   try {

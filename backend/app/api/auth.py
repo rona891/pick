@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Header
-from app.models.schemas import LoginRequest, LoginResponse, ChangePasswordRequest, ChangeUsernameRequest, UserCreate, UserOut
+from app.models.schemas import LoginRequest, LoginResponse, ChangePasswordRequest, ChangeUsernameRequest, UserCreate, UserOut, UserUpdate
 from app.db.database import get_db
 from app.auth.jwt import verify_password, create_access_token, hash_password, verify_token
 from typing import List
@@ -147,6 +147,52 @@ def delete_user(id: int):
             raise HTTPException(status_code=400, detail="No se puede eliminar el único usuario")
         cur.execute("DELETE FROM users WHERE id = %s", (id,))
     return {"message": "Usuario eliminado"}
+
+
+@router.put("/users/{id}", response_model=UserOut)
+def update_user(id: int, data: UserUpdate, authorization: str = Header(...)):
+    payload = verify_token(authorization)
+    with get_db() as cur:
+        cur.execute("SELECT rol FROM users WHERE id = %s", (payload.get("sub"),))
+        caller = cur.fetchone()
+    if not caller or caller["rol"] not in ("admin", "superadmin"):
+        raise HTTPException(403, "Solo admins pueden editar usuarios")
+    with get_db() as cur:
+        cur.execute("SELECT rol FROM users WHERE id = %s", (id,))
+        target = cur.fetchone()
+    if not target:
+        raise HTTPException(404, "Usuario no encontrado")
+    if target["rol"] == "superadmin":
+        raise HTTPException(403, "No se puede editar al superadmin")
+    # Cambio de rol solo para superadmin
+    if data.rol is not None:
+        if caller["rol"] != "superadmin":
+            raise HTTPException(403, "Solo el superadmin puede cambiar roles")
+        if data.rol not in ("operario", "admin", "vendedor"):
+            raise HTTPException(400, "Rol inválido")
+    updates, values = [], []
+    if data.username is not None:
+        username = data.username.strip()
+        if not username:
+            raise HTTPException(400, "El nombre de usuario no puede estar vacío")
+        updates.append("username = %s"); values.append(username)
+    if data.rol is not None:
+        updates.append("rol = %s"); values.append(data.rol)
+    if data.acceso_sobrantes is not None:
+        updates.append("acceso_sobrantes = %s"); values.append(data.acceso_sobrantes)
+    if not updates:
+        raise HTTPException(400, "Nada que actualizar")
+    with get_db() as cur:
+        if data.username:
+            cur.execute("SELECT id FROM users WHERE username = %s AND id != %s", (data.username.strip(), id))
+            if cur.fetchone():
+                raise HTTPException(400, "Ese nombre de usuario ya está en uso")
+        values.append(id)
+        cur.execute(
+            f"UPDATE users SET {', '.join(updates)} WHERE id = %s RETURNING id, username, rol, acceso_sobrantes, created_at",
+            values
+        )
+        return dict(cur.fetchone())
 
 
 class SobrantesAcceso(BaseModel):
