@@ -69,8 +69,15 @@ def _query_db_file(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
         picks = [dict(r) for r in cur.fetchall()]
         cur.execute(TOTALES_SQL, (fecha_desde, fecha_hasta))
         totales = {r["cliente_id"]: float(r["total_importe"] or 0) for r in cur.fetchall()}
+        # Códigos que Yaguar sabe que NO son consumidor final (RESP. INSC., MONOTRIBUTO, etc.)
+        cur.execute("""
+            SELECT SUBSTR(CLI_ID, -6) AS codigo
+            FROM clientes
+            WHERE CLI_COND_IVA NOT IN (2, 5)
+        """)
+        no_cf = {r["codigo"] for r in cur.fetchall()}
         conn.close()
-        return picks, totales
+        return picks, totales, no_cf
     finally:
         os.unlink(tmp_path)
 
@@ -97,12 +104,14 @@ async def importar_semana(
 
     all_rows: list = []
     totales_por_cliente: dict = {}
+    codigos_no_cf: set = set()
     for archivo in archivos:
         content = await archivo.read()
-        rows, totales = _query_db_file(content, fecha_desde, fecha_hasta)
+        rows, totales, no_cf = _query_db_file(content, fecha_desde, fecha_hasta)
         all_rows.extend(rows)
         for cid, monto in totales.items():
             totales_por_cliente[cid] = totales_por_cliente.get(cid, 0) + monto
+        codigos_no_cf.update(no_cf)
 
     if not all_rows:
         raise HTTPException(400, "No se encontraron picks en ese rango de fechas. Verificá las fechas.")
@@ -199,10 +208,25 @@ async def importar_semana(
               AND id_yaguar IN (SELECT cliente FROM codigos_con_historial)
         """)
 
+    # Marcar como no_apto los códigos libres que Yaguar identifica como no consumidor final.
+    # Solo se tocan códigos con estado='libre' — los ocupados no se modifican.
+    marcados_no_apto = 0
+    if codigos_no_cf:
+        with get_db() as cur:
+            cur.execute("""
+                UPDATE clientes_yaguar
+                SET estado = 'no_apto'
+                WHERE mayorista = 'yaguar'
+                  AND estado = 'libre'
+                  AND id_yaguar = ANY(%s)
+            """, (list(codigos_no_cf),))
+            marcados_no_apto = cur.rowcount
+
     return {
         "picks_importados": inserted,
         "semana": nombre,
         "clientes_no_encontrados": sorted(no_encontrados),
+        "codigos_marcados_no_apto": marcados_no_apto,
     }
 
 
