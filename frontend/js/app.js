@@ -1380,8 +1380,8 @@ function openEditUser(id, username, rol, accesoSobrantes) {
   document.getElementById('edit-username').value = username;
   document.getElementById('edit-rol').value = rol;
   document.getElementById('edit-sobrantes').checked = !!accesoSobrantes;
-  // Solo superadmin puede cambiar rol
-  document.getElementById('edit-rol-group').classList.toggle('hidden', getRol() !== 'superadmin');
+  // Cualquier admin puede cambiar rol
+  document.getElementById('edit-rol-group').classList.remove('hidden');
   document.getElementById('edit-user-modal').classList.remove('hidden');
   setTimeout(() => document.getElementById('edit-username').focus(), 50);
 }
@@ -1400,9 +1400,7 @@ document.getElementById('edit-user-form').addEventListener('submit', async (e) =
     username: document.getElementById('edit-username').value.trim(),
     acceso_sobrantes: document.getElementById('edit-sobrantes').checked,
   };
-  if (getRol() === 'superadmin') {
-    data.rol = document.getElementById('edit-rol').value;
-  }
+  data.rol = document.getElementById('edit-rol').value;
   try {
     await api.updateUser(id, data);
     showToast('Usuario actualizado', 'success');

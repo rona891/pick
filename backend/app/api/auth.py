@@ -164,12 +164,8 @@ def update_user(id: int, data: UserUpdate, authorization: str = Header(...)):
         raise HTTPException(404, "Usuario no encontrado")
     if target["rol"] == "superadmin":
         raise HTTPException(403, "No se puede editar al superadmin")
-    # Cambio de rol solo para superadmin
-    if data.rol is not None:
-        if caller["rol"] != "superadmin":
-            raise HTTPException(403, "Solo el superadmin puede cambiar roles")
-        if data.rol not in ("operario", "admin", "vendedor"):
-            raise HTTPException(400, "Rol inválido")
+    if data.rol is not None and data.rol not in ("operario", "admin", "vendedor"):
+        raise HTTPException(400, "Rol inválido")
     updates, values = [], []
     if data.username is not None:
         username = data.username.strip()
