@@ -16,6 +16,7 @@ async def lifespan(app: FastAPI):
     init_pool()
     with get_db() as cur:
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS rol VARCHAR NOT NULL DEFAULT 'operario'")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_sobrantes BOOLEAN NOT NULL DEFAULT false")
         # Crear superadmin si no existe ninguno
         cur.execute("SELECT COUNT(*) AS n FROM users WHERE rol = 'superadmin'")
         if cur.fetchone()["n"] == 0:

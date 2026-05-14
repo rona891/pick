@@ -59,6 +59,7 @@ function showApp() {
   const adminBtn = document.querySelector('.tab-btn[data-tab="admin"]');
   adminBtn.classList.toggle('hidden', !esAdminOVendedor());
   if (esVendedor()) document.getElementById('nav-admin-label').textContent = 'Gestión';
+  document.querySelector('.tab-btn[data-tab="sobrantes"]').classList.toggle('hidden', !tieneSobrantes());
   document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
   const m = getMayorista();
   aplicarTema(m);
@@ -123,6 +124,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     const res = await api.login(username, password);
     setToken(res.access_token);
     setRol(res.rol);
+    localStorage.setItem('acceso_sobrantes', res.acceso_sobrantes ? '1' : '0');
     localStorage.setItem('username', username);
     if (mayoristaCaducado()) {
       showMayoristaSelector();
@@ -1320,7 +1322,7 @@ async function deleteSemana(id, nombre) {
 async function loadUsers() {
   const tbody = document.getElementById('users-tbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="4" class="loading">Cargando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" class="loading">Cargando...</td></tr>';
   try {
     const users = await api.getUsers();
     tbody.innerHTML = users.map((u) => {
@@ -1328,25 +1330,44 @@ async function loadUsers() {
       const esAdminUser = u.rol === 'admin';
       const rolLabel = esSuperadmin ? '<span style="color:var(--accent)">Superadmin</span>'
                      : esAdminUser  ? '<span style="color:var(--green)">Admin</span>'
+                     : u.rol === 'vendedor' ? '<span style="color:#7eb8ff">Vendedor</span>'
                      :                '<span style="color:var(--muted)">Operario</span>';
       const esSuperadminActual = getRol() === 'superadmin';
       const toggleBtn = (esSuperadmin || !esSuperadminActual) ? '' : `
         <label class="rol-switch" title="${esAdminUser ? 'Quitar admin' : 'Dar admin'}">
           <input type="checkbox" ${esAdminUser ? 'checked' : ''} onchange="toggleRol(${u.id}, '${u.rol}', this)">
           <span class="rol-switch-track"><span class="rol-switch-thumb"></span></span>
-          <span class="rol-switch-label">${esAdminUser ? 'Admin' : 'Operario'}</span>
+          <span class="rol-switch-label">${esAdminUser ? 'Admin' : 'Op.'}</span>
+        </label>`;
+      const sobToggle = esSuperadmin ? '<span style="color:var(--accent);font-size:11px">Siempre</span>' : `
+        <label class="rol-switch" title="${u.acceso_sobrantes ? 'Quitar acceso' : 'Dar acceso'}">
+          <input type="checkbox" ${u.acceso_sobrantes ? 'checked' : ''} onchange="toggleSobrantes(${u.id}, this)">
+          <span class="rol-switch-track"><span class="rol-switch-thumb"></span></span>
+          <span class="rol-switch-label">${u.acceso_sobrantes ? 'Sí' : 'No'}</span>
         </label>`;
       const delBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
       return `
         <tr>
           <td>${u.username}</td>
           <td>${rolLabel}</td>
+          <td>${sobToggle}</td>
           <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
-          <td class="td-actions">${esSuperadmin ? '<span style="color:var(--muted)">—</span>' : toggleBtn + delBtn}</td>
+          <td class="td-actions">${esSuperadmin ? '' : toggleBtn + delBtn}</td>
         </tr>`;
     }).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" class="error-msg">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="error-msg">${err.message}</td></tr>`;
+  }
+}
+
+async function toggleSobrantes(id, checkbox) {
+  try {
+    await api.updateSobrantesAcceso(id, checkbox.checked);
+    showToast(`Acceso a sobrantes ${checkbox.checked ? 'activado' : 'desactivado'}`, 'success');
+    loadUsers();
+  } catch (err) {
+    checkbox.checked = !checkbox.checked;
+    showToast(err.message, 'error');
   }
 }
 

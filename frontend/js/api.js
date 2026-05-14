@@ -12,6 +12,7 @@ function clearToken() {
   localStorage.removeItem('token');
   localStorage.removeItem('rol');
   localStorage.removeItem('username');
+  localStorage.removeItem('acceso_sobrantes');
 }
 
 function getMayorista() {
@@ -47,6 +48,10 @@ function esVendedor() {
 
 function esAdminOVendedor() {
   return esAdmin() || esVendedor();
+}
+
+function tieneSobrantes() {
+  return localStorage.getItem('acceso_sobrantes') === '1';
 }
 
 async function request(method, path, body = null) {
@@ -113,6 +118,7 @@ const api = {
   createUser: (username, password) => request('POST', '/api/auth/users', { username, password }),
   deleteUser: (id) => request('DELETE', `/api/auth/users/${id}`),
   updateRol: (id, rol) => request('PUT', `/api/auth/users/${id}/rol`, { rol }),
+  updateSobrantesAcceso: (id, acceso) => request('PUT', `/api/auth/users/${id}/sobrantes`, { acceso }),
 
   // Zonas y Repartos — compartidos entre mayoristas
   getZonas: () => request('GET', '/api/zonas/'),

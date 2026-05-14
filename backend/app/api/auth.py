@@ -16,7 +16,7 @@ class RolUpdate(BaseModel):
 def login(request: LoginRequest):
     with get_db() as cur:
         cur.execute(
-            "SELECT id, username, password_hash, rol FROM users WHERE username = %s",
+            "SELECT id, username, password_hash, rol, acceso_sobrantes FROM users WHERE username = %s",
             (request.username,),
         )
         user = cur.fetchone()
@@ -27,6 +27,7 @@ def login(request: LoginRequest):
     return {
         "access_token": create_access_token(user["id"], user["username"]),
         "rol": user["rol"],
+        "acceso_sobrantes": user["rol"] == "superadmin" or bool(user["acceso_sobrantes"]),
     }
 
 
@@ -78,7 +79,7 @@ def change_username(request: ChangeUsernameRequest, authorization: str = Header(
 def list_users():
     with get_db() as cur:
         cur.execute("""
-            SELECT id, username, rol, created_at FROM users
+            SELECT id, username, rol, acceso_sobrantes, created_at FROM users
             ORDER BY CASE rol WHEN 'superadmin' THEN 1 WHEN 'admin' THEN 2 ELSE 3 END, created_at
         """)
         return [dict(r) for r in cur.fetchall()]
@@ -132,3 +133,28 @@ def delete_user(id: int):
             raise HTTPException(status_code=400, detail="No se puede eliminar el único usuario")
         cur.execute("DELETE FROM users WHERE id = %s", (id,))
     return {"message": "Usuario eliminado"}
+
+
+class SobrantesAcceso(BaseModel):
+    acceso: bool
+
+@router.put("/users/{id}/sobrantes")
+def update_sobrantes_acceso(id: int, data: SobrantesAcceso, authorization: str = Header(...)):
+    payload = verify_token(authorization)
+    with get_db() as cur:
+        cur.execute("SELECT rol FROM users WHERE id = %s", (payload.get("sub"),))
+        caller = cur.fetchone()
+    if not caller or caller["rol"] not in ("admin", "superadmin"):
+        raise HTTPException(403, "Solo admins pueden gestionar el acceso a sobrantes")
+    with get_db() as cur:
+        cur.execute("SELECT rol FROM users WHERE id = %s", (id,))
+        user = cur.fetchone()
+        if not user:
+            raise HTTPException(404, "Usuario no encontrado")
+        if user["rol"] == "superadmin":
+            raise HTTPException(403, "El superadmin siempre tiene acceso a sobrantes")
+        cur.execute(
+            "UPDATE users SET acceso_sobrantes = %s WHERE id = %s RETURNING id, username, rol, acceso_sobrantes, created_at",
+            (data.acceso, id)
+        )
+        return dict(cur.fetchone())
