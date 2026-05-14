@@ -964,7 +964,7 @@ input[type="date"] {
 input[type="date"]:focus { border-color: var(--accent); }
 
 /* Barra de ayuda en pestañas Pick y Clientes: separada visualmente del buscador */
-.panel-help-bar { padding: 10px 16px 0; }
+.panel-help-bar { padding: 10px 16px 12px; }
 .panel-help-bar .info-block { margin-bottom: 0; }
 .panel-help-bar .info-content { margin-top: 8px; }
 
