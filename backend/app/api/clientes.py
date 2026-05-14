@@ -26,7 +26,16 @@ def _list(mayorista: str):
         return [dict(r) for r in cur.fetchall()]
 
 
+def _normalizar(data: ClienteCreate) -> ClienteCreate:
+    if data.nombre:
+        data.nombre = data.nombre.strip().upper()
+    if data.localidad:
+        data.localidad = data.localidad.strip().upper()
+    return data
+
+
 def _create(mayorista: str, data: ClienteCreate):
+    data = _normalizar(data)
     try:
         with get_db() as cur:
             estado = 'ocupado' if mayorista == 'yaguar' else None
@@ -68,6 +77,7 @@ def _create(mayorista: str, data: ClienteCreate):
 
 
 def _update(id: int, data: ClienteCreate, mayorista: str = 'yaguar'):
+    data = _normalizar(data)
     try:
         with get_db() as cur:
             cur.execute(
