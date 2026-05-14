@@ -1090,7 +1090,7 @@ async function loadClientes() {
   const esYaguar = m === 'yaguar';
   document.getElementById('th-codigo-yaguar').style.display = esYaguar ? '' : 'none';
   document.getElementById('th-flete-yaguar').style.display = esYaguar ? '' : 'none';
-  document.getElementById('btn-exportar-clientes').classList.toggle('hidden', !esYaguar);
+  document.getElementById('btn-exportar-clientes').classList.remove('hidden');
   const colspan = esYaguar ? 8 : 6;
   const tbody = document.getElementById('clientes-tbody');
   tbody.innerHTML = `<tr><td colspan="${colspan}" class="loading">Cargando...</td></tr>`;
@@ -1116,7 +1116,7 @@ async function loadClientes() {
 }
 
 document.getElementById('btn-exportar-clientes').addEventListener('click', () => {
-  window.location.href = '/api/yaguar/export/clientes';
+  window.location.href = `/api/${getMayorista()}/export/clientes`;
 });
 
 async function openClienteForm(id, codigoPreverificado = null, nombrePre = null) {
