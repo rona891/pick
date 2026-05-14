@@ -1,0 +1,9 @@
+# Archivos que corren dentro de containers Linux: siempre LF
+*.sql       text eol=lf
+*.py        text eol=lf
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.conf      text eol=lf
+
+# Resto: normalizar según plataforma
+*           text=auto

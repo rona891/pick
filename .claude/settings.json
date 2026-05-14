@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(docker --version*)",
+      "PowerShell(docker ps *)",
+      "PowerShell(wsl --list *)",
+      "PowerShell(Get-WindowsOptionalFeature *)"
+    ]
+  }
+}

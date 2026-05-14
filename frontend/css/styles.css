@@ -963,25 +963,61 @@ input[type="date"] {
 
 input[type="date"]:focus { border-color: var(--accent); }
 
-.admin-section-desc {
-  font-size: 12px;
+/* Barra de ayuda en pestañas Pick y Clientes: separada visualmente del buscador */
+.panel-help-bar { padding: 10px 16px 12px; }
+.panel-help-bar .info-block { margin-bottom: 0; }
+.panel-help-bar .info-content { margin-top: 8px; }
+
+.info-block { margin-bottom: 16px; }
+
+.info-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 11px 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 20px;
   color: var(--muted);
-  margin-bottom: 20px;
-  line-height: 1.6;
+  font-size: 12px;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  user-select: none;
+}
+.info-btn::before {
+  content: '?';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.info-btn:hover, .info-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
-.admin-section-desc strong { color: var(--text); }
-
-.admin-tab-desc {
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.6;
+.info-content {
+  display: none;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px 14px;
-  margin-bottom: 20px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.65;
 }
+.info-content.visible { display: block; }
+.info-content strong { color: var(--text); }
+.info-content p { margin: 0 0 8px; }
+.info-content p:last-child { margin-bottom: 0; }
 
 .btn-upload {
   display: block;
@@ -1107,21 +1143,16 @@ input[type="date"]:focus { border-color: var(--accent); }
   padding: 3px 10px;
 }
 
-.cfm-alerta {
+.cfm-no-cf-aviso {
   display: flex;
   gap: 10px;
-  align-items: flex-start;
-  padding: 12px 20px;
-  background: rgba(242,203,7,.07);
-  border-bottom: 1px solid rgba(242,203,7,.2);
+  align-items: center;
+  padding: 10px 20px;
+  background: rgba(230,100,0,.07);
+  border-bottom: 1px solid rgba(230,100,0,.2);
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--text);
-}
-.cfm-alerta-icon {
-  font-size: 16px;
-  flex-shrink: 0;
-  margin-top: 1px;
 }
 
 .cfm-body {
@@ -1137,66 +1168,6 @@ input[type="date"]:focus { border-color: var(--accent); }
 .cfm-actions .btn-secondary { flex: 1; }
 .cfm-actions .btn-primary   { flex: 1; }
 
-.verify-modal { max-width: 380px; }
-
-.verify-body {
-  padding: 20px 20px 4px;
-  border-top: 1px solid var(--border);
-}
-
-.verify-codigo-wrap {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  text-align: center;
-  padding: 16px 12px;
-  margin-bottom: 16px;
-}
-
-.verify-codigo-label {
-  font-size: 11px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  margin-bottom: 6px;
-}
-
-.verify-codigo-num {
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  color: var(--accent);
-}
-
-.verify-instruccion {
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.55;
-  margin: 0;
-}
-
-.verify-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px 20px 20px;
-  border-top: 1px solid var(--border);
-  margin-top: 20px;
-}
-.btn-no-apto {
-  background: var(--red);
-  border: none;
-  border-radius: var(--radius);
-  color: #fff;
-  font-family: var(--font);
-  font-size: 13px;
-  font-weight: 700;
-  padding: 10px;
-  cursor: pointer;
-  text-align: center;
-}
-.btn-no-apto:hover { background: #c40404; }
-.btn-no-apto:disabled { opacity: .5; cursor: default; }
 
 .sin-reg-wrap { margin-bottom: 16px; }
 .sin-reg-title { margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
@@ -1431,6 +1402,196 @@ input[type="date"]:focus { border-color: var(--accent); }
   font-family: var(--font);
   font-size: 13px;
   cursor: pointer;
+}
+
+/* ── Bottom navigation ────────────────────────────────────────────────────── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  z-index: 200;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.bottom-nav .tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px 4px 8px;
+  background: none;
+  border: none;
+  border-top: 2px solid transparent;
+  color: var(--muted);
+  font-family: var(--font);
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+
+.bottom-nav .tab-btn.active {
+  color: var(--accent);
+  border-top-color: var(--accent);
+}
+
+.nav-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.nav-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+/* ── Sobrantes panel ──────────────────────────────────────────────────────── */
+.sob-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+}
+
+.sob-lista-select {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  padding: 9px 10px;
+  outline: none;
+}
+
+.sob-lista-select:focus { border-color: var(--accent); }
+
+.sob-nueva-btn { padding: 9px 14px; font-size: 13px; white-space: nowrap; }
+.sob-del-btn   { padding: 9px 12px; font-size: 15px; }
+
+.sob-scan-area {
+  padding: 0 16px 10px;
+}
+
+.sob-items {
+  padding: 0 16px 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sob-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color .3s;
+}
+
+.sob-item.highlight {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(224,255,79,.15);
+}
+
+.sob-item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sob-item-info { flex: 1; min-width: 0; }
+
+.sob-item-descrip {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sob-item-cod {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.sob-item-remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 4px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.sob-item-remove:hover { color: var(--red); }
+
+.sob-steppers {
+  display: flex;
+  gap: 12px;
+}
+
+.sob-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.sob-stepper-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  width: 26px;
+  flex-shrink: 0;
+}
+
+.sob-stepper-val {
+  flex: 1;
+  text-align: center;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: var(--font);
+  min-width: 28px;
+}
+
+.sob-export-bar {
+  position: fixed;
+  bottom: 62px; /* encima del bottom-nav */
+  left: 0;
+  right: 0;
+  padding: 10px 16px;
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+  z-index: 150;
+}
+
+.sob-export-btn {
+  display: block;
+  text-align: center;
+  padding: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  text-decoration: none;
+  border-radius: var(--radius);
 }
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */
@@ -1841,4 +2002,224 @@ input[type="date"]:focus { border-color: var(--accent); }
   color: var(--muted);
   padding: 8px 0;
   text-align: center;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   DESKTOP LAYOUT  ≥ 900px
+   Solo el admin usa PC → admin panel se convierte en sidebar + contenido.
+   Pick y Clientes mantienen el estilo mobile centrado.
+══════════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 900px) {
+
+  /* ── App container: full width ─────────────────────────────────────── */
+  #app-view {
+    max-width: 100%;
+    padding: 0 0 60px;
+  }
+
+  /* ── Topbar ─────────────────────────────────────────────────────────── */
+  .topbar {
+    padding: 14px 40px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0;
+  }
+
+  /* ── Bottom nav: se vuelve una barra horizontal estática en desktop ─── */
+  .bottom-nav {
+    position: static;
+    border-top: none;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    max-width: 720px;
+    margin: 0 auto;
+    padding-bottom: 0;
+  }
+  .bottom-nav .tab-btn {
+    flex-direction: row;
+    gap: 6px;
+    padding: 10px 20px;
+    border-top: none;
+    border-bottom: 2px solid transparent;
+    font-size: 13px;
+  }
+  .bottom-nav .tab-btn.active {
+    border-bottom-color: var(--accent);
+    border-top-color: transparent;
+  }
+  .nav-icon { font-size: 14px; }
+  .nav-label { font-size: 13px; letter-spacing: .3px; }
+
+  .sob-export-bar { bottom: 0; }
+
+  /* ── Semana row, progreso, stats: centrados y acotados ─────────────── */
+  .semana-row,
+  .progress-bar-wrap,
+  .stats {
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .semana-row   { padding-top: 20px; }
+
+  /* Pick y Clientes: panel centrado, ancho acotado */
+  .tab-panel[data-panel="pick"],
+  .tab-panel[data-panel="clientes"] {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  /* ── Admin: panel completo full-width ───────────────────────────────── */
+  .tab-panel[data-panel="admin"] {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  /* Lock screen: tarjeta centrada */
+  #admin-lock {
+    display: flex;
+    justify-content: center;
+    padding-top: 80px;
+  }
+  .admin-lock-form {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px 48px;
+    width: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .admin-lock-form label {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: .5px;
+  }
+
+  /* ── Admin panel: sidebar + contenido ──────────────────────────────── */
+  #admin-panel {
+    display: flex;
+    min-height: calc(100vh - 110px);
+  }
+
+  /* Sidebar (sub-tabs) */
+  .admin-tabs {
+    flex-direction: column;
+    width: 200px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+    padding: 28px 0 28px;
+    gap: 2px;
+    margin-bottom: 0;
+    position: sticky;
+    top: 0;
+    height: fit-content;
+  }
+
+  .admin-tab-btn {
+    text-align: left;
+    padding: 11px 28px;
+    font-size: 14px;
+    border-bottom: none;
+    border-left: 3px solid transparent;
+    border-right: none;
+    margin-bottom: 0;
+    border-radius: 0;
+    letter-spacing: .3px;
+  }
+  .admin-tab-btn.active {
+    border-left-color: var(--accent);
+    border-bottom-color: transparent;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  .admin-tab-btn:hover:not(.active) {
+    background: var(--surface);
+  }
+
+  /* Contenido principal */
+  .admin-main {
+    flex: 1;
+    padding: 32px 48px 48px;
+    overflow-y: auto;
+    min-width: 0;
+  }
+
+  /* ── Tablas más cómodas ─────────────────────────────────────────────── */
+  .clientes-table th,
+  .clientes-table td {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+  .clientes-table th {
+    font-size: 11px;
+  }
+
+  /* ── Formularios: campos más amplios ────────────────────────────────── */
+  .admin-tab-panel .form-group input,
+  .admin-tab-panel .form-group select {
+    font-size: 14px;
+    padding: 11px 14px;
+  }
+
+  /* Import: campos de fecha en línea con el nombre */
+  .fecha-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  /* Sección de importar: ancho máximo razonable para el form */
+  #import-yaguar,
+  #import-diarco {
+    max-width: 560px;
+  }
+
+  /* Nuevo usuario: más compacto */
+  #nuevo-usuario-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  #nuevo-usuario-form .form-group {
+    flex: 1;
+    min-width: 160px;
+    margin-bottom: 0;
+  }
+  #nuevo-usuario-form .btn-primary {
+    flex-shrink: 0;
+    align-self: flex-end;
+    padding: 11px 24px;
+    margin-bottom: 0;
+  }
+
+  /* Repartos/Zonas: tabla full width */
+  .repartos-orden-list { max-width: 480px; }
+
+  /* Título de secciones admin más prominente */
+  .admin-section-title {
+    font-size: 13px;
+    letter-spacing: .8px;
+  }
+
+  /* Botones de acción más fáciles de clickear */
+  .btn-edit, .btn-del {
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+
+  /* Buscador de clientes */
+  #admin-clientes-search {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  /* Sin registrar */
+  .sin-reg-wrap { max-width: 100%; }
+
 }

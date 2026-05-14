@@ -12,6 +12,7 @@ function clearToken() {
   localStorage.removeItem('token');
   localStorage.removeItem('rol');
   localStorage.removeItem('username');
+  localStorage.removeItem('acceso_sobrantes');
 }
 
 function getMayorista() {
@@ -39,6 +40,18 @@ function setRol(rol) {
 function esAdmin() {
   const r = getRol();
   return r === 'admin' || r === 'superadmin';
+}
+
+function esVendedor() {
+  return getRol() === 'vendedor';
+}
+
+function esAdminOVendedor() {
+  return esAdmin() || esVendedor();
+}
+
+function tieneSobrantes() {
+  return localStorage.getItem('acceso_sobrantes') === '1';
 }
 
 async function request(method, path, body = null) {
@@ -102,9 +115,12 @@ const api = {
 
   // Usuarios (admin)
   getUsers: () => request('GET', '/api/auth/users'),
-  createUser: (username, password) => request('POST', '/api/auth/users', { username, password }),
+  createUser: (username, password, rol = 'operario') => request('POST', '/api/auth/users', { username, password, rol }),
   deleteUser: (id) => request('DELETE', `/api/auth/users/${id}`),
   updateRol: (id, rol) => request('PUT', `/api/auth/users/${id}/rol`, { rol }),
+  updateSobrantesAcceso: (id, acceso) => request('PUT', `/api/auth/users/${id}/sobrantes`, { acceso }),
+  updateUser: (id, data) => request('PUT', `/api/auth/users/${id}`, data),
+  getMe: () => request('GET', '/api/auth/me'),
 
   // Zonas y Repartos — compartidos entre mayoristas
   getZonas: () => request('GET', '/api/zonas/'),
@@ -135,4 +151,16 @@ const api = {
     if (!res.ok) throw new Error(data.detail || 'Error del servidor');
     return data;
   },
+
+  // Sobrantes
+  sobGetListas: () => request('GET', `/api/${getMayorista()}/sobrantes/listas`),
+  sobCrearLista: (nombre) => request('POST', `/api/${getMayorista()}/sobrantes/listas`, { nombre }),
+  sobDeleteLista: (lista) => request('DELETE', `/api/${getMayorista()}/sobrantes/listas/${encodeURIComponent(lista)}`),
+  sobLookup: (codBar) => request('GET', `/api/${getMayorista()}/sobrantes/lookup/${encodeURIComponent(codBar)}`),
+  sobSearch: (q) => request('GET', `/api/${getMayorista()}/sobrantes/search?q=${encodeURIComponent(q)}`),
+  sobGetItems: (lista) => request('GET', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}`),
+  sobAddItem: (lista, item) => request('POST', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/item`, item),
+  sobUpdateItem: (lista, id, unidades, bultos) => request('PUT', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/item/${id}`, { unidades, bultos }),
+  sobDeleteItem: (lista, id) => request('DELETE', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/item/${id}`),
+  sobExportUrl: (lista) => `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/export`,
 };

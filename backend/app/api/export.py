@@ -162,31 +162,64 @@ def yaguar_export(semana: str = Query(...)):
 
 @router_yaguar.get("/clientes")
 def yaguar_export_clientes():
+    return _export_clientes("yaguar")
+
+
+@router_diarco.get("/picks")
+def diarco_export(semana: str = Query(...)):
+    return _export_picks(semana, "diarco")
+
+
+@router_diarco.get("/clientes")
+def diarco_export_clientes():
+    return _export_clientes("diarco")
+
+
+def _export_clientes(mayorista: str):
     with get_db() as cur:
         cur.execute("""
-            SELECT id_yaguar, nombre, localidad, vendedor, estado
-            FROM clientes_yaguar
-            WHERE id_yaguar IS NOT NULL AND estado = 'libre'
-            ORDER BY id_yaguar
-        """)
+            SELECT
+                cy.id_yaguar,
+                cy.nombre,
+                cy.localidad,
+                cy.vendedor,
+                cy.flete,
+                (
+                    SELECT p.semana
+                    FROM pick p
+                    JOIN semanas s ON s.nombre = p.semana AND s.mayorista = cy.mayorista
+                    WHERE p.cliente = cy.id_yaguar AND p.mayorista = cy.mayorista
+                    ORDER BY s.created_at DESC
+                    LIMIT 1
+                ) AS ultimo_pick
+            FROM clientes_yaguar cy
+            WHERE cy.mayorista = %s
+              AND cy.nombre IS NOT NULL AND cy.nombre <> ''
+              AND (cy.estado = 'ocupado' OR cy.mayorista = 'diarco')
+            ORDER BY cy.nombre
+        """, (mayorista,))
         rows = [dict(r) for r in cur.fetchall()]
 
-    HEADERS_CL = [
-        ("Código Yaguar", "id_yaguar"),
+    es_yaguar = mayorista == "yaguar"
+    headers = [
+        ("Código",        "id_yaguar"),
         ("Cliente",       "nombre"),
         ("Zona",          "localidad"),
         ("Vendedor",      "vendedor"),
     ]
+    if es_yaguar:
+        headers.append(("Flete %", "flete"))
+    headers.append(("Último pick", "ultimo_pick"))
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Códigos Libres"
+    ws.title = "Clientes"
 
     header_font  = Font(name="Calibri", bold=True, color=DARK_BG, size=10)
     header_fill  = PatternFill("solid", fgColor=ACCENT)
     header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    for col, (label, _) in enumerate(HEADERS_CL, start=1):
+    for col, (label, _) in enumerate(headers, start=1):
         cell = ws.cell(row=1, column=col, value=label)
         cell.font      = header_font
         cell.fill      = header_fill
@@ -195,25 +228,29 @@ def yaguar_export_clientes():
     ws.row_dimensions[1].height = 30
 
     data_font  = Font(name="Calibri", size=10, color="E8E8E8")
+    muted_font = Font(name="Calibri", size=10, color=MUTED)
     alt_fill   = PatternFill("solid", fgColor="1C1C1C")
     base_fill  = PatternFill("solid", fgColor=HEADER_BG)
-    ok_font    = Font(name="Calibri", size=10, color=GREEN)
-    muted_font = Font(name="Calibri", size=10, color=MUTED)
     center     = Alignment(horizontal="center", vertical="center")
     left       = Alignment(horizontal="left",   vertical="center")
 
     for row_idx, row in enumerate(rows, start=2):
         fill = alt_fill if row_idx % 2 == 0 else base_fill
-        for col_idx, (label, field) in enumerate(HEADERS_CL, start=1):
-            value = row.get(field) or ""
-            cell  = ws.cell(row=row_idx, column=col_idx, value=value)
-            cell.fill      = fill
-            cell.border    = _thin_border()
-            cell.alignment = center if label == "Código Yaguar" else left
-            cell.font      = data_font
+        for col_idx, (label, field) in enumerate(headers, start=1):
+            raw = row.get(field)
+            if field == "flete" and raw is not None:
+                value = f"{round(float(raw) * 100, 1)}%"
+            else:
+                value = raw or ("—" if field in ("ultimo_pick", "flete") else "")
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            cell.fill   = fill
+            cell.border = _thin_border()
+            cell.font   = muted_font if (field == "ultimo_pick" and not raw) else data_font
+            cell.alignment = center if label in ("Código", "Flete %") else left
 
-    for i, width in enumerate([16, 40, 22, 25], start=1):
-        ws.column_dimensions[get_column_letter(i)].width = width
+    widths = [14, 40, 22, 22, 10, 22] if es_yaguar else [14, 40, 22, 22, 22]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
 
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
@@ -221,13 +258,9 @@ def yaguar_export_clientes():
     output = io.BytesIO()
     wb.save(output)
     output.seek(0)
+    fname = f"clientes_{mayorista}.xlsx"
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": 'attachment; filename="codigos_libres_yaguar.xlsx"'},
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
-
-
-@router_diarco.get("/picks")
-def diarco_export(semana: str = Query(...)):
-    return _export_picks(semana, "diarco")

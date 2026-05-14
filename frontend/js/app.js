@@ -56,7 +56,10 @@ function showApp() {
   document.getElementById('login-view').classList.add('hidden');
   document.getElementById('mayorista-view').classList.add('hidden');
   document.getElementById('app-view').classList.remove('hidden');
-  document.querySelector('.tab-btn[data-tab="admin"]').classList.toggle('hidden', !esAdmin());
+  const adminBtn = document.querySelector('.tab-btn[data-tab="admin"]');
+  adminBtn.classList.toggle('hidden', !esAdminOVendedor());
+  if (esVendedor()) document.getElementById('nav-admin-label').textContent = 'Gestión';
+  document.querySelector('.tab-btn[data-tab="sobrantes"]').classList.toggle('hidden', !tieneSobrantes());
   document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
   const m = getMayorista();
   aplicarTema(m);
@@ -67,6 +70,28 @@ function showApp() {
   renderHistorial();
   setTimeout(() => document.getElementById('barcode-input').focus(), 200);
 }
+
+// ── Permisos en tiempo real ────────────────────────────────────────────────
+async function checkPermissions() {
+  if (!getToken()) return;
+  try {
+    const me = await api.getMe();
+    const nuevo = me.acceso_sobrantes ? '1' : '0';
+    if (nuevo !== (localStorage.getItem('acceso_sobrantes') || '0')) {
+      localStorage.setItem('acceso_sobrantes', nuevo);
+      const sobTab = document.querySelector('.tab-btn[data-tab="sobrantes"]');
+      if (sobTab) sobTab.classList.toggle('hidden', !me.acceso_sobrantes);
+    }
+  } catch { /* silencioso — no romper si el servidor no responde */ }
+}
+
+// Chequear al volver a la pestaña del browser
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) checkPermissions();
+});
+
+// Chequear cada 15 segundos mientras la app está activa
+setInterval(() => { if (!document.hidden) checkPermissions(); }, 15000);
 
 // ── Modo claro / oscuro ────────────────────────────────────────────────────
 function esLightMode() {
@@ -121,6 +146,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     const res = await api.login(username, password);
     setToken(res.access_token);
     setRol(res.rol);
+    localStorage.setItem('acceso_sobrantes', res.acceso_sobrantes ? '1' : '0');
     localStorage.setItem('username', username);
     if (mayoristaCaducado()) {
       showMayoristaSelector();
@@ -203,9 +229,11 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== tab));
-
+  if (scannerActive && tab !== 'pick') stopScanner();
+  if (sobScannerActive && tab !== 'sobrantes') stopSobScanner();
   if (tab === 'clientes') loadResumen();
   if (tab === 'admin') initAdmin();
+  if (tab === 'sobrantes') initSobrantes();
 }
 
 // ── Tab: Pick ──────────────────────────────────────────────────────────────
@@ -939,15 +967,18 @@ document.getElementById('cliente-picks-overlay').addEventListener('click', (e) =
 
 // ── Tab: Admin ─────────────────────────────────────────────────────────────
 function initAdmin() {
-  if (adminUnlocked || esAdmin()) {
+  const vendedor = esVendedor();
+  if (adminUnlocked || esAdmin() || vendedor) {
     adminUnlocked = true;
     document.getElementById('admin-lock').classList.add('hidden');
     document.getElementById('admin-panel').classList.remove('hidden');
 
-    const esDiarco = getMayorista() === 'diarco';
+    // Vendedor: ocultar Semanas y Usuarios
+    document.querySelector('.admin-tab-btn[data-admin-tab="nueva-semana"]').classList.toggle('hidden', vendedor);
+    document.querySelector('.admin-tab-btn[data-admin-tab="usuarios"]').classList.toggle('hidden', vendedor);
 
-    if (esDiarco) {
-      // Activar la primera tab visible (Semanas)
+    const esDiarco = getMayorista() === 'diarco';
+    if (esDiarco && !vendedor) {
       document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.add('hidden'));
       const firstBtn = document.querySelector('.admin-tab-btn:not(.hidden)');
@@ -959,6 +990,9 @@ function initAdmin() {
         if (target === 'clientes') loadClientes();
       }
     } else {
+      // Asegurar que Clientes esté activo para Yaguar o vendedor
+      document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.adminTab === 'clientes'));
+      document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.toggle('hidden', p.dataset.adminPanel !== 'clientes'));
       loadClientes();
     }
   } else {
@@ -1020,12 +1054,27 @@ function registrarClientePendiente(codigo, nombreObs) {
   openClienteForm(null, codigo, nombreObs);
 }
 
-document.getElementById('btn-nuevo-cliente').addEventListener('click', () => {
+document.getElementById('btn-nuevo-cliente').addEventListener('click', async () => {
   if (getMayorista() === 'yaguar') {
-    abrirVerificacionCodigo();
+    try {
+      const res = await api.getCodigoLibreYaguar();
+      openClienteForm(null, res.codigo);
+    } catch {
+      showToast('No hay códigos libres disponibles', 'error');
+    }
   } else {
     openClienteForm(null);
   }
+});
+
+// ── Info-btn: toggle de ayuda contextual ──────────────────────────────────
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.info-btn');
+  if (!btn) return;
+  const content = btn.parentElement.querySelector('.info-content');
+  if (!content) return;
+  const visible = content.classList.toggle('visible');
+  btn.classList.toggle('active', visible);
 });
 
 // ── Admin búsqueda de clientes ─────────────────────────────────────────────
@@ -1041,7 +1090,7 @@ async function loadClientes() {
   const esYaguar = m === 'yaguar';
   document.getElementById('th-codigo-yaguar').style.display = esYaguar ? '' : 'none';
   document.getElementById('th-flete-yaguar').style.display = esYaguar ? '' : 'none';
-  document.getElementById('btn-exportar-clientes').classList.toggle('hidden', !esYaguar);
+  document.getElementById('btn-exportar-clientes').classList.remove('hidden');
   const colspan = esYaguar ? 8 : 6;
   const tbody = document.getElementById('clientes-tbody');
   tbody.innerHTML = `<tr><td colspan="${colspan}" class="loading">Cargando...</td></tr>`;
@@ -1067,7 +1116,7 @@ async function loadClientes() {
 }
 
 document.getElementById('btn-exportar-clientes').addEventListener('click', () => {
-  window.location.href = '/api/yaguar/export/clientes';
+  window.location.href = `/api/${getMayorista()}/export/clientes`;
 });
 
 async function openClienteForm(id, codigoPreverificado = null, nombrePre = null) {
@@ -1165,14 +1214,16 @@ async function deleteCliente(id) {
 
 // ── Modal: clientes faltantes post-import ──────────────────────────────────
 let _cfmPendientes = [];
-let _cfmNombres = {};   // {id: nombre_observacion} para pre-rellenar
+let _cfmNombres = {};
 let _cfmEsYaguar = true;
+let _cfmNoCF = new Set();
 let _cfmIdx = 0;
 
-async function abrirModalClientesFaltantes(ids, nombres = {}, esYaguar = true) {
+async function abrirModalClientesFaltantes(ids, nombres = {}, esYaguar = true, noCF = []) {
   _cfmPendientes = ids;
   _cfmNombres = nombres;
   _cfmEsYaguar = esYaguar;
+  _cfmNoCF = new Set(noCF);
   _cfmIdx = 0;
   await _cfmMostrar();
 }
@@ -1188,8 +1239,7 @@ async function _cfmMostrar() {
   document.getElementById('cfm-id_yaguar').value = id;
   document.getElementById('cfm-progreso').textContent = `${_cfmIdx + 1} de ${total}`;
 
-  // Alerta de monotributo solo para Yaguar
-  document.getElementById('cfm-alerta').classList.toggle('hidden', !_cfmEsYaguar);
+  document.getElementById('cfm-no-cf-aviso').classList.toggle('hidden', !_cfmNoCF.has(id));
 
   // Pre-rellenar nombre desde OBSERVACION si está disponible
   document.getElementById('cfm-nombre').value = _cfmNombres[id] || '';
@@ -1241,70 +1291,6 @@ document.getElementById('cfm-close').addEventListener('click', () => {
   loadClientes();
 });
 
-// ── Modal: verificar código Yaguar antes de crear cliente ─────────────────
-let _codigoPendienteVerif = null;
-
-async function abrirVerificacionCodigo() {
-  _codigoPendienteVerif = null;
-  const display = document.getElementById('verify-codigo-display');
-  const btnConfirmar = document.getElementById('verify-confirmar');
-  const btnNoApto = document.getElementById('verify-no-apto');
-  display.textContent = 'Buscando...';
-  btnConfirmar.disabled = true;
-  btnNoApto.disabled = true;
-  document.getElementById('verify-codigo-modal').classList.remove('hidden');
-  try {
-    const res = await api.getCodigoLibreYaguar();
-    _codigoPendienteVerif = res.codigo;
-    display.textContent = res.codigo;
-    btnConfirmar.disabled = false;
-    btnNoApto.disabled = false;
-  } catch {
-    display.textContent = 'Sin códigos disponibles';
-    showToast('No hay códigos libres disponibles', 'error');
-  }
-}
-
-document.getElementById('verify-close').addEventListener('click', () => {
-  document.getElementById('verify-codigo-modal').classList.add('hidden');
-});
-
-document.getElementById('verify-no-apto').addEventListener('click', async () => {
-  if (!_codigoPendienteVerif) return;
-  const display = document.getElementById('verify-codigo-display');
-  const btnConfirmar = document.getElementById('verify-confirmar');
-  const btnNoApto = document.getElementById('verify-no-apto');
-  btnNoApto.disabled = true;
-  btnConfirmar.disabled = true;
-  const anterior = _codigoPendienteVerif;
-  display.textContent = 'Marcando...';
-  try {
-    const res = await api.marcarNoApto(anterior);
-    showToast(`Código ${anterior} descartado`, 'info');
-    if (res.nuevo_codigo) {
-      _codigoPendienteVerif = res.nuevo_codigo;
-      display.textContent = res.nuevo_codigo;
-      btnNoApto.disabled = false;
-      btnConfirmar.disabled = false;
-    } else {
-      display.textContent = 'Sin códigos disponibles';
-      showToast('No quedan más códigos libres', 'error');
-    }
-  } catch (err) {
-    showToast(err.message, 'error');
-    display.textContent = anterior;
-    _codigoPendienteVerif = anterior;
-    btnNoApto.disabled = false;
-    btnConfirmar.disabled = false;
-  }
-});
-
-document.getElementById('verify-confirmar').addEventListener('click', () => {
-  if (!_codigoPendienteVerif) return;
-  const codigo = _codigoPendienteVerif;
-  document.getElementById('verify-codigo-modal').classList.add('hidden');
-  openClienteForm(null, codigo);
-});
 
 // ── Admin: Semanas ─────────────────────────────────────────────────────────
 async function loadSemanasAdmin() {
@@ -1315,8 +1301,8 @@ async function loadSemanasAdmin() {
 
   // Descripción y formulario según mayorista
   document.getElementById('semanas-desc').innerHTML = m === 'diarco'
-    ? 'Acá se cargan los pedidos de DIARCO. Subí el archivo <strong>MobileAssistantBU.db</strong> de la app DIARCO, completá el nombre y las fechas, y presioná <strong>Importar picks</strong>.'
-    : 'Acá se cargan los pedidos de Yaguar. Subí los archivos <strong>.db</strong> exportados de la app Yaguar (uno por vendedor), completá el nombre y las fechas, y presioná <strong>Importar picks</strong>.';
+    ? '<p>Acá se cargan los pedidos de DIARCO. Completá el nombre de la semana, las fechas del pedido, y subí el archivo.</p><p>Si reimportás una semana con el mismo nombre, se reemplazan todos sus picks anteriores.</p>'
+    : '<p>Acá se cargan los pedidos de Yaguar. Completá el nombre de la semana, las fechas del pedido, y subí los archivos.</p><p>Si reimportás una semana con el mismo nombre, se reemplazan todos sus picks anteriores.</p>';
   document.getElementById('import-yaguar').classList.toggle('hidden', m === 'diarco');
   document.getElementById('import-diarco').classList.toggle('hidden', m !== 'diarco');
 
@@ -1355,36 +1341,84 @@ async function deleteSemana(id, nombre) {
 }
 
 // ── Admin: Usuarios ────────────────────────────────────────────────────────
+const ROL_COLORS = { superadmin: 'var(--accent)', admin: 'var(--green)', vendedor: '#7eb8ff', operario: 'var(--muted)' };
+const ROL_LABELS = { superadmin: 'Superadmin', admin: 'Admin', vendedor: 'Vendedor', operario: 'Operario' };
+
 async function loadUsers() {
   const tbody = document.getElementById('users-tbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="4" class="loading">Cargando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" class="loading">Cargando...</td></tr>';
   try {
     const users = await api.getUsers();
     tbody.innerHTML = users.map((u) => {
       const esSuperadmin = u.rol === 'superadmin';
-      const esAdminUser = u.rol === 'admin';
-      const rolLabel = esSuperadmin ? '<span style="color:var(--accent)">Superadmin</span>'
-                     : esAdminUser  ? '<span style="color:var(--green)">Admin</span>'
-                     :                '<span style="color:var(--muted)">Operario</span>';
-      const esSuperadminActual = getRol() === 'superadmin';
-      const toggleBtn = (esSuperadmin || !esSuperadminActual) ? '' : `
-        <label class="rol-switch" title="${esAdminUser ? 'Quitar admin' : 'Dar admin'}">
-          <input type="checkbox" ${esAdminUser ? 'checked' : ''} onchange="toggleRol(${u.id}, '${u.rol}', this)">
-          <span class="rol-switch-track"><span class="rol-switch-thumb"></span></span>
-          <span class="rol-switch-label">${esAdminUser ? 'Admin' : 'Operario'}</span>
-        </label>`;
-      const delBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
+      const rolLabel = `<span style="color:${ROL_COLORS[u.rol] || 'var(--muted)'}">${ROL_LABELS[u.rol] || u.rol}</span>`;
+      const sobLabel = esSuperadmin
+        ? '<span style="color:var(--accent);font-size:11px">Siempre</span>'
+        : `<span style="color:${u.acceso_sobrantes ? 'var(--green)' : 'var(--muted)'}">${u.acceso_sobrantes ? 'Sí' : 'No'}</span>`;
+      const actions = esSuperadmin ? '<span style="color:var(--muted)">—</span>' : `
+        <button class="btn-edit" onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes})">Editar</button>
+        <button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
+      const clickAttr = esSuperadmin ? '' : `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes})" style="cursor:pointer"`;
       return `
-        <tr>
+        <tr ${clickAttr}>
           <td>${u.username}</td>
           <td>${rolLabel}</td>
+          <td>${sobLabel}</td>
           <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
-          <td class="td-actions">${esSuperadmin ? '<span style="color:var(--muted)">—</span>' : toggleBtn + delBtn}</td>
+          <td class="td-actions" onclick="event.stopPropagation()">${actions}</td>
         </tr>`;
     }).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" class="error-msg">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="error-msg">${err.message}</td></tr>`;
+  }
+}
+
+// ── Modal editar usuario ───────────────────────────────────────────────────
+function openEditUser(id, username, rol, accesoSobrantes) {
+  document.getElementById('edit-user-id').value = id;
+  document.getElementById('edit-username').value = username;
+  document.getElementById('edit-rol').value = rol;
+  document.getElementById('edit-sobrantes').checked = !!accesoSobrantes;
+  // Cualquier admin puede cambiar rol
+  document.getElementById('edit-rol-group').classList.remove('hidden');
+  document.getElementById('edit-user-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('edit-username').focus(), 50);
+}
+
+function closeEditUser() {
+  document.getElementById('edit-user-modal').classList.add('hidden');
+}
+
+document.getElementById('edit-user-close').addEventListener('click', closeEditUser);
+document.getElementById('edit-user-cancel').addEventListener('click', closeEditUser);
+
+document.getElementById('edit-user-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = parseInt(document.getElementById('edit-user-id').value);
+  const data = {
+    username: document.getElementById('edit-username').value.trim(),
+    acceso_sobrantes: document.getElementById('edit-sobrantes').checked,
+  };
+  data.rol = document.getElementById('edit-rol').value;
+  try {
+    await api.updateUser(id, data);
+    showToast('Usuario actualizado', 'success');
+    closeEditUser();
+    loadUsers();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
+
+async function toggleSobrantes(id, checkbox) {
+  try {
+    await api.updateSobrantesAcceso(id, checkbox.checked);
+    showToast(`Acceso a sobrantes ${checkbox.checked ? 'activado' : 'desactivado'}`, 'success');
+    loadUsers();
+  } catch (err) {
+    checkbox.checked = !checkbox.checked;
+    showToast(err.message, 'error');
   }
 }
 
@@ -1415,8 +1449,9 @@ document.getElementById('nuevo-usuario-form').addEventListener('submit', async (
   e.preventDefault();
   const username = document.getElementById('nu-email').value.trim();
   const password = document.getElementById('nu-password').value;
+  const rol = document.getElementById('nu-rol').value;
   try {
-    await api.createUser(username, password);
+    await api.createUser(username, password, rol);
     showToast(`Usuario ${username} creado`, 'success');
     document.getElementById('nuevo-usuario-form').reset();
     loadUsers();
@@ -1490,7 +1525,7 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
         Los siguientes IDs no están en la tabla de clientes:
         <div class="import-missing-list">${tags}</div>
       `;
-      abrirModalClientesFaltantes(res.clientes_no_encontrados, {}, true);
+      abrirModalClientesFaltantes(res.clientes_no_encontrados, {}, true, res.no_encontrados_no_cf || []);
     }
     resultPanel.classList.remove('hidden');
   } catch (err) {
@@ -1794,4 +1829,293 @@ function showToast(msg, type = 'info') {
   toast.textContent = msg;
   toast.className = `toast toast-${type} show`;
   setTimeout(() => toast.classList.remove('show'), 2800);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SOBRANTES
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _sobListas = [];
+let _sobListaActual = null;
+let _sobItems = [];
+let sobScannerActive = false;
+let _sobCodeReader = null;
+let _sobCameras = [];
+let _sobCamIdx = 0;
+
+async function initSobrantes() {
+  await loadSobListas();
+}
+
+async function loadSobListas() {
+  try {
+    _sobListas = await api.sobGetListas();
+  } catch { _sobListas = []; }
+
+  const sel = document.getElementById('sob-lista-select');
+  if (_sobListas.length === 0) {
+    const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const nombre = `Sobrantes ${hoy}`;
+    _sobListaActual = nombre;
+    sel.innerHTML = `<option value="${nombre}">${nombre} (nueva)</option>`;
+  } else {
+    sel.innerHTML = _sobListas.map(l =>
+      `<option value="${l.lista}">${l.lista} (${l.items} ítems)</option>`
+    ).join('');
+    if (!_sobListaActual || !_sobListas.find(l => l.lista === _sobListaActual)) {
+      _sobListaActual = _sobListas[0].lista;
+    }
+    sel.value = _sobListaActual;
+  }
+  await loadSobItems();
+}
+
+async function loadSobItems() {
+  const lista = document.getElementById('sob-lista-select').value;
+  _sobListaActual = lista;
+  if (!lista) { renderSobItems([]); return; }
+  try {
+    _sobItems = await api.sobGetItems(lista);
+  } catch { _sobItems = []; }
+  renderSobItems(_sobItems);
+}
+
+function renderSobItems(items) {
+  const container = document.getElementById('sob-items');
+  const exportBar = document.getElementById('sob-export-bar');
+  const exportLink = document.getElementById('sob-export-link');
+
+  if (items.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:8px 0">Escaneá o buscá un producto para empezar.</p>';
+    exportBar.classList.add('hidden');
+    return;
+  }
+
+  exportBar.classList.remove('hidden');
+  exportLink.href = api.sobExportUrl(_sobListaActual);
+  exportLink.download = `sobrantes_${_sobListaActual}.xlsx`;
+
+  container.innerHTML = items.map(item => `
+    <div class="sob-item" data-id="${item.id}">
+      <div class="sob-item-top">
+        <div class="sob-item-info">
+          <div class="sob-item-descrip">${item.descrip || item.cod_bar || item.cod_art || '—'}</div>
+          <div class="sob-item-cod">${[item.cod_bar, item.cod_art].filter(Boolean).join(' · ')}</div>
+        </div>
+        <button class="sob-item-remove" data-id="${item.id}">✕</button>
+      </div>
+      <div class="sob-steppers">
+        <div class="sob-stepper">
+          <span class="sob-stepper-label">UNI</span>
+          <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="unidades">−</button>
+          <span class="sob-stepper-val" data-id="${item.id}" data-field="unidades">${item.unidades}</span>
+          <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="unidades">+</button>
+        </div>
+        <div class="sob-stepper">
+          <span class="sob-stepper-label">BUL</span>
+          <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="bultos">−</button>
+          <span class="sob-stepper-val" data-id="${item.id}" data-field="bultos">${item.bultos}</span>
+          <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="bultos">+</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Delegated stepper clicks
+document.getElementById('sob-items').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.sob-btn');
+  if (btn) {
+    const id = parseInt(btn.dataset.id);
+    const field = btn.dataset.field;
+    const item = _sobItems.find(i => i.id === id);
+    if (!item) return;
+    const delta = btn.classList.contains('btn-step-plus') ? 1 : -1;
+    item[field] = Math.max(0, item[field] + delta);
+    document.querySelector(`.sob-stepper-val[data-id="${id}"][data-field="${field}"]`).textContent = item[field];
+    try {
+      await api.sobUpdateItem(_sobListaActual, id, item.unidades, item.bultos);
+    } catch { showToast('Error al actualizar', 'error'); }
+    return;
+  }
+  const removeBtn = e.target.closest('.sob-item-remove');
+  if (removeBtn) {
+    const id = parseInt(removeBtn.dataset.id);
+    try {
+      await api.sobDeleteItem(_sobListaActual, id);
+      _sobItems = _sobItems.filter(i => i.id !== id);
+      renderSobItems(_sobItems);
+    } catch { showToast('Error al eliminar', 'error'); }
+  }
+});
+
+// Buscar / escanear
+async function sobBuscar(codBar) {
+  if (!codBar.trim()) return;
+  const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
+  if (!lista) { showToast('Creá una lista primero', 'error'); return; }
+
+  let cod_art = null, descrip = null;
+  try {
+    const lookup = await api.sobLookup(codBar.trim());
+    cod_art = lookup.cod_art;
+    descrip = lookup.descrip;
+  } catch { /* no pasa nada, igual agregamos con solo el barcode */ }
+
+  try {
+    const res = await api.sobAddItem(lista, { cod_bar: codBar.trim(), cod_art, descrip });
+    if (res.action === 'existing') {
+      // Resaltar el existente
+      _sobItems = await api.sobGetItems(lista);
+      renderSobItems(_sobItems);
+      setTimeout(() => {
+        const el = document.querySelector(`.sob-item[data-id="${res.id}"]`);
+        if (el) { el.classList.add('highlight'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        setTimeout(() => el?.classList.remove('highlight'), 1500);
+      }, 50);
+    } else {
+      _sobItems = await api.sobGetItems(lista);
+      await loadSobListas();
+      renderSobItems(_sobItems);
+      // Scroll al nuevo (primer elemento)
+      setTimeout(() => document.querySelector('.sob-item')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+  } catch (err) { showToast(err.message, 'error'); }
+  document.getElementById('sob-barcode-input').value = '';
+}
+
+document.getElementById('sob-buscar-btn').addEventListener('click', () => {
+  sobBuscar(document.getElementById('sob-barcode-input').value);
+});
+document.getElementById('sob-barcode-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sobBuscar(e.target.value); }
+});
+
+// Búsqueda por descripción
+let _sobDescripTimer = null;
+document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
+  clearTimeout(_sobDescripTimer);
+  const q = e.target.value.trim();
+  const results = document.getElementById('sob-descrip-results');
+  if (q.length < 2) { results.classList.add('hidden'); return; }
+  _sobDescripTimer = setTimeout(async () => {
+    try {
+      const items = await api.sobSearch(q);
+      if (!items.length) { results.classList.add('hidden'); return; }
+      results.innerHTML = items.map(i =>
+        `<div class="descrip-result-item" data-bar="${i.cod_bar || ''}" data-art="${i.cod_art || ''}" data-descrip="${(i.descrip || '').replace(/"/g, '&quot;')}">${i.descrip}</div>`
+      ).join('');
+      results.classList.remove('hidden');
+    } catch { results.classList.add('hidden'); }
+  }, 250);
+});
+
+document.getElementById('sob-descrip-results').addEventListener('click', async (e) => {
+  const item = e.target.closest('.descrip-result-item');
+  if (!item) return;
+  document.getElementById('sob-descrip-results').classList.add('hidden');
+  document.getElementById('sob-descrip-input').value = '';
+  const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
+  if (!lista) { showToast('Creá una lista primero', 'error'); return; }
+  try {
+    const res = await api.sobAddItem(lista, {
+      cod_bar: item.dataset.bar || null,
+      cod_art: item.dataset.art || null,
+      descrip: item.dataset.descrip || null,
+    });
+    if (res.action === 'existing') {
+      _sobItems = await api.sobGetItems(lista);
+      renderSobItems(_sobItems);
+      setTimeout(() => {
+        const el = document.querySelector(`.sob-item[data-id="${res.id}"]`);
+        if (el) { el.classList.add('highlight'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        setTimeout(() => el?.classList.remove('highlight'), 1500);
+      }, 50);
+    } else {
+      _sobItems = await api.sobGetItems(lista);
+      await loadSobListas();
+      renderSobItems(_sobItems);
+      setTimeout(() => document.querySelector('.sob-item')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#sob-descrip-input') && !e.target.closest('#sob-descrip-results')) {
+    document.getElementById('sob-descrip-results')?.classList.add('hidden');
+  }
+});
+
+// Nueva lista
+document.getElementById('sob-nueva-btn').addEventListener('click', async () => {
+  const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const nombre = prompt('Nombre de la nueva lista:', `Sobrantes ${hoy}`);
+  if (!nombre || !nombre.trim()) return;
+  try {
+    await api.sobCrearLista(nombre.trim());
+    _sobListaActual = nombre.trim();
+    await loadSobListas();
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+// Cambiar lista
+document.getElementById('sob-lista-select').addEventListener('change', loadSobItems);
+
+// Eliminar lista
+document.getElementById('sob-del-lista-btn').addEventListener('click', async () => {
+  const lista = document.getElementById('sob-lista-select').value;
+  if (!lista) return;
+  if (!confirm(`¿Eliminar la lista "${lista}"? Esta acción no se puede deshacer.`)) return;
+  try {
+    await api.sobDeleteLista(lista);
+    _sobListaActual = null;
+    await loadSobListas();
+    showToast('Lista eliminada', 'info');
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+// ── Scanner sobrantes ─────────────────────────────────────────────────────────
+document.getElementById('sob-scan-btn').addEventListener('click', async () => {
+  if (sobScannerActive) stopSobScanner();
+  else await startSobScanner();
+});
+
+async function startSobScanner(deviceId = null) {
+  const container = document.getElementById('sob-scanner-container');
+  container.classList.remove('hidden');
+  document.getElementById('sob-scan-btn').textContent = 'Detener';
+  sobScannerActive = true;
+  const hints = new Map([[2, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39]], [3, true]]);
+  _sobCodeReader = new ZXing.BrowserMultiFormatReader(hints, 0);
+  const targetId = deviceId ?? localStorage.getItem('pick_last_camera') ?? null;
+  await _sobCodeReader.decodeFromVideoDevice(targetId, 'sob-scanner-video', async (result) => {
+    if (result) {
+      const code = result.getText();
+      stopSobScanner();
+      await sobBuscar(code);
+    }
+  });
+  container.classList.add('scanner-open');
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  _sobCameras = devices.filter(d => d.kind === 'videoinput');
+  document.getElementById('sob-switch-camera-btn').classList.toggle('hidden', _sobCameras.length <= 1);
+}
+
+function stopSobScanner() {
+  if (!sobScannerActive) return;
+  sobScannerActive = false;
+  if (_sobCodeReader) { _sobCodeReader.reset(); _sobCodeReader = null; }
+  const video = document.getElementById('sob-scanner-video');
+  if (video?.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  document.getElementById('sob-scanner-container').classList.remove('scanner-open');
+  document.getElementById('sob-scanner-container').classList.add('hidden');
+  document.getElementById('sob-scan-btn').textContent = 'Escanear';
+  document.getElementById('sob-switch-camera-btn').classList.add('hidden');
+}
+
+function switchSobCamera() {
+  if (!_sobCameras.length) return;
+  _sobCamIdx = (_sobCamIdx + 1) % _sobCameras.length;
+  stopSobScanner();
+  startSobScanner(_sobCameras[_sobCamIdx].deviceId);
 }
