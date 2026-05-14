@@ -41,6 +41,14 @@ function esAdmin() {
   return r === 'admin' || r === 'superadmin';
 }
 
+function esVendedor() {
+  return getRol() === 'vendedor';
+}
+
+function esAdminOVendedor() {
+  return esAdmin() || esVendedor();
+}
+
 async function request(method, path, body = null) {
   const token = getToken();
   const headers = { 'Content-Type': 'application/json' };
@@ -135,4 +143,15 @@ const api = {
     if (!res.ok) throw new Error(data.detail || 'Error del servidor');
     return data;
   },
+
+  // Sobrantes
+  sobGetListas: () => request('GET', `/api/${getMayorista()}/sobrantes/listas`),
+  sobCrearLista: (nombre) => request('POST', `/api/${getMayorista()}/sobrantes/listas`, { nombre }),
+  sobDeleteLista: (lista) => request('DELETE', `/api/${getMayorista()}/sobrantes/listas/${encodeURIComponent(lista)}`),
+  sobLookup: (codBar) => request('GET', `/api/${getMayorista()}/sobrantes/lookup/${encodeURIComponent(codBar)}`),
+  sobGetItems: (lista) => request('GET', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}`),
+  sobAddItem: (lista, item) => request('POST', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/item`, item),
+  sobUpdateItem: (lista, id, unidades, bultos) => request('PUT', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/item/${id}`, { unidades, bultos }),
+  sobDeleteItem: (lista, id) => request('DELETE', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/item/${id}`),
+  sobExportUrl: (lista) => `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/export`,
 };

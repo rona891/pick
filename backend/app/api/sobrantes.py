@@ -1,0 +1,222 @@
+import io
+import openpyxl
+from openpyxl.styles import PatternFill, Font, Alignment
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from typing import Optional
+from app.db.database import get_db
+
+router_yaguar = APIRouter(prefix="/yaguar/sobrantes", tags=["Yaguar - Sobrantes"])
+router_diarco = APIRouter(prefix="/diarco/sobrantes", tags=["Diarco - Sobrantes"])
+
+
+class ItemIn(BaseModel):
+    cod_bar: Optional[str] = None
+    cod_art: Optional[str] = None
+    descrip: Optional[str] = None
+
+class CantidadIn(BaseModel):
+    unidades: int = 0
+    bultos: int = 0
+
+class ListaIn(BaseModel):
+    nombre: str
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _list_listas(mayorista: str):
+    with get_db() as cur:
+        cur.execute("""
+            SELECT lista, COUNT(*) AS items, MAX(created_at) AS ultima
+            FROM sobrantes WHERE mayorista = %s
+            GROUP BY lista ORDER BY ultima DESC
+        """, (mayorista,))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _get_items(lista: str, mayorista: str):
+    with get_db() as cur:
+        cur.execute("""
+            SELECT id, cod_bar, cod_art, descrip, unidades, bultos
+            FROM sobrantes WHERE lista = %s AND mayorista = %s
+            ORDER BY created_at DESC
+        """, (lista, mayorista))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _add_item(lista: str, data: ItemIn, mayorista: str):
+    cod_bar = (data.cod_bar or "").strip() or None
+    cod_art = (data.cod_art or "").strip() or None
+    descrip = (data.descrip or "").strip() or None
+    if not cod_bar and not cod_art:
+        raise HTTPException(400, "Se requiere cod_bar o cod_art")
+    with get_db() as cur:
+        # Si ya existe en esta lista, devolver el existente (frontend lo resalta)
+        if cod_bar:
+            cur.execute(
+                "SELECT id, cod_bar, cod_art, descrip, unidades, bultos FROM sobrantes WHERE lista=%s AND mayorista=%s AND cod_bar=%s",
+                (lista, mayorista, cod_bar)
+            )
+        else:
+            cur.execute(
+                "SELECT id, cod_bar, cod_art, descrip, unidades, bultos FROM sobrantes WHERE lista=%s AND mayorista=%s AND cod_art=%s",
+                (lista, mayorista, cod_art)
+            )
+        existing = cur.fetchone()
+        if existing:
+            return {"action": "existing", **dict(existing)}
+        cur.execute(
+            "INSERT INTO sobrantes (cod_bar, cod_art, descrip, unidades, bultos, lista, mayorista) VALUES (%s,%s,%s,0,0,%s,%s) RETURNING id, cod_bar, cod_art, descrip, unidades, bultos",
+            (cod_bar, cod_art, descrip, lista, mayorista)
+        )
+        return {"action": "added", **dict(cur.fetchone())}
+
+
+def _update_item(lista: str, item_id: int, data: CantidadIn, mayorista: str):
+    with get_db() as cur:
+        cur.execute(
+            "UPDATE sobrantes SET unidades=%s, bultos=%s WHERE id=%s AND lista=%s AND mayorista=%s RETURNING id, cod_bar, cod_art, descrip, unidades, bultos",
+            (max(0, data.unidades), max(0, data.bultos), item_id, lista, mayorista)
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Item no encontrado")
+        return dict(row)
+
+
+def _delete_item(lista: str, item_id: int, mayorista: str):
+    with get_db() as cur:
+        cur.execute("DELETE FROM sobrantes WHERE id=%s AND lista=%s AND mayorista=%s", (item_id, lista, mayorista))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Item no encontrado")
+    return {"ok": True}
+
+
+def _delete_lista(lista: str, mayorista: str):
+    with get_db() as cur:
+        cur.execute("DELETE FROM sobrantes WHERE lista=%s AND mayorista=%s", (lista, mayorista))
+    return {"ok": True}
+
+
+def _lookup(cod_bar: str, mayorista: str):
+    with get_db() as cur:
+        for col in ("cod_bar", "cod_bar_bulto"):
+            cur.execute(f"SELECT cod_art, descrip FROM pick WHERE {col}=%s AND mayorista=%s LIMIT 1", (cod_bar, mayorista))
+            row = cur.fetchone()
+            if row:
+                return {"cod_art": row["cod_art"], "descrip": row["descrip"], "found": True}
+    return {"cod_art": None, "descrip": None, "found": False}
+
+
+def _export(lista: str, mayorista: str):
+    with get_db() as cur:
+        cur.execute(
+            "SELECT cod_bar, cod_art, descrip, unidades, bultos FROM sobrantes WHERE lista=%s AND mayorista=%s ORDER BY created_at DESC",
+            (lista, mayorista)
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sobrantes"
+
+    hfill = PatternFill("solid", fgColor="E0FF4F")
+    hfont = Font(bold=True, color="141414")
+    headers = ["Cód. de Barra", "Cód. Artículo", "Descripción", "Unidades", "Bultos"]
+    for c, h in enumerate(headers, 1):
+        cell = ws.cell(1, c, h)
+        cell.fill = hfill
+        cell.font = hfont
+        cell.alignment = Alignment(horizontal="center")
+
+    alt = PatternFill("solid", fgColor="1E1E1E")
+    for i, r in enumerate(rows, 2):
+        vals = [r["cod_bar"], r["cod_art"], r["descrip"], r["unidades"], r["bultos"]]
+        for c, v in enumerate(vals, 1):
+            cell = ws.cell(i, c, v)
+            cell.font = Font(color="FFFFFF")
+            cell.alignment = Alignment(horizontal="center" if c > 3 else "left")
+            if i % 2 == 0:
+                cell.fill = alt
+
+    ws.column_dimensions["A"].width = 18
+    ws.column_dimensions["B"].width = 14
+    ws.column_dimensions["C"].width = 42
+    ws.column_dimensions["D"].width = 12
+    ws.column_dimensions["E"].width = 12
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"sobrantes_{lista.replace(' ', '_')}_{mayorista}.xlsx"
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": f"attachment; filename={fname}"})
+
+
+# ── Yaguar routes ──────────────────────────────────────────────────────────────
+
+@router_yaguar.get("/listas")
+def yaguar_list_listas(): return _list_listas("yaguar")
+
+@router_yaguar.post("/listas")
+def yaguar_crear_lista(data: ListaIn):
+    nombre = data.nombre.strip()
+    if not nombre: raise HTTPException(400, "Nombre vacío")
+    return {"lista": nombre}
+
+@router_yaguar.delete("/listas/{lista}")
+def yaguar_delete_lista(lista: str): return _delete_lista(lista, "yaguar")
+
+@router_yaguar.get("/lookup/{cod_bar}")
+def yaguar_lookup(cod_bar: str): return _lookup(cod_bar, "yaguar")
+
+@router_yaguar.get("/{lista}/export")
+def yaguar_export(lista: str): return _export(lista, "yaguar")
+
+@router_yaguar.get("/{lista}")
+def yaguar_get_items(lista: str): return _get_items(lista, "yaguar")
+
+@router_yaguar.post("/{lista}/item")
+def yaguar_add_item(lista: str, data: ItemIn): return _add_item(lista, data, "yaguar")
+
+@router_yaguar.put("/{lista}/item/{item_id}")
+def yaguar_update_item(lista: str, item_id: int, data: CantidadIn): return _update_item(lista, item_id, data, "yaguar")
+
+@router_yaguar.delete("/{lista}/item/{item_id}")
+def yaguar_delete_item(lista: str, item_id: int): return _delete_item(lista, item_id, "yaguar")
+
+
+# ── Diarco routes ──────────────────────────────────────────────────────────────
+
+@router_diarco.get("/listas")
+def diarco_list_listas(): return _list_listas("diarco")
+
+@router_diarco.post("/listas")
+def diarco_crear_lista(data: ListaIn):
+    nombre = data.nombre.strip()
+    if not nombre: raise HTTPException(400, "Nombre vacío")
+    return {"lista": nombre}
+
+@router_diarco.delete("/listas/{lista}")
+def diarco_delete_lista(lista: str): return _delete_lista(lista, "diarco")
+
+@router_diarco.get("/lookup/{cod_bar}")
+def diarco_lookup(cod_bar: str): return _lookup(cod_bar, "diarco")
+
+@router_diarco.get("/{lista}/export")
+def diarco_export(lista: str): return _export(lista, "diarco")
+
+@router_diarco.get("/{lista}")
+def diarco_get_items(lista: str): return _get_items(lista, "diarco")
+
+@router_diarco.post("/{lista}/item")
+def diarco_add_item(lista: str, data: ItemIn): return _add_item(lista, data, "diarco")
+
+@router_diarco.put("/{lista}/item/{item_id}")
+def diarco_update_item(lista: str, item_id: int, data: CantidadIn): return _update_item(lista, item_id, data, "diarco")
+
+@router_diarco.delete("/{lista}/item/{item_id}")
+def diarco_delete_item(lista: str, item_id: int): return _delete_item(lista, item_id, "diarco")

@@ -98,12 +98,25 @@
       </div>
     </div>
 
-    <!-- Tabs -->
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="pick">Pick</button>
-      <button class="tab-btn" data-tab="clientes">Clientes</button>
-      <button class="tab-btn" data-tab="admin">Admin</button>
-    </div>
+    <!-- Bottom nav -->
+    <nav class="bottom-nav">
+      <button class="tab-btn active" data-tab="pick">
+        <span class="nav-icon">▦</span>
+        <span class="nav-label">Pick</span>
+      </button>
+      <button class="tab-btn" data-tab="clientes">
+        <span class="nav-icon">◉</span>
+        <span class="nav-label">Clientes</span>
+      </button>
+      <button class="tab-btn" data-tab="sobrantes">
+        <span class="nav-icon">≋</span>
+        <span class="nav-label">Sobrantes</span>
+      </button>
+      <button class="tab-btn hidden" data-tab="admin" id="nav-admin-btn">
+        <span class="nav-icon">⚙</span>
+        <span class="nav-label" id="nav-admin-label">Admin</span>
+      </button>
+    </nav>
 
     <!-- ── Panel: Pick ──────────────────────────────────────────────── -->
     <div class="tab-panel" data-panel="pick">
@@ -196,6 +209,63 @@
         <button class="filter-btn" data-filter="pendiente">Pendiente</button>
       </div>
       <div id="resumen-list"></div>
+    </div>
+
+    <!-- ── Panel: Sobrantes ──────────────────────────────────────────── -->
+    <div class="tab-panel hidden" data-panel="sobrantes">
+
+      <div class="panel-help-bar">
+        <div class="info-block">
+          <button class="info-btn">Ayuda</button>
+          <div class="info-content">
+            <p><strong>¿Para qué sirve esta pestaña?</strong> Para registrar los artículos que sobran al final del picking. Escaneás o buscás cada producto, ingresás cuántas unidades o bultos quedaron, y exportás la lista para mandársela a administración.</p>
+            <p><strong>¿Cómo se usa?</strong><br>
+            1. Elegí una lista existente o creá una nueva con <strong>+ Nueva</strong><br>
+            2. Escaneá el código de barras del producto sobrante o escribilo a mano<br>
+            3. Ajustá las <strong>unidades</strong> y los <strong>bultos</strong> con los botones − y +<br>
+            4. Cuando terminés, tocá <strong>Exportar Excel</strong> para descargar la lista</p>
+            <p>Si escaneás un producto que ya está en la lista, la app lo resalta en lugar de duplicarlo.</p>
+            <p>Las listas <strong>no se comparten</strong> entre Yaguar y DIARCO — cada mayorista tiene las suyas.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selector de lista -->
+      <div class="sob-header">
+        <select id="sob-lista-select" class="sob-lista-select"></select>
+        <button id="sob-nueva-btn" class="btn-secondary sob-nueva-btn">+ Nueva</button>
+        <button id="sob-del-lista-btn" class="btn-del sob-del-btn" title="Eliminar lista">🗑</button>
+      </div>
+
+      <!-- Buscador / scanner -->
+      <div class="sob-scan-area">
+        <div class="search-row">
+          <input type="text" id="sob-barcode-input" placeholder="Código de barras..." autocomplete="off" inputmode="numeric" />
+          <button type="button" id="sob-scan-btn" class="btn-icon">Escanear</button>
+          <button type="button" id="sob-buscar-btn" class="btn-search">Buscar</button>
+        </div>
+      </div>
+
+      <div id="sob-scanner-container" class="hidden">
+        <video id="sob-scanner-video" autoplay muted playsinline></video>
+        <button class="btn-scanner-close" onclick="stopSobScanner()">✕</button>
+        <div class="scanner-guide-overlay">
+          <div class="scanner-guide-rect"></div>
+          <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
+        </div>
+        <div class="scanner-controls">
+          <button id="sob-switch-camera-btn" class="btn-switch-camera hidden" onclick="switchSobCamera()">⟳ Cambiar cámara</button>
+        </div>
+      </div>
+
+      <!-- Lista de items -->
+      <div id="sob-items" class="sob-items"></div>
+
+      <!-- Barra inferior fija: exportar -->
+      <div id="sob-export-bar" class="sob-export-bar hidden">
+        <a id="sob-export-link" class="btn-primary sob-export-btn">↓ Exportar Excel</a>
+      </div>
+
     </div>
 
     <!-- ── Panel: Admin ─────────────────────────────────────────────── -->

@@ -56,7 +56,9 @@ function showApp() {
   document.getElementById('login-view').classList.add('hidden');
   document.getElementById('mayorista-view').classList.add('hidden');
   document.getElementById('app-view').classList.remove('hidden');
-  document.querySelector('.tab-btn[data-tab="admin"]').classList.toggle('hidden', !esAdmin());
+  const adminBtn = document.querySelector('.tab-btn[data-tab="admin"]');
+  adminBtn.classList.toggle('hidden', !esAdminOVendedor());
+  if (esVendedor()) document.getElementById('nav-admin-label').textContent = 'Gestión';
   document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
   const m = getMayorista();
   aplicarTema(m);
@@ -203,9 +205,11 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== tab));
-
+  if (scannerActive && tab !== 'pick') stopScanner();
+  if (sobScannerActive && tab !== 'sobrantes') stopSobScanner();
   if (tab === 'clientes') loadResumen();
   if (tab === 'admin') initAdmin();
+  if (tab === 'sobrantes') initSobrantes();
 }
 
 // ── Tab: Pick ──────────────────────────────────────────────────────────────
@@ -939,15 +943,18 @@ document.getElementById('cliente-picks-overlay').addEventListener('click', (e) =
 
 // ── Tab: Admin ─────────────────────────────────────────────────────────────
 function initAdmin() {
-  if (adminUnlocked || esAdmin()) {
+  const vendedor = esVendedor();
+  if (adminUnlocked || esAdmin() || vendedor) {
     adminUnlocked = true;
     document.getElementById('admin-lock').classList.add('hidden');
     document.getElementById('admin-panel').classList.remove('hidden');
 
-    const esDiarco = getMayorista() === 'diarco';
+    // Vendedor: ocultar Semanas y Usuarios
+    document.querySelector('.admin-tab-btn[data-admin-tab="nueva-semana"]').classList.toggle('hidden', vendedor);
+    document.querySelector('.admin-tab-btn[data-admin-tab="usuarios"]').classList.toggle('hidden', vendedor);
 
-    if (esDiarco) {
-      // Activar la primera tab visible (Semanas)
+    const esDiarco = getMayorista() === 'diarco';
+    if (esDiarco && !vendedor) {
       document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.add('hidden'));
       const firstBtn = document.querySelector('.admin-tab-btn:not(.hidden)');
@@ -959,6 +966,9 @@ function initAdmin() {
         if (target === 'clientes') loadClientes();
       }
     } else {
+      // Asegurar que Clientes esté activo para Yaguar o vendedor
+      document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.adminTab === 'clientes'));
+      document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.toggle('hidden', p.dataset.adminPanel !== 'clientes'));
       loadClientes();
     }
   } else {
@@ -1746,4 +1756,238 @@ function showToast(msg, type = 'info') {
   toast.textContent = msg;
   toast.className = `toast toast-${type} show`;
   setTimeout(() => toast.classList.remove('show'), 2800);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SOBRANTES
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _sobListas = [];
+let _sobListaActual = null;
+let _sobItems = [];
+let sobScannerActive = false;
+let _sobCodeReader = null;
+let _sobCameras = [];
+let _sobCamIdx = 0;
+
+async function initSobrantes() {
+  await loadSobListas();
+}
+
+async function loadSobListas() {
+  try {
+    _sobListas = await api.sobGetListas();
+  } catch { _sobListas = []; }
+
+  const sel = document.getElementById('sob-lista-select');
+  if (_sobListas.length === 0) {
+    const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const nombre = `Sobrantes ${hoy}`;
+    _sobListaActual = nombre;
+    sel.innerHTML = `<option value="${nombre}">${nombre} (nueva)</option>`;
+  } else {
+    sel.innerHTML = _sobListas.map(l =>
+      `<option value="${l.lista}">${l.lista} (${l.items} ítems)</option>`
+    ).join('');
+    if (!_sobListaActual || !_sobListas.find(l => l.lista === _sobListaActual)) {
+      _sobListaActual = _sobListas[0].lista;
+    }
+    sel.value = _sobListaActual;
+  }
+  await loadSobItems();
+}
+
+async function loadSobItems() {
+  const lista = document.getElementById('sob-lista-select').value;
+  _sobListaActual = lista;
+  if (!lista) { renderSobItems([]); return; }
+  try {
+    _sobItems = await api.sobGetItems(lista);
+  } catch { _sobItems = []; }
+  renderSobItems(_sobItems);
+}
+
+function renderSobItems(items) {
+  const container = document.getElementById('sob-items');
+  const exportBar = document.getElementById('sob-export-bar');
+  const exportLink = document.getElementById('sob-export-link');
+
+  if (items.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:8px 0">Escaneá o buscá un producto para empezar.</p>';
+    exportBar.classList.add('hidden');
+    return;
+  }
+
+  exportBar.classList.remove('hidden');
+  exportLink.href = api.sobExportUrl(_sobListaActual);
+  exportLink.download = `sobrantes_${_sobListaActual}.xlsx`;
+
+  container.innerHTML = items.map(item => `
+    <div class="sob-item" data-id="${item.id}">
+      <div class="sob-item-top">
+        <div class="sob-item-info">
+          <div class="sob-item-descrip">${item.descrip || item.cod_bar || item.cod_art || '—'}</div>
+          <div class="sob-item-cod">${[item.cod_bar, item.cod_art].filter(Boolean).join(' · ')}</div>
+        </div>
+        <button class="sob-item-remove" data-id="${item.id}">✕</button>
+      </div>
+      <div class="sob-steppers">
+        <div class="sob-stepper">
+          <span class="sob-stepper-label">UNI</span>
+          <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="unidades">−</button>
+          <span class="sob-stepper-val" data-id="${item.id}" data-field="unidades">${item.unidades}</span>
+          <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="unidades">+</button>
+        </div>
+        <div class="sob-stepper">
+          <span class="sob-stepper-label">BUL</span>
+          <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="bultos">−</button>
+          <span class="sob-stepper-val" data-id="${item.id}" data-field="bultos">${item.bultos}</span>
+          <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="bultos">+</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Delegated stepper clicks
+document.getElementById('sob-items').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.sob-btn');
+  if (btn) {
+    const id = parseInt(btn.dataset.id);
+    const field = btn.dataset.field;
+    const item = _sobItems.find(i => i.id === id);
+    if (!item) return;
+    const delta = btn.classList.contains('btn-step-plus') ? 1 : -1;
+    item[field] = Math.max(0, item[field] + delta);
+    document.querySelector(`.sob-stepper-val[data-id="${id}"][data-field="${field}"]`).textContent = item[field];
+    try {
+      await api.sobUpdateItem(_sobListaActual, id, item.unidades, item.bultos);
+    } catch { showToast('Error al actualizar', 'error'); }
+    return;
+  }
+  const removeBtn = e.target.closest('.sob-item-remove');
+  if (removeBtn) {
+    const id = parseInt(removeBtn.dataset.id);
+    try {
+      await api.sobDeleteItem(_sobListaActual, id);
+      _sobItems = _sobItems.filter(i => i.id !== id);
+      renderSobItems(_sobItems);
+    } catch { showToast('Error al eliminar', 'error'); }
+  }
+});
+
+// Buscar / escanear
+async function sobBuscar(codBar) {
+  if (!codBar.trim()) return;
+  const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
+  if (!lista) { showToast('Creá una lista primero', 'error'); return; }
+
+  let cod_art = null, descrip = null;
+  try {
+    const lookup = await api.sobLookup(codBar.trim());
+    cod_art = lookup.cod_art;
+    descrip = lookup.descrip;
+  } catch { /* no pasa nada, igual agregamos con solo el barcode */ }
+
+  try {
+    const res = await api.sobAddItem(lista, { cod_bar: codBar.trim(), cod_art, descrip });
+    if (res.action === 'existing') {
+      // Resaltar el existente
+      _sobItems = await api.sobGetItems(lista);
+      renderSobItems(_sobItems);
+      setTimeout(() => {
+        const el = document.querySelector(`.sob-item[data-id="${res.id}"]`);
+        if (el) { el.classList.add('highlight'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        setTimeout(() => el?.classList.remove('highlight'), 1500);
+      }, 50);
+    } else {
+      _sobItems = await api.sobGetItems(lista);
+      await loadSobListas();
+      renderSobItems(_sobItems);
+      // Scroll al nuevo (primer elemento)
+      setTimeout(() => document.querySelector('.sob-item')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+  } catch (err) { showToast(err.message, 'error'); }
+  document.getElementById('sob-barcode-input').value = '';
+}
+
+document.getElementById('sob-buscar-btn').addEventListener('click', () => {
+  sobBuscar(document.getElementById('sob-barcode-input').value);
+});
+document.getElementById('sob-barcode-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sobBuscar(e.target.value); }
+});
+
+// Nueva lista
+document.getElementById('sob-nueva-btn').addEventListener('click', async () => {
+  const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const nombre = prompt('Nombre de la nueva lista:', `Sobrantes ${hoy}`);
+  if (!nombre || !nombre.trim()) return;
+  try {
+    await api.sobCrearLista(nombre.trim());
+    _sobListaActual = nombre.trim();
+    await loadSobListas();
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+// Cambiar lista
+document.getElementById('sob-lista-select').addEventListener('change', loadSobItems);
+
+// Eliminar lista
+document.getElementById('sob-del-lista-btn').addEventListener('click', async () => {
+  const lista = document.getElementById('sob-lista-select').value;
+  if (!lista) return;
+  if (!confirm(`¿Eliminar la lista "${lista}"? Esta acción no se puede deshacer.`)) return;
+  try {
+    await api.sobDeleteLista(lista);
+    _sobListaActual = null;
+    await loadSobListas();
+    showToast('Lista eliminada', 'info');
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+// ── Scanner sobrantes ─────────────────────────────────────────────────────────
+document.getElementById('sob-scan-btn').addEventListener('click', async () => {
+  if (sobScannerActive) stopSobScanner();
+  else await startSobScanner();
+});
+
+async function startSobScanner(deviceId = null) {
+  const container = document.getElementById('sob-scanner-container');
+  container.classList.remove('hidden');
+  document.getElementById('sob-scan-btn').textContent = 'Detener';
+  sobScannerActive = true;
+  const hints = new Map([[2, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39]], [3, true]]);
+  _sobCodeReader = new ZXing.BrowserMultiFormatReader(hints, 0);
+  const targetId = deviceId ?? localStorage.getItem('pick_last_camera') ?? null;
+  await _sobCodeReader.decodeFromVideoDevice(targetId, 'sob-scanner-video', async (result) => {
+    if (result) {
+      const code = result.getText();
+      stopSobScanner();
+      await sobBuscar(code);
+    }
+  });
+  container.classList.add('scanner-open');
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  _sobCameras = devices.filter(d => d.kind === 'videoinput');
+  document.getElementById('sob-switch-camera-btn').classList.toggle('hidden', _sobCameras.length <= 1);
+}
+
+function stopSobScanner() {
+  if (!sobScannerActive) return;
+  sobScannerActive = false;
+  if (_sobCodeReader) { _sobCodeReader.reset(); _sobCodeReader = null; }
+  const video = document.getElementById('sob-scanner-video');
+  if (video?.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  document.getElementById('sob-scanner-container').classList.remove('scanner-open');
+  document.getElementById('sob-scanner-container').classList.add('hidden');
+  document.getElementById('sob-scan-btn').textContent = 'Escanear';
+  document.getElementById('sob-switch-camera-btn').classList.add('hidden');
+}
+
+function switchSobCamera() {
+  if (!_sobCameras.length) return;
+  _sobCamIdx = (_sobCamIdx + 1) % _sobCameras.length;
+  stopSobScanner();
+  startSobScanner(_sobCameras[_sobCamIdx].deviceId);
 }

@@ -105,8 +105,8 @@ def update_rol(id: int, data: RolUpdate, authorization: str = Header(...)):
         caller = cur.fetchone()
     if not caller or caller["rol"] != "superadmin":
         raise HTTPException(403, "Solo el superadmin puede cambiar roles")
-    if data.rol not in ("operario", "admin"):
-        raise HTTPException(400, "Rol inválido. Valores permitidos: operario, admin")
+    if data.rol not in ("operario", "admin", "vendedor"):
+        raise HTTPException(400, "Rol inválido. Valores permitidos: operario, admin, vendedor")
     with get_db() as cur:
         cur.execute("SELECT rol FROM users WHERE id = %s", (id,))
         user = cur.fetchone()

@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import picks, auth, health, clientes, admin, zonas, export
 from app.api.yaguar import semanas as yaguar_semanas
 from app.api.diarco import semanas as diarco_semanas
+from app.api.sobrantes import router_yaguar as sob_yaguar, router_diarco as sob_diarco
 # picks, clientes y export tienen routers dobles (uno por mayorista)
 from app.auth.jwt import hash_password
 from app.db.database import init_pool, get_db
@@ -123,6 +124,19 @@ async def lifespan(app: FastAPI):
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_pick_semana ON pick(semana)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_clientes_yaguar_id_yaguar ON clientes_yaguar(id_yaguar)")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS sobrantes (
+                id bigserial PRIMARY KEY,
+                cod_bar varchar,
+                cod_art varchar,
+                descrip varchar,
+                unidades integer DEFAULT 0,
+                bultos integer DEFAULT 0,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                lista varchar NOT NULL,
+                created_at timestamptz DEFAULT now()
+            )
+        """)
         # Estado de códigos Yaguar (ocupado/libre/no_apto según últimas 10 semanas)
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS estado VARCHAR")
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS flete NUMERIC")
@@ -181,3 +195,6 @@ app.include_router(diarco_semanas.router, prefix="/api")
 app.include_router(picks.router_diarco, prefix="/api")
 app.include_router(clientes.router_diarco, prefix="/api")
 app.include_router(export.router_diarco, prefix="/api")
+# ── Sobrantes ─────────────────────────────────────────────────────────────────
+app.include_router(sob_yaguar, prefix="/api")
+app.include_router(sob_diarco, prefix="/api")
