@@ -1356,7 +1356,7 @@ async function loadUsers() {
       const sobLabel = esSuperadmin
         ? '<span style="color:var(--accent);font-size:11px">Siempre</span>'
         : `<span style="color:${u.acceso_sobrantes ? 'var(--green)' : 'var(--muted)'}">${u.acceso_sobrantes ? 'Sí' : 'No'}</span>`;
-      const actions = esSuperadmin ? '' : `
+      const actions = esSuperadmin ? '<span style="color:var(--muted)">—</span>' : `
         <button class="btn-edit" onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes})">Editar</button>
         <button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
       const clickAttr = esSuperadmin ? '' : `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes})" style="cursor:pointer"`;
