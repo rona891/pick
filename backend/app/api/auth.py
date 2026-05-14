@@ -36,6 +36,20 @@ def logout():
     return {"message": "Sesión cerrada"}
 
 
+@router.get("/me")
+def get_me(authorization: str = Header(...)):
+    payload = verify_token(authorization)
+    user_id = payload.get("sub")
+    with get_db() as cur:
+        cur.execute("SELECT rol, acceso_sobrantes FROM users WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+    if not user:
+        raise HTTPException(404, "Usuario no encontrado")
+    return {
+        "acceso_sobrantes": user["rol"] == "superadmin" or bool(user["acceso_sobrantes"])
+    }
+
+
 @router.put("/password")
 def change_password(request: ChangePasswordRequest, authorization: str = Header(...)):
     payload = verify_token(authorization)

@@ -119,6 +119,7 @@ const api = {
   deleteUser: (id) => request('DELETE', `/api/auth/users/${id}`),
   updateRol: (id, rol) => request('PUT', `/api/auth/users/${id}/rol`, { rol }),
   updateSobrantesAcceso: (id, acceso) => request('PUT', `/api/auth/users/${id}/sobrantes`, { acceso }),
+  getMe: () => request('GET', '/api/auth/me'),
 
   // Zonas y Repartos — compartidos entre mayoristas
   getZonas: () => request('GET', '/api/zonas/'),

@@ -71,6 +71,28 @@ function showApp() {
   setTimeout(() => document.getElementById('barcode-input').focus(), 200);
 }
 
+// ── Permisos en tiempo real ────────────────────────────────────────────────
+async function checkPermissions() {
+  if (!getToken()) return;
+  try {
+    const me = await api.getMe();
+    const nuevo = me.acceso_sobrantes ? '1' : '0';
+    if (nuevo !== (localStorage.getItem('acceso_sobrantes') || '0')) {
+      localStorage.setItem('acceso_sobrantes', nuevo);
+      const sobTab = document.querySelector('.tab-btn[data-tab="sobrantes"]');
+      if (sobTab) sobTab.classList.toggle('hidden', !me.acceso_sobrantes);
+    }
+  } catch { /* silencioso — no romper si el servidor no responde */ }
+}
+
+// Chequear al volver a la pestaña del browser
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) checkPermissions();
+});
+
+// Chequear cada 15 segundos mientras la app está activa
+setInterval(() => { if (!document.hidden) checkPermissions(); }, 15000);
+
 // ── Modo claro / oscuro ────────────────────────────────────────────────────
 function esLightMode() {
   return localStorage.getItem('lightMode') === '1';
