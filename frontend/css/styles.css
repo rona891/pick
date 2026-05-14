@@ -963,6 +963,11 @@ input[type="date"] {
 
 input[type="date"]:focus { border-color: var(--accent); }
 
+/* Barra de ayuda en pestañas Pick y Clientes: separada visualmente del buscador */
+.panel-help-bar { padding: 10px 16px 0; }
+.panel-help-bar .info-block { margin-bottom: 0; }
+.panel-help-bar .info-content { margin-top: 8px; }
+
 .info-block { margin-bottom: 16px; }
 
 .info-btn {
@@ -1807,4 +1812,199 @@ input[type="date"]:focus { border-color: var(--accent); }
   color: var(--muted);
   padding: 8px 0;
   text-align: center;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   DESKTOP LAYOUT  ≥ 900px
+   Solo el admin usa PC → admin panel se convierte en sidebar + contenido.
+   Pick y Clientes mantienen el estilo mobile centrado.
+══════════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 900px) {
+
+  /* ── App container: full width ─────────────────────────────────────── */
+  #app-view {
+    max-width: 100%;
+    padding: 0 0 60px;
+  }
+
+  /* ── Topbar ─────────────────────────────────────────────────────────── */
+  .topbar {
+    padding: 14px 40px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0;
+  }
+
+  /* ── Semana row, progreso, stats, tabs: centrados y acotados ────────── */
+  .semana-row,
+  .progress-bar-wrap,
+  .stats,
+  .tabs {
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .semana-row   { padding-top: 20px; }
+  .tabs         { margin-top: 8px; }
+
+  /* Pick y Clientes: panel centrado, ancho acotado */
+  .tab-panel[data-panel="pick"],
+  .tab-panel[data-panel="clientes"] {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  /* ── Admin: panel completo full-width ───────────────────────────────── */
+  .tab-panel[data-panel="admin"] {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  /* Lock screen: tarjeta centrada */
+  #admin-lock {
+    display: flex;
+    justify-content: center;
+    padding-top: 80px;
+  }
+  .admin-lock-form {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 40px 48px;
+    width: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .admin-lock-form label {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: .5px;
+  }
+
+  /* ── Admin panel: sidebar + contenido ──────────────────────────────── */
+  #admin-panel {
+    display: flex;
+    min-height: calc(100vh - 110px);
+  }
+
+  /* Sidebar (sub-tabs) */
+  .admin-tabs {
+    flex-direction: column;
+    width: 200px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    border-bottom: none;
+    padding: 28px 0 28px;
+    gap: 2px;
+    margin-bottom: 0;
+    position: sticky;
+    top: 0;
+    height: fit-content;
+  }
+
+  .admin-tab-btn {
+    text-align: left;
+    padding: 11px 28px;
+    font-size: 14px;
+    border-bottom: none;
+    border-left: 3px solid transparent;
+    border-right: none;
+    margin-bottom: 0;
+    border-radius: 0;
+    letter-spacing: .3px;
+  }
+  .admin-tab-btn.active {
+    border-left-color: var(--accent);
+    border-bottom-color: transparent;
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+  .admin-tab-btn:hover:not(.active) {
+    background: var(--surface);
+  }
+
+  /* Contenido principal */
+  .admin-main {
+    flex: 1;
+    padding: 32px 48px 48px;
+    overflow-y: auto;
+    min-width: 0;
+  }
+
+  /* ── Tablas más cómodas ─────────────────────────────────────────────── */
+  .clientes-table th,
+  .clientes-table td {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+  .clientes-table th {
+    font-size: 11px;
+  }
+
+  /* ── Formularios: campos más amplios ────────────────────────────────── */
+  .admin-tab-panel .form-group input,
+  .admin-tab-panel .form-group select {
+    font-size: 14px;
+    padding: 11px 14px;
+  }
+
+  /* Import: campos de fecha en línea con el nombre */
+  .fecha-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  /* Sección de importar: ancho máximo razonable para el form */
+  #import-yaguar,
+  #import-diarco {
+    max-width: 560px;
+  }
+
+  /* Nuevo usuario: más compacto */
+  #nuevo-usuario-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  #nuevo-usuario-form .form-group {
+    flex: 1;
+    min-width: 160px;
+    margin-bottom: 0;
+  }
+  #nuevo-usuario-form .btn-primary {
+    flex-shrink: 0;
+    align-self: flex-end;
+    padding: 11px 24px;
+    margin-bottom: 0;
+  }
+
+  /* Repartos/Zonas: tabla full width */
+  .repartos-orden-list { max-width: 480px; }
+
+  /* Título de secciones admin más prominente */
+  .admin-section-title {
+    font-size: 13px;
+    letter-spacing: .8px;
+  }
+
+  /* Botones de acción más fáciles de clickear */
+  .btn-edit, .btn-del {
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+
+  /* Buscador de clientes */
+  #admin-clientes-search {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+
+  /* Sin registrar */
+  .sin-reg-wrap { max-width: 100%; }
+
 }
