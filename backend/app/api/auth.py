@@ -16,7 +16,7 @@ class RolUpdate(BaseModel):
 def login(request: LoginRequest):
     with get_db() as cur:
         cur.execute(
-            "SELECT id, username, password_hash, rol, acceso_sobrantes FROM users WHERE username = %s",
+            "SELECT id, username, password_hash, rol, acceso_sobrantes FROM users WHERE LOWER(username) = LOWER(%s)",
             (request.username,),
         )
         user = cur.fetchone()
