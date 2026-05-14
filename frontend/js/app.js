@@ -1359,13 +1359,14 @@ async function loadUsers() {
       const actions = esSuperadmin ? '' : `
         <button class="btn-edit" onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes})">Editar</button>
         <button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
+      const clickAttr = esSuperadmin ? '' : `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes})" style="cursor:pointer"`;
       return `
-        <tr>
+        <tr ${clickAttr}>
           <td>${u.username}</td>
           <td>${rolLabel}</td>
           <td>${sobLabel}</td>
           <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
-          <td class="td-actions">${actions}</td>
+          <td class="td-actions" onclick="event.stopPropagation()">${actions}</td>
         </tr>`;
     }).join('');
   } catch (err) {
