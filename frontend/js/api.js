@@ -225,15 +225,15 @@ const api = {
   setAsignacion: (data) => request('PUT', `/api/${getMayorista()}/asignaciones/`, data),
   deleteAsignacion: (id) => request('DELETE', `/api/${getMayorista()}/asignaciones/${id}`),
 
-  // Sobrantes
-  sobGetListas: () => request('GET', `/api/${getMayorista()}/sobrantes/listas`),
-  sobCrearLista: (nombre) => request('POST', `/api/${getMayorista()}/sobrantes/listas`, { nombre }),
-  sobDeleteLista: (lista) => request('DELETE', `/api/${getMayorista()}/sobrantes/listas/${encodeURIComponent(lista)}`),
-  sobLookup: (codBar) => request('GET', `/api/${getMayorista()}/sobrantes/lookup/${encodeURIComponent(codBar)}`),
-  sobSearch: (q) => request('GET', `/api/${getMayorista()}/sobrantes/search?q=${encodeURIComponent(q)}`),
-  sobGetItems: (lista) => request('GET', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}`),
-  sobAddItem: (lista, item) => request('POST', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/item`, item),
-  sobUpdateItem: (lista, id, unidades, bultos) => request('PUT', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/item/${id}`, { unidades, bultos }),
-  sobDeleteItem: (lista, id) => request('DELETE', `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/item/${id}`),
-  sobExportUrl: (lista) => `/api/${getMayorista()}/sobrantes/${encodeURIComponent(lista)}/export`,
+  // Sobrantes (compartido entre mayoristas)
+  sobGetListas: () => request('GET', '/api/sobrantes/listas'),
+  sobCrearLista: (nombre) => request('POST', '/api/sobrantes/listas', { nombre }),
+  sobDeleteLista: (lista) => request('DELETE', `/api/sobrantes/listas/${encodeURIComponent(lista)}`),
+  sobLookup: (codBar) => request('GET', `/api/sobrantes/lookup/${encodeURIComponent(codBar)}`),
+  sobSearch: (q) => request('GET', `/api/sobrantes/search?q=${encodeURIComponent(q)}`),
+  sobGetItems: (lista) => request('GET', `/api/sobrantes/${encodeURIComponent(lista)}`),
+  sobAddItem: (lista, item) => request('POST', `/api/sobrantes/${encodeURIComponent(lista)}/item`, item),
+  sobUpdateItem: (lista, id, unidades, bultos) => request('PUT', `/api/sobrantes/${encodeURIComponent(lista)}/item/${id}`, { unidades, bultos }),
+  sobDeleteItem: (lista, id) => request('DELETE', `/api/sobrantes/${encodeURIComponent(lista)}/item/${id}`),
+  sobExportUrl: (lista) => `/api/sobrantes/${encodeURIComponent(lista)}/export`,
 };

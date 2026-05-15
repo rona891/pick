@@ -173,17 +173,32 @@ def _by_barcode(mayorista: str, cod_bar: str, semana: Optional[str]):
 
 def _update_quantity(id: int, update: QuantityUpdate, username: str = None):
     with get_db() as cur:
-        cur.execute("SELECT uni FROM pick WHERE id = %s", (id,))
+        cur.execute(
+            "SELECT uni, cantidad_pickeada, cod_art, descrip, nombre, mayorista, semana FROM pick WHERE id = %s",
+            (id,),
+        )
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Pick no encontrado")
         uni = row["uni"] or 0
+        old_cantidad = row["cantidad_pickeada"] or 0
         cantidad = update.cantidad_pickeada
         estado = f"completado: {cantidad}/{uni} UNI" if cantidad >= uni else f"entregado: {cantidad}/{uni} UNI"
         cur.execute(
             "UPDATE pick SET cantidad_pickeada = %s, estado = %s, updated_at = %s, updated_by = %s WHERE id = %s",
             (cantidad, estado, datetime.now(timezone.utc), username, id),
         )
+        if cantidad == 0:
+            cur.execute("DELETE FROM pick_auditoria WHERE pick_id = %s", (id,))
+        elif cantidad > old_cantidad and username:
+            delta = cantidad - old_cantidad
+            cur.execute(
+                """INSERT INTO pick_auditoria
+                   (pick_id, cod_art, descrip, nombre, mayorista, semana, uni, cantidad_entregada, estado, updated_by)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (id, row["cod_art"], row["descrip"], row["nombre"],
+                 row["mayorista"], row["semana"], uni, delta, estado, username),
+            )
     return {"id": id, "cantidad_pickeada": cantidad, "estado": estado}
 
 
@@ -191,19 +206,19 @@ def _historial(mayorista: str, semana: Optional[str]):
     with get_db() as cur:
         if semana:
             cur.execute("""
-                SELECT cod_art, descrip, nombre, uni, cantidad_pickeada, estado, updated_by,
-                       updated_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at
-                FROM pick
-                WHERE semana = %s AND mayorista = %s AND updated_by IS NOT NULL
-                ORDER BY updated_at DESC
+                SELECT cod_art, descrip, nombre, uni, cantidad_entregada, estado, updated_by,
+                       created_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at
+                FROM pick_auditoria
+                WHERE semana = %s AND mayorista = %s
+                ORDER BY created_at DESC
             """, (semana, mayorista))
         else:
             cur.execute("""
-                SELECT cod_art, descrip, nombre, uni, cantidad_pickeada, estado, updated_by,
-                       updated_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at
-                FROM pick
-                WHERE mayorista = %s AND updated_by IS NOT NULL
-                ORDER BY updated_at DESC
+                SELECT cod_art, descrip, nombre, uni, cantidad_entregada, estado, updated_by,
+                       created_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at
+                FROM pick_auditoria
+                WHERE mayorista = %s
+                ORDER BY created_at DESC
                 LIMIT 500
             """, (mayorista,))
         rows = cur.fetchall()

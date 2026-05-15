@@ -9,12 +9,14 @@ from app.db.database import get_db
 
 router_yaguar = APIRouter(prefix="/yaguar/sobrantes", tags=["Yaguar - Sobrantes"])
 router_diarco = APIRouter(prefix="/diarco/sobrantes", tags=["Diarco - Sobrantes"])
+router_shared = APIRouter(prefix="/sobrantes", tags=["Sobrantes - Compartido"])
 
 
 class ItemIn(BaseModel):
     cod_bar: Optional[str] = None
     cod_art: Optional[str] = None
     descrip: Optional[str] = None
+    mayorista: Optional[str] = None
 
 class CantidadIn(BaseModel):
     unidades: int = 0
@@ -235,3 +237,181 @@ def diarco_update_item(lista: str, item_id: int, data: CantidadIn): return _upda
 
 @router_diarco.delete("/{lista}/item/{item_id}")
 def diarco_delete_item(lista: str, item_id: int): return _delete_item(lista, item_id, "diarco")
+
+
+# ── Shared helpers (sin filtro por mayorista) ──────────────────────────────────
+
+def _list_listas_shared():
+    with get_db() as cur:
+        cur.execute("""
+            SELECT lista, COUNT(*) AS items, MAX(created_at) AS ultima
+            FROM sobrantes GROUP BY lista ORDER BY ultima DESC
+        """)
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _get_items_shared(lista: str):
+    with get_db() as cur:
+        cur.execute("""
+            SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista
+            FROM sobrantes WHERE lista = %s ORDER BY created_at DESC
+        """, (lista,))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _lookup_shared(cod_bar: str):
+    with get_db() as cur:
+        for m in ("yaguar", "diarco"):
+            for col in ("cod_bar", "cod_bar_bulto"):
+                cur.execute(
+                    f"SELECT cod_art, descrip FROM pick WHERE {col}=%s AND mayorista=%s LIMIT 1",
+                    (cod_bar, m)
+                )
+                row = cur.fetchone()
+                if row:
+                    return {"cod_art": row["cod_art"], "descrip": row["descrip"], "mayorista": m, "found": True}
+    return {"cod_art": None, "descrip": None, "mayorista": None, "found": False}
+
+
+def _search_shared(q: str):
+    with get_db() as cur:
+        cur.execute("""
+            SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista
+            FROM pick WHERE descrip ILIKE %s
+            ORDER BY cod_art, descrip LIMIT 20
+        """, (f"%{q}%",))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _add_item_shared(lista: str, data: ItemIn):
+    cod_bar = (data.cod_bar or "").strip() or None
+    cod_art = (data.cod_art or "").strip() or None
+    descrip = (data.descrip or "").strip() or None
+    mayorista = (data.mayorista or "yaguar").strip()
+    if not cod_bar and not cod_art:
+        raise HTTPException(400, "Se requiere cod_bar o cod_art")
+    with get_db() as cur:
+        if cod_bar:
+            cur.execute(
+                "SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista FROM sobrantes WHERE lista=%s AND cod_bar=%s",
+                (lista, cod_bar)
+            )
+        else:
+            cur.execute(
+                "SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista FROM sobrantes WHERE lista=%s AND cod_art=%s",
+                (lista, cod_art)
+            )
+        existing = cur.fetchone()
+        if existing:
+            return {"action": "existing", **dict(existing)}
+        cur.execute(
+            """INSERT INTO sobrantes (cod_bar, cod_art, descrip, unidades, bultos, lista, mayorista)
+               VALUES (%s,%s,%s,0,0,%s,%s)
+               RETURNING id, cod_bar, cod_art, descrip, unidades, bultos, mayorista""",
+            (cod_bar, cod_art, descrip, lista, mayorista)
+        )
+        return {"action": "added", **dict(cur.fetchone())}
+
+
+def _update_item_shared(lista: str, item_id: int, data: CantidadIn):
+    with get_db() as cur:
+        cur.execute(
+            "UPDATE sobrantes SET unidades=%s, bultos=%s WHERE id=%s AND lista=%s RETURNING id, cod_bar, cod_art, descrip, unidades, bultos, mayorista",
+            (max(0, data.unidades), max(0, data.bultos), item_id, lista)
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Item no encontrado")
+        return dict(row)
+
+
+def _export_shared(lista: str):
+    with get_db() as cur:
+        cur.execute(
+            "SELECT mayorista, cod_bar, cod_art, descrip, unidades, bultos FROM sobrantes WHERE lista=%s ORDER BY mayorista, created_at DESC",
+            (lista,)
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sobrantes"
+
+    hfill = PatternFill("solid", fgColor="E0FF4F")
+    hfont = Font(bold=True, color="141414")
+    headers = ["Mayorista", "Cód. de Barra", "Cód. Artículo", "Descripción", "Unidades", "Bultos"]
+    for c, h in enumerate(headers, 1):
+        cell = ws.cell(1, c, h)
+        cell.fill = hfill; cell.font = hfont
+        cell.alignment = Alignment(horizontal="center")
+
+    alt = PatternFill("solid", fgColor="1E1E1E")
+    for i, r in enumerate(rows, 2):
+        vals = [r["mayorista"], r["cod_bar"], r["cod_art"], r["descrip"], r["unidades"], r["bultos"]]
+        for c, v in enumerate(vals, 1):
+            cell = ws.cell(i, c, v)
+            cell.font = Font(color="FFFFFF")
+            cell.alignment = Alignment(horizontal="center" if c > 4 else "left")
+            if i % 2 == 0:
+                cell.fill = alt
+
+    ws.column_dimensions["A"].width = 12
+    ws.column_dimensions["B"].width = 18
+    ws.column_dimensions["C"].width = 14
+    ws.column_dimensions["D"].width = 42
+    ws.column_dimensions["E"].width = 12
+    ws.column_dimensions["F"].width = 12
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"sobrantes_{lista.replace(' ', '_')}.xlsx"
+    return StreamingResponse(
+        buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}"}
+    )
+
+
+# ── Shared routes ──────────────────────────────────────────────────────────────
+
+@router_shared.get("/listas")
+def shared_list_listas(): return _list_listas_shared()
+
+@router_shared.post("/listas")
+def shared_crear_lista(data: ListaIn):
+    nombre = data.nombre.strip()
+    if not nombre: raise HTTPException(400, "Nombre vacío")
+    return {"lista": nombre}
+
+@router_shared.delete("/listas/{lista}")
+def shared_delete_lista(lista: str):
+    with get_db() as cur:
+        cur.execute("DELETE FROM sobrantes WHERE lista=%s", (lista,))
+    return {"ok": True}
+
+@router_shared.get("/lookup/{cod_bar}")
+def shared_lookup(cod_bar: str): return _lookup_shared(cod_bar)
+
+@router_shared.get("/search")
+def shared_search(q: str): return _search_shared(q)
+
+@router_shared.get("/{lista}/export")
+def shared_export(lista: str): return _export_shared(lista)
+
+@router_shared.get("/{lista}")
+def shared_get_items(lista: str): return _get_items_shared(lista)
+
+@router_shared.post("/{lista}/item")
+def shared_add_item(lista: str, data: ItemIn): return _add_item_shared(lista, data)
+
+@router_shared.put("/{lista}/item/{item_id}")
+def shared_update_item(lista: str, item_id: int, data: CantidadIn): return _update_item_shared(lista, item_id, data)
+
+@router_shared.delete("/{lista}/item/{item_id}")
+def shared_delete_item(lista: str, item_id: int):
+    with get_db() as cur:
+        cur.execute("DELETE FROM sobrantes WHERE id=%s AND lista=%s", (item_id, lista))
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Item no encontrado")
+    return {"ok": True}
