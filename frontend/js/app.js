@@ -1863,7 +1863,8 @@ async function loadSobListas() {
 
   const sel = document.getElementById('sob-lista-select');
   if (_sobListas.length === 0) {
-    const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const now = new Date();
+    const hoy = `${String(now.getDate()).padStart(2,'0')}-${String(now.getMonth()+1).padStart(2,'0')}-${now.getFullYear()}`;
     const nombre = `Sobrantes ${hoy}`;
     _sobListaActual = nombre;
     sel.innerHTML = `<option value="${nombre}">${nombre} (nueva)</option>`;
@@ -2069,7 +2070,8 @@ document.addEventListener('click', (e) => {
 
 // Nueva lista — modal custom
 document.getElementById('sob-nueva-btn').addEventListener('click', () => {
-  const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const now = new Date();
+  const hoy = `${String(now.getDate()).padStart(2,'0')}-${String(now.getMonth()+1).padStart(2,'0')}-${now.getFullYear()}`;
   const input = document.getElementById('sob-nueva-input');
   input.value = `Sobrantes ${hoy}`;
   document.getElementById('sob-nueva-modal').classList.remove('hidden');
@@ -2077,7 +2079,7 @@ document.getElementById('sob-nueva-btn').addEventListener('click', () => {
 });
 
 document.getElementById('sob-nueva-confirm').addEventListener('click', async () => {
-  const nombre = document.getElementById('sob-nueva-input').value.trim();
+  const nombre = document.getElementById('sob-nueva-input').value.trim().replace(/\//g, '-');
   if (!nombre) return;
   document.getElementById('sob-nueva-modal').classList.add('hidden');
   try {
