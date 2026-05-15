@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import picks, auth, health, clientes, admin, zonas, export
 from app.api.yaguar import semanas as yaguar_semanas
 from app.api.diarco import semanas as diarco_semanas
-from app.api.sobrantes import router_yaguar as sob_yaguar, router_diarco as sob_diarco
+from app.api.sobrantes import router_yaguar as sob_yaguar, router_diarco as sob_diarco, router_shared as sob_shared
 from app.api.asignaciones import router_yaguar as asig_yaguar, router_diarco as asig_diarco
 # picks, clientes y export tienen routers dobles (uno por mayorista)
 from app.auth.jwt import hash_password
@@ -152,6 +152,22 @@ async def lifespan(app: FastAPI):
                 created_at timestamptz DEFAULT now()
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS pick_auditoria (
+                id bigserial PRIMARY KEY,
+                pick_id bigint NOT NULL,
+                cod_art varchar,
+                descrip varchar,
+                nombre varchar,
+                mayorista varchar NOT NULL,
+                semana varchar NOT NULL,
+                uni integer,
+                cantidad_entregada integer NOT NULL,
+                estado varchar,
+                updated_by varchar NOT NULL,
+                created_at timestamptz DEFAULT now()
+            )
+        """)
         # Estado de códigos Yaguar (ocupado/libre/no_apto según últimas 10 semanas)
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS estado VARCHAR")
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS flete NUMERIC")
@@ -211,6 +227,7 @@ app.include_router(picks.router_diarco, prefix="/api")
 app.include_router(clientes.router_diarco, prefix="/api")
 app.include_router(export.router_diarco, prefix="/api")
 # ── Sobrantes ─────────────────────────────────────────────────────────────────
+app.include_router(sob_shared, prefix="/api")
 app.include_router(sob_yaguar, prefix="/api")
 app.include_router(sob_diarco, prefix="/api")
 # ── Asignaciones de reparto ────────────────────────────────────────────────────

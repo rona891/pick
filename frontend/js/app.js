@@ -61,6 +61,7 @@ function showApp() {
   const adminBtn = document.querySelector('.tab-btn[data-tab="admin"]');
   adminBtn.classList.toggle('hidden', !esAdminOVendedor());
   if (esVendedor()) document.getElementById('nav-admin-label').textContent = 'Gestión';
+  else document.getElementById('nav-admin-label').textContent = 'Panel';
   document.querySelector('.tab-btn[data-tab="sobrantes"]').classList.toggle('hidden', !tieneSobrantes());
   document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
   const m = getMayorista();
@@ -1907,10 +1908,13 @@ function renderSobItems(items) {
     <div class="sob-item" data-id="${item.id}">
       <div class="sob-item-top">
         <div class="sob-item-info">
-          <div class="sob-item-descrip">${item.descrip || item.cod_bar || item.cod_art || '—'}</div>
+          <div class="sob-item-header-row">
+            <span class="sob-mayorista-badge sob-mayorista-${item.mayorista || 'otro'}">${(item.mayorista || '?').toUpperCase()}</span>
+            <div class="sob-item-descrip">${item.descrip || item.cod_bar || item.cod_art || '—'}</div>
+          </div>
           <div class="sob-item-cod">${[item.cod_bar, item.cod_art].filter(Boolean).join(' · ')}</div>
         </div>
-        <button class="sob-item-remove" data-id="${item.id}">✕</button>
+        <button class="sob-item-remove" data-id="${item.id}" title="Quitar artículo">✕</button>
       </div>
       <div class="sob-steppers">
         <div class="sob-stepper">
@@ -1963,15 +1967,16 @@ async function sobBuscar(codBar) {
   const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
   if (!lista) { showToast('Creá una lista primero', 'error'); return; }
 
-  let cod_art = null, descrip = null;
+  let cod_art = null, descrip = null, mayorista = 'yaguar';
   try {
     const lookup = await api.sobLookup(codBar.trim());
     cod_art = lookup.cod_art;
     descrip = lookup.descrip;
+    mayorista = lookup.mayorista || 'yaguar';
   } catch { /* no pasa nada, igual agregamos con solo el barcode */ }
 
   try {
-    const res = await api.sobAddItem(lista, { cod_bar: codBar.trim(), cod_art, descrip });
+    const res = await api.sobAddItem(lista, { cod_bar: codBar.trim(), cod_art, descrip, mayorista });
     if (res.action === 'existing') {
       // Resaltar el existente
       _sobItems = await api.sobGetItems(lista);
@@ -2009,9 +2014,16 @@ document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
   _sobDescripTimer = setTimeout(async () => {
     try {
       const items = await api.sobSearch(q);
-      if (!items.length) { results.classList.add('hidden'); return; }
+      if (!items.length) {
+        results.innerHTML = '<div class="descrip-result-empty">Sin resultados</div>';
+        results.classList.remove('hidden');
+        return;
+      }
       results.innerHTML = items.map(i =>
-        `<div class="descrip-result-item" data-bar="${i.cod_bar || ''}" data-art="${i.cod_art || ''}" data-descrip="${(i.descrip || '').replace(/"/g, '&quot;')}">${i.descrip}</div>`
+        `<div class="descrip-result-item" data-bar="${i.cod_bar || ''}" data-art="${i.cod_art || ''}" data-descrip="${(i.descrip || '').replace(/"/g, '&quot;')}" data-mayorista="${i.mayorista || 'yaguar'}">
+          <span class="descrip-result-text">${i.descrip}</span>
+          <span class="sob-mayorista-badge sob-mayorista-${i.mayorista || 'otro'}">${(i.mayorista || '?').toUpperCase()}</span>
+        </div>`
       ).join('');
       results.classList.remove('hidden');
     } catch { results.classList.add('hidden'); }
@@ -2030,6 +2042,7 @@ document.getElementById('sob-descrip-results').addEventListener('click', async (
       cod_bar: item.dataset.bar || null,
       cod_art: item.dataset.art || null,
       descrip: item.dataset.descrip || null,
+      mayorista: item.dataset.mayorista || 'yaguar',
     });
     if (res.action === 'existing') {
       _sobItems = await api.sobGetItems(lista);
@@ -2054,16 +2067,30 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Nueva lista
-document.getElementById('sob-nueva-btn').addEventListener('click', async () => {
+// Nueva lista — modal custom
+document.getElementById('sob-nueva-btn').addEventListener('click', () => {
   const hoy = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-  const nombre = prompt('Nombre de la nueva lista:', `Sobrantes ${hoy}`);
-  if (!nombre || !nombre.trim()) return;
+  const input = document.getElementById('sob-nueva-input');
+  input.value = `Sobrantes ${hoy}`;
+  document.getElementById('sob-nueva-modal').classList.remove('hidden');
+  setTimeout(() => { input.focus(); input.select(); }, 50);
+});
+
+document.getElementById('sob-nueva-confirm').addEventListener('click', async () => {
+  const nombre = document.getElementById('sob-nueva-input').value.trim();
+  if (!nombre) return;
+  document.getElementById('sob-nueva-modal').classList.add('hidden');
   try {
-    await api.sobCrearLista(nombre.trim());
-    _sobListaActual = nombre.trim();
+    await api.sobCrearLista(nombre);
+    _sobListaActual = nombre;
+    _sobItems = [];
     await loadSobListas();
   } catch (err) { showToast(err.message, 'error'); }
+});
+
+document.getElementById('sob-nueva-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('sob-nueva-confirm').click();
+  if (e.key === 'Escape') document.getElementById('sob-nueva-modal').classList.add('hidden');
 });
 
 // Cambiar lista
@@ -2275,7 +2302,7 @@ function renderHistorial() {
             <th>Artículo</th>
             <th>Cliente</th>
             <th>Req.</th>
-            <th>Pickeado</th>
+            <th>Entregado</th>
             <th>Usuario</th>
             <th>Fecha y hora</th>
           </tr>
@@ -2292,7 +2319,7 @@ function renderHistorial() {
               <td title="${esc(r.descrip)}">${esc(r.cod_art)}<br><small>${esc(r.descrip?.slice(0, 30))}${(r.descrip?.length > 30) ? '…' : ''}</small></td>
               <td>${esc(r.nombre)}</td>
               <td>${r.uni ?? '—'}</td>
-              <td>${r.cantidad_pickeada ?? 0}</td>
+              <td><strong>${r.cantidad_entregada ?? 0}</strong> uni</td>
               <td><strong>${esc(r.updated_by)}</strong></td>
               <td style="white-space:nowrap;font-size:12px">${fecha}</td>
             </tr>`;

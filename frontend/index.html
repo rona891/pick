@@ -121,7 +121,7 @@
       </button>
       <button class="tab-btn hidden" data-tab="admin" id="nav-admin-btn">
         <span class="nav-icon">⚙</span>
-        <span class="nav-label" id="nav-admin-label">Admin</span>
+        <span class="nav-label" id="nav-admin-label">Panel</span>
       </button>
     </nav>
 
@@ -246,21 +246,25 @@
       </div>
 
       <!-- Selector de lista -->
-      <div class="sob-header">
+      <div class="sob-lista-card">
+        <div class="sob-lista-top">
+          <label class="sob-card-label">Lista activa</label>
+          <button id="sob-del-lista-btn" class="btn-link-del">Eliminar</button>
+        </div>
         <select id="sob-lista-select" class="sob-lista-select"></select>
-        <button id="sob-nueva-btn" class="btn-secondary sob-nueva-btn">+ Nueva</button>
-        <button id="sob-del-lista-btn" class="btn-del sob-del-btn" title="Eliminar lista">🗑</button>
+        <button id="sob-nueva-btn" class="btn-secondary sob-nueva-btn">+ Nueva lista</button>
       </div>
 
       <!-- Buscador / scanner -->
-      <div class="sob-scan-area">
-        <div class="search-row">
+      <div class="sob-search-card">
+        <label class="sob-card-label">Agregar artículo</label>
+        <div class="search-row" style="margin-top:6px">
           <input type="text" id="sob-barcode-input" placeholder="Código de barras..." autocomplete="off" inputmode="numeric" />
-          <button type="button" id="sob-scan-btn" class="btn-icon">Escanear</button>
+          <button type="button" id="sob-scan-btn" class="btn-icon">📷</button>
           <button type="button" id="sob-buscar-btn" class="btn-search">Buscar</button>
         </div>
-        <div class="descrip-search-wrap" style="margin-top:8px">
-          <input type="text" id="sob-descrip-input" placeholder="Buscar por descripción..." autocomplete="off" />
+        <div class="descrip-search-wrap">
+          <input type="text" id="sob-descrip-input" placeholder="O buscá por descripción..." autocomplete="off" />
           <div id="sob-descrip-results" class="descrip-results hidden"></div>
         </div>
       </div>
@@ -310,7 +314,7 @@
           <button class="admin-tab-btn" data-admin-tab="usuarios">Usuarios</button>
           <button class="admin-tab-btn" data-admin-tab="zonas">Zonas</button>
           <button class="admin-tab-btn" data-admin-tab="reparto">Reparto</button>
-          <button class="admin-tab-btn" data-admin-tab="historial">Historial</button>
+          <button class="admin-tab-btn" data-admin-tab="historial">Auditoría</button>
         </div>
 
         <div class="admin-main">
@@ -529,22 +533,37 @@
           </form>
         </div>
 
-        <!-- Sub-panel: Historial -->
+        <!-- Sub-panel: Auditoría -->
         <div class="admin-tab-panel hidden" data-admin-panel="historial">
-          <div class="admin-section-title" style="margin-bottom:12px">Historial de actividad</div>
-          <div class="historial-filters">
-            <select id="hist-semana-sel" class="semana-select" style="flex:1;min-width:140px"></select>
-            <div class="hist-scan-row">
-              <input type="text" id="hist-filter-producto" class="clientes-search-input" placeholder="Código o descripción..." autocomplete="off" />
-              <button id="hist-scan-btn" class="btn-icon">Escanear</button>
+          <div class="admin-section-title" style="margin-bottom:12px">Auditoría de actividad</div>
+          <div class="auditoria-filters">
+            <div class="auditoria-filter-row">
+              <div class="auditoria-filter-field">
+                <label class="auditoria-filter-label">Semana</label>
+                <select id="hist-semana-sel" class="semana-select"></select>
+              </div>
+              <div class="auditoria-filter-field">
+                <label class="auditoria-filter-label">Usuario</label>
+                <select id="hist-filter-usuario" class="semana-select">
+                  <option value="">Todos</option>
+                </select>
+              </div>
             </div>
-            <select id="hist-filter-usuario" class="semana-select" style="flex:1;min-width:120px">
-              <option value="">Todos los usuarios</option>
-            </select>
-            <label class="historial-toggle-label">
-              <input type="checkbox" id="historial-solo-errores" />
-              Solo incompletos
-            </label>
+            <div class="auditoria-filter-row">
+              <div class="auditoria-filter-field" style="flex:1">
+                <label class="auditoria-filter-label">Artículo</label>
+                <div class="hist-scan-row">
+                  <input type="text" id="hist-filter-producto" class="clientes-search-input" placeholder="Código o descripción..." autocomplete="off" />
+                  <button id="hist-scan-btn" class="btn-icon">Escanear</button>
+                </div>
+              </div>
+              <div class="auditoria-filter-field auditoria-filter-toggle">
+                <label class="historial-toggle-label">
+                  <input type="checkbox" id="historial-solo-errores" />
+                  <span>Solo incompletos</span>
+                </label>
+              </div>
+            </div>
           </div>
           <div id="hist-scanner-container" class="hidden">
             <video id="hist-scanner-video" autoplay muted playsinline></video>
@@ -705,6 +724,24 @@
         </div>
       </div>
       <div id="cliente-picks-content" class="cliente-picks-content"></div>
+    </div>
+  </div>
+
+  <!-- ── Modal: nueva lista sobrantes ──────────────────────────────────── -->
+  <div id="sob-nueva-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width:340px">
+      <div class="modal-header">
+        <span>Nueva lista de sobrantes</span>
+        <button class="modal-close" onclick="document.getElementById('sob-nueva-modal').classList.add('hidden')">✕</button>
+      </div>
+      <div style="padding:16px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Nombre</label>
+        <input type="text" id="sob-nueva-input" class="clientes-search-input" placeholder="Ej: Sobrantes 14/05/2026" style="width:100%;box-sizing:border-box" />
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="btn-secondary" style="flex:1" onclick="document.getElementById('sob-nueva-modal').classList.add('hidden')">Cancelar</button>
+          <button class="btn-primary" style="flex:1" id="sob-nueva-confirm">Crear</button>
+        </div>
+      </div>
     </div>
   </div>
 
