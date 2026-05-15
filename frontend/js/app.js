@@ -67,7 +67,7 @@ function showApp() {
   const m = getMayorista();
   aplicarTema(m);
   document.getElementById('topbar-logo').src = m === 'diarco' ? 'diarco.png' : 'yaguar.png';
-  loadSemanas().then(() => { loadStats(); loadRepartosInfo(); });
+  loadSemanas().then(() => { loadStats(); });
   switchTab('pick');
   prewarmCamera();
   renderHistorial();
@@ -198,7 +198,6 @@ document.getElementById('semana-select').addEventListener('change', (e) => {
   document.getElementById('descrip-input').value = '';
   hideDescripResults();
   loadStats();
-  loadRepartosInfo();
   if (document.querySelector('.tab-btn[data-tab="clientes"]').classList.contains('active')) {
     loadResumen();
   }
@@ -2332,34 +2331,6 @@ function renderHistorial() {
   `;
 }
 
-// ── Repartos info (tab Pick) ───────────────────────────────────────────────
-async function loadRepartosInfo() {
-  const wrap = document.getElementById('repartos-info');
-  const body = document.getElementById('repartos-info-body');
-  if (!wrap || !semanaActual) { if (wrap) wrap.classList.add('hidden'); return; }
-  wrap.classList.remove('hidden');
-  try {
-    const [asignaciones, repartos] = await Promise.all([
-      api.getAsignaciones(semanaActual),
-      api.getRepartos(),
-    ]);
-    if (!repartos.length) { wrap.classList.add('hidden'); return; }
-    body.innerHTML = repartos.map((r) => {
-      const a = asignaciones.find((x) => x.reparto === r.nombre);
-      const usuario = a ? `<span class="reparto-usuario">${a.username}</span>` : `<span class="reparto-sin-asignar">Sin asignar</span>`;
-      return `<div class="reparto-fila"><span class="reparto-nombre">${r.nombre}</span>${usuario}</div>`;
-    }).join('');
-  } catch (_) {}
-}
-
-document.getElementById('repartos-toggle-btn').addEventListener('click', () => {
-  const body = document.getElementById('repartos-info-body');
-  const icon = document.getElementById('repartos-toggle-icon');
-  const open = !body.classList.contains('hidden');
-  body.classList.toggle('hidden', open);
-  icon.textContent = open ? '▾' : '▴';
-});
-
 // ── Asignaciones admin ────────────────────────────────────────────────────
 async function loadAsignaciones() {
   const sel = document.getElementById('reparto-semana-sel');
@@ -2436,7 +2407,6 @@ async function renderAsignaciones(repartos, users, semana) {
         const msg = wrap.querySelector('#reparto-save-msg');
         msg.style.display = 'inline';
         setTimeout(() => { msg.style.display = 'none'; }, 2000);
-        loadRepartosInfo();
       } catch (err) {
         alert(err.message);
       } finally {

@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI):
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS cod_bar_bulto VARCHAR")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS updated_by VARCHAR")
+        cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS precio_unit NUMERIC")
         # Tabla repartos con mayorista
         cur.execute("""
             CREATE TABLE IF NOT EXISTS repartos (

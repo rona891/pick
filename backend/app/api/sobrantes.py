@@ -250,12 +250,18 @@ def _list_listas_shared():
         return [dict(r) for r in cur.fetchall()]
 
 
-def _get_items_shared(lista: str):
+def _get_items_shared(lista: str, mayorista: Optional[str] = None):
     with get_db() as cur:
-        cur.execute("""
-            SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista
-            FROM sobrantes WHERE lista = %s ORDER BY created_at DESC
-        """, (lista,))
+        if mayorista:
+            cur.execute("""
+                SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista
+                FROM sobrantes WHERE lista = %s AND mayorista = %s ORDER BY created_at DESC
+            """, (lista, mayorista))
+        else:
+            cur.execute("""
+                SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista
+                FROM sobrantes WHERE lista = %s ORDER BY created_at DESC
+            """, (lista,))
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -273,13 +279,20 @@ def _lookup_shared(cod_bar: str):
     return {"cod_art": None, "descrip": None, "mayorista": None, "found": False}
 
 
-def _search_shared(q: str):
+def _search_shared(q: str, mayorista: Optional[str] = None):
     with get_db() as cur:
-        cur.execute("""
-            SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista
-            FROM pick WHERE descrip ILIKE %s
-            ORDER BY cod_art, descrip LIMIT 20
-        """, (f"%{q}%",))
+        if mayorista:
+            cur.execute("""
+                SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista
+                FROM pick WHERE descrip ILIKE %s AND mayorista = %s
+                ORDER BY cod_art, descrip LIMIT 20
+            """, (f"%{q}%", mayorista))
+        else:
+            cur.execute("""
+                SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista
+                FROM pick WHERE descrip ILIKE %s
+                ORDER BY cod_art, descrip LIMIT 20
+            """, (f"%{q}%",))
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -327,10 +340,18 @@ def _update_item_shared(lista: str, item_id: int, data: CantidadIn):
 
 def _export_shared(lista: str):
     with get_db() as cur:
-        cur.execute(
-            "SELECT mayorista, cod_bar, cod_art, descrip, unidades, bultos FROM sobrantes WHERE lista=%s ORDER BY mayorista, created_at DESC",
-            (lista,)
-        )
+        cur.execute("""
+            SELECT s.mayorista, s.cod_bar, s.cod_art, s.descrip, s.unidades, s.bultos,
+                   p.uxb, p.precio_unit
+            FROM sobrantes s
+            LEFT JOIN LATERAL (
+                SELECT uxb, precio_unit FROM pick
+                WHERE pick.cod_art = s.cod_art AND pick.mayorista = s.mayorista
+                ORDER BY created_at DESC LIMIT 1
+            ) p ON true
+            WHERE s.lista = %s
+            ORDER BY s.mayorista, s.created_at DESC
+        """, (lista,))
         rows = [dict(r) for r in cur.fetchall()]
 
     wb = openpyxl.Workbook()
@@ -339,7 +360,8 @@ def _export_shared(lista: str):
 
     hfill = PatternFill("solid", fgColor="E0FF4F")
     hfont = Font(bold=True, color="141414")
-    headers = ["Mayorista", "Cód. de Barra", "Cód. Artículo", "Descripción", "Unidades", "Bultos"]
+    headers = ["Mayorista", "Cód. de Barra", "Cód. Artículo", "Descripción",
+               "Unid.", "Bultos", "UxB", "Unid. Totales", "Precio c/IVA"]
     for c, h in enumerate(headers, 1):
         cell = ws.cell(1, c, h)
         cell.fill = hfill; cell.font = hfont
@@ -347,7 +369,11 @@ def _export_shared(lista: str):
 
     alt = PatternFill("solid", fgColor="1E1E1E")
     for i, r in enumerate(rows, 2):
-        vals = [r["mayorista"], r["cod_bar"], r["cod_art"], r["descrip"], r["unidades"], r["bultos"]]
+        precio = round(float(r["precio_unit"]), 2) if r["precio_unit"] is not None else ""
+        uxb = r["uxb"] or 0
+        unid_totales = r["unidades"] + (uxb * r["bultos"]) if uxb else r["unidades"]
+        vals = [r["mayorista"], r["cod_bar"], r["cod_art"], r["descrip"],
+                r["unidades"], r["bultos"], uxb or "", unid_totales, precio]
         for c, v in enumerate(vals, 1):
             cell = ws.cell(i, c, v)
             cell.font = Font(color="FFFFFF")
@@ -359,8 +385,11 @@ def _export_shared(lista: str):
     ws.column_dimensions["B"].width = 18
     ws.column_dimensions["C"].width = 14
     ws.column_dimensions["D"].width = 42
-    ws.column_dimensions["E"].width = 12
-    ws.column_dimensions["F"].width = 12
+    ws.column_dimensions["E"].width = 8
+    ws.column_dimensions["F"].width = 8
+    ws.column_dimensions["G"].width = 7
+    ws.column_dimensions["H"].width = 14
+    ws.column_dimensions["I"].width = 14
     ws.freeze_panes = "A2"
 
     buf = io.BytesIO()
@@ -394,13 +423,13 @@ def shared_delete_lista(lista: str):
 def shared_lookup(cod_bar: str): return _lookup_shared(cod_bar)
 
 @router_shared.get("/search")
-def shared_search(q: str): return _search_shared(q)
+def shared_search(q: str, mayorista: Optional[str] = None): return _search_shared(q, mayorista)
 
 @router_shared.get("/{lista}/export")
 def shared_export(lista: str): return _export_shared(lista)
 
 @router_shared.get("/{lista}")
-def shared_get_items(lista: str): return _get_items_shared(lista)
+def shared_get_items(lista: str, mayorista: Optional[str] = None): return _get_items_shared(lista, mayorista)
 
 @router_shared.post("/{lista}/item")
 def shared_add_item(lista: str, data: ItemIn): return _add_item_shared(lista, data)

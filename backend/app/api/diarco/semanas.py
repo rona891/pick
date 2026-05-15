@@ -240,6 +240,7 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
                     pass
 
             importe_excluidos_sin_iva = 0.0  # acumula sin IVA de ítems excluidos
+            trans_start = len(picks)          # índice donde empiezan los picks de esta transacción
 
             # Artículos del pedido (pasos GWS.ELEM)
             # Formula × V2 × V4 = total sin IVA del ítem
@@ -274,33 +275,42 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
                 uni = qty * uxb if qty_en_bultos and uxb > 0 else qty
                 bul = uni // uxb if uxb > 0 else 0
 
-                pass  # el total real se calcula al final por diferencia con los excluidos
+                try:
+                    formula_sin_iva = float(item["Formula"] or 0)
+                except (ValueError, TypeError):
+                    formula_sin_iva = 0.0
 
                 picks.append({
-                    "cod_bar":       barcodes_13.get(cod_art),
-                    "cod_bar_bulto": barcodes_14.get(cod_art),
-                    "cod_art":       cod_art,
-                    "descrip":       descrip_limpia,
-                    "nombre":        nombre_cliente,   # OBSERVACION o CTE como fallback
-                    "nombre_obs":    nombre_obs_limpio, # solo OBSERVACION, nunca CTE
-                    "cliente":       cod_cliente,
-                    "localidad":     localidad,        # del sufijo en OBSERVACION (no DIR)
-                    "uni":           uni,
-                    "bul":           bul,
-                    "uxb":           uxb,
+                    "cod_bar":         barcodes_13.get(cod_art),
+                    "cod_bar_bulto":   barcodes_14.get(cod_art),
+                    "cod_art":         cod_art,
+                    "descrip":         descrip_limpia,
+                    "nombre":          nombre_cliente,
+                    "nombre_obs":      nombre_obs_limpio,
+                    "cliente":         cod_cliente,
+                    "localidad":       localidad,
+                    "uni":             uni,
+                    "bul":             bul,
+                    "uxb":             uxb,
+                    "_formula_sin_iva": formula_sin_iva,  # temporal, se reemplaza abajo
+                    "precio_unit":     None,
                 })
+            trans_end = len(picks)
 
             # Convertir excluidos a con-IVA proporcionalmente:
-            # excluidos_con_iva = excluidos_sin_iva × (total_con_iva / total_sin_iva)
-            # Así nunca puede dar negativo: los excluidos son parte del total,
-            # por lo que excluidos_sin_iva ≤ total_sin_iva siempre.
             if total_orden_sin_iva > 0 and importe_excluidos_sin_iva > 0:
                 iva_ratio = total_orden_con_iva / total_orden_sin_iva
                 importe_excluidos_con_iva = importe_excluidos_sin_iva * iva_ratio
             else:
+                iva_ratio = (total_orden_con_iva / total_orden_sin_iva) if total_orden_sin_iva > 0 else 1.0
                 importe_excluidos_con_iva = 0.0
             importe_trans_con_iva = total_orden_con_iva - importe_excluidos_con_iva
             totales[cod_cliente] = totales.get(cod_cliente, 0.0) + importe_trans_con_iva
+
+            # Aplicar iva_ratio a los picks de esta transacción
+            for i in range(trans_start, trans_end):
+                f = picks[i].pop("_formula_sin_iva", 0.0)
+                picks[i]["precio_unit"] = round(f * iva_ratio, 4) if f else None
 
         conn.close()
     finally:
@@ -410,8 +420,8 @@ async def importar_semana_diarco(
                 """
                 INSERT INTO pick
                     (cod_bar, cod_bar_bulto, cod_art, descrip, nombre, cliente, localidad,
-                     uni, bul, uxb, cantidad_pickeada, estado, semana, importe_total, mayorista)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, 'diarco')
+                     uni, bul, uxb, cantidad_pickeada, estado, semana, importe_total, mayorista, precio_unit)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, 'diarco', %s)
                 """,
                 (
                     p["cod_bar"],
@@ -427,6 +437,7 @@ async def importar_semana_diarco(
                     f"entregado: 0/{uni} UNI",
                     nombre,
                     round(importe_total, 2),
+                    p.get("precio_unit"),
                 ),
             )
             inserted += 1
