@@ -360,7 +360,7 @@ def _export_shared(lista: str):
 
     hfill = PatternFill("solid", fgColor="E0FF4F")
     hfont = Font(bold=True, color="141414")
-    headers = ["Mayorista", "Cód. de Barra", "Cód. Artículo", "Descripción",
+    headers = ["Mayorista", "Cód. Artículo", "Descripción",
                "Unid.", "Bultos", "UxB", "Unid. Totales", "Precio c/IVA"]
     for c, h in enumerate(headers, 1):
         cell = ws.cell(1, c, h)
@@ -372,24 +372,23 @@ def _export_shared(lista: str):
         precio = round(float(r["precio_unit"]), 2) if r["precio_unit"] is not None else ""
         uxb = r["uxb"] or 0
         unid_totales = r["unidades"] + (uxb * r["bultos"]) if uxb else r["unidades"]
-        vals = [r["mayorista"], r["cod_bar"], r["cod_art"], r["descrip"],
+        vals = [r["mayorista"], r["cod_art"], r["descrip"],
                 r["unidades"], r["bultos"], uxb or "", unid_totales, precio]
         for c, v in enumerate(vals, 1):
             cell = ws.cell(i, c, v)
             cell.font = Font(color="FFFFFF")
-            cell.alignment = Alignment(horizontal="center" if c > 4 else "left")
+            cell.alignment = Alignment(horizontal="center" if c > 3 else "left")
             if i % 2 == 0:
                 cell.fill = alt
 
     ws.column_dimensions["A"].width = 12
-    ws.column_dimensions["B"].width = 18
-    ws.column_dimensions["C"].width = 14
-    ws.column_dimensions["D"].width = 42
+    ws.column_dimensions["B"].width = 14
+    ws.column_dimensions["C"].width = 44
+    ws.column_dimensions["D"].width = 8
     ws.column_dimensions["E"].width = 8
-    ws.column_dimensions["F"].width = 8
-    ws.column_dimensions["G"].width = 7
+    ws.column_dimensions["F"].width = 7
+    ws.column_dimensions["G"].width = 14
     ws.column_dimensions["H"].width = 14
-    ws.column_dimensions["I"].width = 14
     ws.freeze_panes = "A2"
 
     buf = io.BytesIO()
