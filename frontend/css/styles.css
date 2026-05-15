@@ -1,6 +1,43 @@
 /* ── Reset & base ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Notificación de red ──────────────────────────────────────────────────── */
+.net-toast {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  background: #c0392b;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  transform: translateY(0);
+  transition: transform 0.2s ease;
+}
+.net-toast.hidden {
+  transform: translateY(-110%);
+  pointer-events: none;
+}
+.net-toast.net-toast-ok { background: #27ae60; }
+.net-toast.net-toast-warn { background: #e67e22; }
+.net-toast-icon { font-size: 16px; flex-shrink: 0; }
+.net-toast-msg { flex: 1; }
+.net-toast-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.8);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
 /* ── Paleta base (neutral, se sobreescribe con el tema del mayorista) ─────── */
 :root {
   --bg: #0a0a0a;
@@ -2222,4 +2259,162 @@ input[type="date"]:focus { border-color: var(--accent); }
   /* Sin registrar */
   .sin-reg-wrap { max-width: 100%; }
 
+}
+
+/* ── Historial ────────────────────────────────────────────────────────────── */
+.historial-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.historial-user-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+}
+
+.historial-user-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.historial-stat {
+  font-size: 13px;
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.historial-stat.ok {
+  background: color-mix(in srgb, var(--green) 15%, transparent);
+  color: var(--green);
+}
+
+.historial-stat.err {
+  background: color-mix(in srgb, #e74c3c 12%, transparent);
+  color: #e74c3c;
+}
+
+.historial-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+  align-items: center;
+}
+
+.hist-scan-row {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  min-width: 180px;
+}
+
+.hist-scan-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+#hist-scanner-container {
+  position: relative;
+  width: 100%;
+  max-width: 400px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#hist-scanner-container video {
+  width: 100%;
+  display: block;
+}
+
+.historial-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.historial-row-error td {
+  background: color-mix(in srgb, #e74c3c 6%, transparent);
+}
+
+/* ── Repartos info (tab Pick) ─────────────────────────────────────────────── */
+.repartos-info {
+  margin: 8px 12px 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.repartos-toggle-btn {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.repartos-info-body {
+  padding: 0 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reparto-fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.reparto-nombre {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.reparto-usuario {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.reparto-sin-asignar {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ── Asignaciones admin ───────────────────────────────────────────────────── */
+.reparto-semana-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.btn-reparto-guardar {
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+.btn-reparto-borrar {
+  padding: 4px 8px;
+  font-size: 13px;
 }

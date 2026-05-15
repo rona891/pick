@@ -17,6 +17,13 @@
 </head>
 <body>
 
+  <!-- ── Notificación de red ──────────────────────────────────────────── -->
+  <div id="net-toast" class="net-toast hidden" role="alert">
+    <span id="net-toast-icon" class="net-toast-icon">⚠</span>
+    <span id="net-toast-msg" class="net-toast-msg"></span>
+    <button id="net-toast-close" class="net-toast-close" aria-label="Cerrar">✕</button>
+  </div>
+
   <!-- ── Selector de mayorista ────────────────────────────────────────── -->
   <div id="mayorista-view" class="hidden">
     <div class="mayorista-selector">
@@ -140,6 +147,14 @@
             <p><strong>La barra de arriba</strong> muestra el % del pick total completado entre todos los operarios.</p>
           </div>
         </div>
+      </div>
+
+      <div id="repartos-info" class="repartos-info hidden">
+        <button class="repartos-toggle-btn" id="repartos-toggle-btn">
+          <span>Reparto del día</span>
+          <span id="repartos-toggle-icon">▾</span>
+        </button>
+        <div id="repartos-info-body" class="repartos-info-body hidden"></div>
       </div>
 
       <form id="search-form">
@@ -294,6 +309,8 @@
           <button class="admin-tab-btn" data-admin-tab="nueva-semana">Semanas</button>
           <button class="admin-tab-btn" data-admin-tab="usuarios">Usuarios</button>
           <button class="admin-tab-btn" data-admin-tab="zonas">Zonas</button>
+          <button class="admin-tab-btn" data-admin-tab="reparto">Reparto</button>
+          <button class="admin-tab-btn" data-admin-tab="historial">Historial</button>
         </div>
 
         <div class="admin-main">
@@ -510,6 +527,45 @@
             </div>
             <button type="submit" class="btn-primary">Agregar zona</button>
           </form>
+        </div>
+
+        <!-- Sub-panel: Historial -->
+        <div class="admin-tab-panel hidden" data-admin-panel="historial">
+          <div class="admin-section-title" style="margin-bottom:12px">Historial de actividad</div>
+          <div class="historial-filters">
+            <select id="hist-semana-sel" class="semana-select" style="flex:1;min-width:140px"></select>
+            <div class="hist-scan-row">
+              <input type="text" id="hist-filter-producto" class="clientes-search-input" placeholder="Código o descripción..." autocomplete="off" />
+              <button id="hist-scan-btn" class="btn-icon">Escanear</button>
+            </div>
+            <select id="hist-filter-usuario" class="semana-select" style="flex:1;min-width:120px">
+              <option value="">Todos los usuarios</option>
+            </select>
+            <label class="historial-toggle-label">
+              <input type="checkbox" id="historial-solo-errores" />
+              Solo incompletos
+            </label>
+          </div>
+          <div id="hist-scanner-container" class="hidden">
+            <video id="hist-scanner-video" autoplay muted playsinline></video>
+            <button class="btn-scanner-close" onclick="stopHistScanner()">✕</button>
+            <div class="scanner-guide-overlay">
+              <div class="scanner-guide-rect"></div>
+              <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
+            </div>
+          </div>
+          <div id="historial-resumen" class="historial-resumen"></div>
+          <div id="historial-tabla-wrap"></div>
+        </div>
+
+        <!-- Sub-panel: Reparto -->
+        <div class="admin-tab-panel hidden" data-admin-panel="reparto">
+          <div class="admin-section-title" style="margin-bottom:12px">Asignaciones de reparto</div>
+          <div class="reparto-semana-row">
+            <label for="reparto-semana-sel">Semana</label>
+            <select id="reparto-semana-sel" class="semana-select" style="flex:1"></select>
+          </div>
+          <div id="reparto-asignaciones-wrap"></div>
         </div>
 
         </div><!-- /admin-main -->

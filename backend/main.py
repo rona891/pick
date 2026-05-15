@@ -5,6 +5,7 @@ from app.api import picks, auth, health, clientes, admin, zonas, export
 from app.api.yaguar import semanas as yaguar_semanas
 from app.api.diarco import semanas as diarco_semanas
 from app.api.sobrantes import router_yaguar as sob_yaguar, router_diarco as sob_diarco
+from app.api.asignaciones import router_yaguar as asig_yaguar, router_diarco as asig_diarco
 # picks, clientes y export tienen routers dobles (uno por mayorista)
 from app.auth.jwt import hash_password
 from app.db.database import init_pool, get_db
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI):
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS importe_total NUMERIC DEFAULT 0")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS cod_bar_bulto VARCHAR")
+        cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS updated_by VARCHAR")
         # Tabla repartos con mayorista
         cur.execute("""
             CREATE TABLE IF NOT EXISTS repartos (
@@ -126,6 +128,18 @@ async def lifespan(app: FastAPI):
         cur.execute("CREATE INDEX IF NOT EXISTS idx_pick_semana ON pick(semana)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_clientes_yaguar_id_yaguar ON clientes_yaguar(id_yaguar)")
         cur.execute("""
+            CREATE TABLE IF NOT EXISTS asignaciones_reparto (
+                id bigserial PRIMARY KEY,
+                semana varchar NOT NULL,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                reparto varchar NOT NULL,
+                user_id bigint REFERENCES users(id) ON DELETE SET NULL,
+                username varchar NOT NULL,
+                created_at timestamptz DEFAULT now(),
+                UNIQUE (semana, mayorista, reparto)
+            )
+        """)
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS sobrantes (
                 id bigserial PRIMARY KEY,
                 cod_bar varchar,
@@ -199,3 +213,6 @@ app.include_router(export.router_diarco, prefix="/api")
 # ── Sobrantes ─────────────────────────────────────────────────────────────────
 app.include_router(sob_yaguar, prefix="/api")
 app.include_router(sob_diarco, prefix="/api")
+# ── Asignaciones de reparto ────────────────────────────────────────────────────
+app.include_router(asig_yaguar, prefix="/api")
+app.include_router(asig_diarco, prefix="/api")
