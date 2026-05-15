@@ -34,6 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (target === 'usuarios') loadUsers();
       if (target === 'nueva-semana') loadSemanasAdmin();
       if (target === 'zonas') loadZonas();
+      if (target === 'reparto') loadAsignaciones();
+      if (target === 'historial') loadHistorial();
     });
   });
 });
@@ -64,7 +66,7 @@ function showApp() {
   const m = getMayorista();
   aplicarTema(m);
   document.getElementById('topbar-logo').src = m === 'diarco' ? 'diarco.png' : 'yaguar.png';
-  loadSemanas().then(() => loadStats());
+  loadSemanas().then(() => { loadStats(); loadRepartosInfo(); });
   switchTab('pick');
   prewarmCamera();
   renderHistorial();
@@ -195,6 +197,7 @@ document.getElementById('semana-select').addEventListener('change', (e) => {
   document.getElementById('descrip-input').value = '';
   hideDescripResults();
   loadStats();
+  loadRepartosInfo();
   if (document.querySelector('.tab-btn[data-tab="clientes"]').classList.contains('active')) {
     loadResumen();
   }
@@ -231,6 +234,7 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== tab));
   if (scannerActive && tab !== 'pick') stopScanner();
   if (sobScannerActive && tab !== 'sobrantes') stopSobScanner();
+  if (histScannerActive && tab !== 'admin') stopHistScanner();
   if (tab === 'clientes') loadResumen();
   if (tab === 'admin') initAdmin();
   if (tab === 'sobrantes') initSobrantes();
@@ -973,9 +977,11 @@ function initAdmin() {
     document.getElementById('admin-lock').classList.add('hidden');
     document.getElementById('admin-panel').classList.remove('hidden');
 
-    // Vendedor: ocultar Semanas y Usuarios
+    // Vendedor: ocultar Semanas, Usuarios, Reparto e Historial
     document.querySelector('.admin-tab-btn[data-admin-tab="nueva-semana"]').classList.toggle('hidden', vendedor);
     document.querySelector('.admin-tab-btn[data-admin-tab="usuarios"]').classList.toggle('hidden', vendedor);
+    document.querySelector('.admin-tab-btn[data-admin-tab="reparto"]').classList.toggle('hidden', vendedor);
+    document.querySelector('.admin-tab-btn[data-admin-tab="historial"]').classList.toggle('hidden', vendedor);
 
     const esDiarco = getMayorista() === 'diarco';
     if (esDiarco && !vendedor) {
@@ -1840,6 +1846,8 @@ let _sobListaActual = null;
 let _sobItems = [];
 let sobScannerActive = false;
 let _sobCodeReader = null;
+let histScannerActive = false;
+let _histCodeReader = null;
 let _sobCameras = [];
 let _sobCamIdx = 0;
 
@@ -2080,6 +2088,12 @@ document.getElementById('sob-scan-btn').addEventListener('click', async () => {
   else await startSobScanner();
 });
 
+// ── Scanner historial ─────────────────────────────────────────────────────────
+document.getElementById('hist-scan-btn').addEventListener('click', async () => {
+  if (histScannerActive) stopHistScanner();
+  else await startHistScanner();
+});
+
 async function startSobScanner(deviceId = null) {
   const container = document.getElementById('sob-scanner-container');
   container.classList.remove('hidden');
@@ -2118,4 +2132,290 @@ function switchSobCamera() {
   _sobCamIdx = (_sobCamIdx + 1) % _sobCameras.length;
   stopSobScanner();
   startSobScanner(_sobCameras[_sobCamIdx].deviceId);
+}
+
+async function startHistScanner(deviceId = null) {
+  const container = document.getElementById('hist-scanner-container');
+  container.classList.remove('hidden');
+  container.classList.add('scanner-open');
+  document.getElementById('hist-scan-btn').textContent = 'Detener';
+  histScannerActive = true;
+  const hints = new Map([[2, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39]], [3, true]]);
+  _histCodeReader = new ZXing.BrowserMultiFormatReader(hints, 0);
+  const targetId = deviceId ?? localStorage.getItem('pick_last_camera') ?? null;
+  await _histCodeReader.decodeFromVideoDevice(targetId, 'hist-scanner-video', (result) => {
+    if (result) {
+      const code = result.getText();
+      stopHistScanner();
+      const input = document.getElementById('hist-filter-producto');
+      if (input) { input.value = code; renderHistorial(); }
+    }
+  });
+}
+
+function stopHistScanner() {
+  if (!histScannerActive) return;
+  histScannerActive = false;
+  if (_histCodeReader) { _histCodeReader.reset(); _histCodeReader = null; }
+  const video = document.getElementById('hist-scanner-video');
+  if (video?.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  const container = document.getElementById('hist-scanner-container');
+  container.classList.remove('scanner-open');
+  container.classList.add('hidden');
+  document.getElementById('hist-scan-btn').textContent = 'Escanear';
+}
+
+// ── Historial ─────────────────────────────────────────────────────────────
+let _historialRows = [];
+
+async function loadHistorial() {
+  const resumenWrap = document.getElementById('historial-resumen');
+  const tablaWrap = document.getElementById('historial-tabla-wrap');
+  const semSel = document.getElementById('hist-semana-sel');
+  const usuSel = document.getElementById('hist-filter-usuario');
+
+  resumenWrap.innerHTML = '<p class="loading">Cargando...</p>';
+  tablaWrap.innerHTML = '';
+
+  // Cargar semanas para el selector propio del historial
+  try {
+    const semanas = await api.getSemanas();
+    semSel.innerHTML = semanas.length
+      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('')
+      : '<option value="">Sin semanas</option>';
+    // Preseleccionar la semana activa del pick tab si está disponible
+    if (semanaActual && semanas.find((s) => s.nombre === semanaActual)) semSel.value = semanaActual;
+  } catch (_) {
+    semSel.innerHTML = '<option value="">Error cargando semanas</option>';
+  }
+
+  // Cargar todos los usuarios para el selector (una sola vez)
+  try {
+    const users = await api.getUsers();
+    usuSel.innerHTML = '<option value="">Todos los usuarios</option>' +
+      users.map((u) => `<option value="${u.username}">${u.username}</option>`).join('');
+  } catch (_) {}
+
+  async function fetchYRender() {
+    resumenWrap.innerHTML = '<p class="loading">Cargando...</p>';
+    tablaWrap.innerHTML = '';
+    try {
+      _historialRows = await api.getHistorial(semSel.value);
+      renderHistorial();
+    } catch (err) {
+      resumenWrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
+    }
+  }
+
+  semSel.onchange = fetchYRender;
+  document.getElementById('hist-filter-producto').oninput = renderHistorial;
+  usuSel.onchange = renderHistorial;
+  document.getElementById('historial-solo-errores').onchange = renderHistorial;
+
+  await fetchYRender();
+}
+
+function renderHistorial() {
+  const resumenWrap = document.getElementById('historial-resumen');
+  const tablaWrap = document.getElementById('historial-tabla-wrap');
+  const soloErrores = document.getElementById('historial-solo-errores')?.checked;
+  const filtroProd = (document.getElementById('hist-filter-producto')?.value || '').toLowerCase();
+  const filtroUser = document.getElementById('hist-filter-usuario')?.value || '';
+  const esc = (s) => (s || '—').replace(/</g, '&lt;');
+
+  // Resumen por usuario (sobre todos los datos, sin filtro)
+  const porUsuario = {};
+  _historialRows.forEach((r) => {
+    const u = r.updated_by || '?';
+    if (!porUsuario[u]) porUsuario[u] = { completados: 0, incompletos: 0 };
+    if (r.estado?.startsWith('completado')) porUsuario[u].completados++;
+    else porUsuario[u].incompletos++;
+  });
+
+  if (!_historialRows.length) {
+    resumenWrap.innerHTML = '<p class="muted-text">Sin actividad registrada. Los artículos aparecen aquí la primera vez que un operario registra una cantidad.</p>';
+    tablaWrap.innerHTML = '';
+    return;
+  }
+
+  resumenWrap.innerHTML = `
+    <div class="historial-chips-wrap">
+      ${Object.entries(porUsuario).map(([u, d]) => `
+        <div class="historial-user-chip">
+          <span class="historial-user-name">${esc(u)}</span>
+          <span class="historial-stat ok">${d.completados} ✓</span>
+          ${d.incompletos ? `<span class="historial-stat err">${d.incompletos} incompletos</span>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  // Aplicar filtros a la tabla
+  const filtrados = _historialRows.filter((r) => {
+    if (soloErrores && r.estado?.startsWith('completado')) return false;
+    if (filtroUser && r.updated_by !== filtroUser) return false;
+    if (filtroProd) {
+      const hayMatch = (r.cod_art || '').toLowerCase().includes(filtroProd) ||
+                       (r.descrip || '').toLowerCase().includes(filtroProd);
+      if (!hayMatch) return false;
+    }
+    return true;
+  });
+
+  if (!filtrados.length) {
+    tablaWrap.innerHTML = '<p class="muted-text" style="margin-top:12px">Sin resultados para los filtros aplicados.</p>';
+    return;
+  }
+
+  tablaWrap.innerHTML = `
+    <div class="table-wrap" style="margin-top:8px">
+      <table class="clientes-table">
+        <thead>
+          <tr>
+            <th>Artículo</th>
+            <th>Cliente</th>
+            <th>Req.</th>
+            <th>Pickeado</th>
+            <th>Usuario</th>
+            <th>Fecha y hora</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filtrados.map((r) => {
+            const completo = r.estado?.startsWith('completado');
+            const dt = r.updated_at ? new Date(r.updated_at) : null;
+            const fecha = dt
+              ? dt.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) +
+                ' ' + dt.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+              : '—';
+            return `<tr class="${completo ? '' : 'historial-row-error'}">
+              <td title="${esc(r.descrip)}">${esc(r.cod_art)}<br><small>${esc(r.descrip?.slice(0, 30))}${(r.descrip?.length > 30) ? '…' : ''}</small></td>
+              <td>${esc(r.nombre)}</td>
+              <td>${r.uni ?? '—'}</td>
+              <td>${r.cantidad_pickeada ?? 0}</td>
+              <td><strong>${esc(r.updated_by)}</strong></td>
+              <td style="white-space:nowrap;font-size:12px">${fecha}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ── Repartos info (tab Pick) ───────────────────────────────────────────────
+async function loadRepartosInfo() {
+  const wrap = document.getElementById('repartos-info');
+  const body = document.getElementById('repartos-info-body');
+  if (!wrap || !semanaActual) { if (wrap) wrap.classList.add('hidden'); return; }
+  wrap.classList.remove('hidden');
+  try {
+    const [asignaciones, repartos] = await Promise.all([
+      api.getAsignaciones(semanaActual),
+      api.getRepartos(),
+    ]);
+    if (!repartos.length) { wrap.classList.add('hidden'); return; }
+    body.innerHTML = repartos.map((r) => {
+      const a = asignaciones.find((x) => x.reparto === r.nombre);
+      const usuario = a ? `<span class="reparto-usuario">${a.username}</span>` : `<span class="reparto-sin-asignar">Sin asignar</span>`;
+      return `<div class="reparto-fila"><span class="reparto-nombre">${r.nombre}</span>${usuario}</div>`;
+    }).join('');
+  } catch (_) {}
+}
+
+document.getElementById('repartos-toggle-btn').addEventListener('click', () => {
+  const body = document.getElementById('repartos-info-body');
+  const icon = document.getElementById('repartos-toggle-icon');
+  const open = !body.classList.contains('hidden');
+  body.classList.toggle('hidden', open);
+  icon.textContent = open ? '▾' : '▴';
+});
+
+// ── Asignaciones admin ────────────────────────────────────────────────────
+async function loadAsignaciones() {
+  const sel = document.getElementById('reparto-semana-sel');
+  const wrap = document.getElementById('reparto-asignaciones-wrap');
+  wrap.innerHTML = '<p class="loading">Cargando...</p>';
+  try {
+    const [semanas, repartos, users] = await Promise.all([
+      api.getSemanas(),
+      api.getRepartos(),
+      api.getUsers(),
+    ]);
+    sel.innerHTML = semanas.length
+      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('')
+      : '<option value="">Sin semanas cargadas</option>';
+    if (semanaActual && semanas.find((s) => s.nombre === semanaActual)) sel.value = semanaActual;
+    await renderAsignaciones(repartos, users, sel.value);
+    sel.onchange = () => renderAsignaciones(repartos, users, sel.value);
+  } catch (err) {
+    wrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
+  }
+}
+
+async function renderAsignaciones(repartos, users, semana) {
+  const wrap = document.getElementById('reparto-asignaciones-wrap');
+  if (!semana) { wrap.innerHTML = '<p class="muted-text">No hay semanas disponibles.</p>'; return; }
+  wrap.innerHTML = '<p class="loading">Cargando asignaciones...</p>';
+  try {
+    const asignaciones = await api.getAsignaciones(semana);
+    const esc = (s) => (s || '').replace(/</g, '&lt;');
+    const userOptions = users.map((u) => `<option value="${u.id}">${esc(u.username)}</option>`).join('');
+    wrap.innerHTML = `
+      <table class="clientes-table" style="margin-top:12px">
+        <thead><tr><th>Reparto</th><th>Usuario asignado</th></tr></thead>
+        <tbody>
+          ${repartos.map((r) => `
+            <tr>
+              <td><strong>${esc(r.nombre)}</strong></td>
+              <td>
+                <select class="reparto-user-sel" data-reparto="${esc(r.nombre)}" style="width:100%">
+                  <option value="">— Sin asignar —</option>
+                  ${userOptions}
+                </select>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <button id="btn-guardar-repartos" class="btn-primary" style="margin-top:14px">Guardar</button>
+      <span id="reparto-save-msg" style="margin-left:10px;font-size:13px;color:var(--green);display:none">Guardado</span>
+    `;
+    // Preseleccionar usuarios ya asignados
+    asignaciones.forEach((a) => {
+      const sel = wrap.querySelector(`.reparto-user-sel[data-reparto="${a.reparto}"]`);
+      if (sel) sel.value = a.user_id;
+    });
+    // Guardar todo de una vez
+    wrap.querySelector('#btn-guardar-repartos').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = '...';
+      try {
+        const existentes = await api.getAsignaciones(semana);
+        const ops = repartos.map(async (r) => {
+          const sel = wrap.querySelector(`.reparto-user-sel[data-reparto="${r.nombre}"]`);
+          const userId = parseInt(sel?.value);
+          const anterior = existentes.find((x) => x.reparto === r.nombre);
+          if (userId) {
+            await api.setAsignacion({ semana, reparto: r.nombre, user_id: userId });
+          } else if (anterior) {
+            await api.deleteAsignacion(anterior.id);
+          }
+        });
+        await Promise.all(ops);
+        const msg = wrap.querySelector('#reparto-save-msg');
+        msg.style.display = 'inline';
+        setTimeout(() => { msg.style.display = 'none'; }, 2000);
+        loadRepartosInfo();
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Guardar';
+      }
+    });
+  } catch (err) {
+    wrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
+  }
 }

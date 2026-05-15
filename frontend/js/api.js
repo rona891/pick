@@ -1,5 +1,42 @@
 const API_BASE = '';
 
+// ── Notificaciones de red ────────────────────────────────────────────────────
+let _toastTimer = null;
+let _lastNetErrAt = 0;
+const NET_ERR_COOLDOWN = 8000; // ms entre toasts de error de red
+
+function showNetToast(msg, tipo = 'error') {
+  const el = document.getElementById('net-toast');
+  const msgEl = document.getElementById('net-toast-msg');
+  const icon = document.getElementById('net-toast-icon');
+  if (!el || !msgEl) return;
+  msgEl.textContent = msg;
+  el.className = `net-toast${tipo === 'ok' ? ' net-toast-ok' : tipo === 'warn' ? ' net-toast-warn' : ''}`;
+  icon.textContent = tipo === 'ok' ? '✓' : tipo === 'warn' ? '⚡' : '⚠';
+  clearTimeout(_toastTimer);
+  if (tipo === 'ok') {
+    _toastTimer = setTimeout(hideNetToast, 3000);
+  } else if (tipo !== 'persistent') {
+    _toastTimer = setTimeout(hideNetToast, 6000);
+  }
+}
+
+function hideNetToast() {
+  const el = document.getElementById('net-toast');
+  if (el) el.classList.add('hidden');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('net-toast-close')?.addEventListener('click', hideNetToast);
+});
+
+window.addEventListener('offline', () =>
+  showNetToast('Sin WiFi — los cambios no se están guardando', 'persistent')
+);
+window.addEventListener('online', () =>
+  showNetToast('Conexión restaurada', 'ok')
+);
+
 function getToken() {
   return localStorage.getItem('token');
 }
@@ -59,16 +96,44 @@ async function request(method, path, body = null) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : null,
-  });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : null,
+    });
+  } catch (_) {
+    // fetch lanzó una excepción → sin conexión al servidor
+    const now = Date.now();
+    if (now - _lastNetErrAt > NET_ERR_COOLDOWN) {
+      _lastNetErrAt = now;
+      showNetToast('Sin conexión al servidor. Revisá el WiFi.');
+    }
+    throw new Error('Sin conexión');
+  }
 
   if (res.status === 401 && getToken()) {
     clearToken();
     window.location.href = '/';
     return;
+  }
+
+  if (res.status >= 500) {
+    const now = Date.now();
+    if (now - _lastNetErrAt > NET_ERR_COOLDOWN) {
+      _lastNetErrAt = now;
+      showNetToast('Error interno del servidor. Avisale al admin.');
+    }
+  }
+
+  // Si llega respuesta, la conexión está bien → limpiar error si estaba visible
+  if (res.ok) {
+    _lastNetErrAt = 0;
+    const el = document.getElementById('net-toast');
+    if (el && !el.classList.contains('hidden') && !el.classList.contains('net-toast-ok')) {
+      showNetToast('Conexión restaurada', 'ok');
+    }
   }
 
   const data = await res.json();
@@ -151,6 +216,14 @@ const api = {
     if (!res.ok) throw new Error(data.detail || 'Error del servidor');
     return data;
   },
+
+  // Historial
+  getHistorial: (semana) => request('GET', `/api/${getMayorista()}/picks/historial${semanaParam(semana)}`),
+
+  // Asignaciones de reparto
+  getAsignaciones: (semana) => request('GET', `/api/${getMayorista()}/asignaciones/?semana=${encodeURIComponent(semana)}`),
+  setAsignacion: (data) => request('PUT', `/api/${getMayorista()}/asignaciones/`, data),
+  deleteAsignacion: (id) => request('DELETE', `/api/${getMayorista()}/asignaciones/${id}`),
 
   // Sobrantes
   sobGetListas: () => request('GET', `/api/${getMayorista()}/sobrantes/listas`),

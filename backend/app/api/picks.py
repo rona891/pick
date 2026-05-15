@@ -7,9 +7,10 @@
 #
 # La lógica de DB es idéntica; solo cambia el filtro WHERE mayorista = '...'
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Header
 from app.models.schemas import Pick, QuantityUpdate, StatsResponse, PickResumen
 from app.db.database import get_db
+from app.auth.jwt import verify_token
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -170,7 +171,7 @@ def _by_barcode(mayorista: str, cod_bar: str, semana: Optional[str]):
     return [{k: v for k, v in dict(r).items() if k != "_reparto_orden"} for r in rows]
 
 
-def _update_quantity(id: int, update: QuantityUpdate):
+def _update_quantity(id: int, update: QuantityUpdate, username: str = None):
     with get_db() as cur:
         cur.execute("SELECT uni FROM pick WHERE id = %s", (id,))
         row = cur.fetchone()
@@ -180,10 +181,33 @@ def _update_quantity(id: int, update: QuantityUpdate):
         cantidad = update.cantidad_pickeada
         estado = f"completado: {cantidad}/{uni} UNI" if cantidad >= uni else f"entregado: {cantidad}/{uni} UNI"
         cur.execute(
-            "UPDATE pick SET cantidad_pickeada = %s, estado = %s, updated_at = %s WHERE id = %s",
-            (cantidad, estado, datetime.now(timezone.utc), id),
+            "UPDATE pick SET cantidad_pickeada = %s, estado = %s, updated_at = %s, updated_by = %s WHERE id = %s",
+            (cantidad, estado, datetime.now(timezone.utc), username, id),
         )
     return {"id": id, "cantidad_pickeada": cantidad, "estado": estado}
+
+
+def _historial(mayorista: str, semana: Optional[str]):
+    with get_db() as cur:
+        if semana:
+            cur.execute("""
+                SELECT cod_art, descrip, nombre, uni, cantidad_pickeada, estado, updated_by,
+                       updated_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at
+                FROM pick
+                WHERE semana = %s AND mayorista = %s AND updated_by IS NOT NULL
+                ORDER BY updated_at DESC
+            """, (semana, mayorista))
+        else:
+            cur.execute("""
+                SELECT cod_art, descrip, nombre, uni, cantidad_pickeada, estado, updated_by,
+                       updated_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at
+                FROM pick
+                WHERE mayorista = %s AND updated_by IS NOT NULL
+                ORDER BY updated_at DESC
+                LIMIT 500
+            """, (mayorista,))
+        rows = cur.fetchall()
+    return [dict(r) for r in rows]
 
 
 # ── Rutas Yaguar ──────────────────────────────────────────────────────────
@@ -212,9 +236,19 @@ def yaguar_by_barcode(cod_bar: str, semana: Optional[str] = Query(None)):
 def yaguar_by_art(cod_art: str, semana: Optional[str] = Query(None)):
     return _by_art("yaguar", cod_art, semana)
 
+@router_yaguar.get("/historial")
+def yaguar_historial(semana: Optional[str] = Query(None)):
+    return _historial("yaguar", semana)
+
 @router_yaguar.put("/{id}/quantity")
-def yaguar_update_quantity(id: int, update: QuantityUpdate):
-    return _update_quantity(id, update)
+def yaguar_update_quantity(id: int, update: QuantityUpdate, authorization: str = Header(None)):
+    username = None
+    if authorization:
+        try:
+            username = verify_token(authorization).get("username")
+        except Exception:
+            pass
+    return _update_quantity(id, update, username)
 
 
 # ── Rutas Diarco ──────────────────────────────────────────────────────────
@@ -243,6 +277,16 @@ def diarco_by_barcode(cod_bar: str, semana: Optional[str] = Query(None)):
 def diarco_by_art(cod_art: str, semana: Optional[str] = Query(None)):
     return _by_art("diarco", cod_art, semana)
 
+@router_diarco.get("/historial")
+def diarco_historial(semana: Optional[str] = Query(None)):
+    return _historial("diarco", semana)
+
 @router_diarco.put("/{id}/quantity")
-def diarco_update_quantity(id: int, update: QuantityUpdate):
-    return _update_quantity(id, update)
+def diarco_update_quantity(id: int, update: QuantityUpdate, authorization: str = Header(None)):
+    username = None
+    if authorization:
+        try:
+            username = verify_token(authorization).get("username")
+        except Exception:
+            pass
+    return _update_quantity(id, update, username)
