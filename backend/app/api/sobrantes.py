@@ -250,12 +250,18 @@ def _list_listas_shared():
         return [dict(r) for r in cur.fetchall()]
 
 
-def _get_items_shared(lista: str):
+def _get_items_shared(lista: str, mayorista: Optional[str] = None):
     with get_db() as cur:
-        cur.execute("""
-            SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista
-            FROM sobrantes WHERE lista = %s ORDER BY created_at DESC
-        """, (lista,))
+        if mayorista:
+            cur.execute("""
+                SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista
+                FROM sobrantes WHERE lista = %s AND mayorista = %s ORDER BY created_at DESC
+            """, (lista, mayorista))
+        else:
+            cur.execute("""
+                SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista
+                FROM sobrantes WHERE lista = %s ORDER BY created_at DESC
+            """, (lista,))
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -354,7 +360,8 @@ def _export_shared(lista: str):
 
     hfill = PatternFill("solid", fgColor="E0FF4F")
     hfont = Font(bold=True, color="141414")
-    headers = ["Mayorista", "Cód. de Barra", "Cód. Artículo", "Descripción", "Unid.", "Bultos", "UxB", "Precio c/IVA"]
+    headers = ["Mayorista", "Cód. de Barra", "Cód. Artículo", "Descripción",
+               "Unid.", "Bultos", "UxB", "Unid. Totales", "Precio c/IVA"]
     for c, h in enumerate(headers, 1):
         cell = ws.cell(1, c, h)
         cell.fill = hfill; cell.font = hfont
@@ -363,8 +370,10 @@ def _export_shared(lista: str):
     alt = PatternFill("solid", fgColor="1E1E1E")
     for i, r in enumerate(rows, 2):
         precio = round(float(r["precio_unit"]), 2) if r["precio_unit"] is not None else ""
+        uxb = r["uxb"] or 0
+        unid_totales = r["unidades"] + (uxb * r["bultos"]) if uxb else r["unidades"]
         vals = [r["mayorista"], r["cod_bar"], r["cod_art"], r["descrip"],
-                r["unidades"], r["bultos"], r["uxb"] or "", precio]
+                r["unidades"], r["bultos"], uxb or "", unid_totales, precio]
         for c, v in enumerate(vals, 1):
             cell = ws.cell(i, c, v)
             cell.font = Font(color="FFFFFF")
@@ -376,10 +385,11 @@ def _export_shared(lista: str):
     ws.column_dimensions["B"].width = 18
     ws.column_dimensions["C"].width = 14
     ws.column_dimensions["D"].width = 42
-    ws.column_dimensions["E"].width = 10
-    ws.column_dimensions["F"].width = 10
-    ws.column_dimensions["G"].width = 8
+    ws.column_dimensions["E"].width = 8
+    ws.column_dimensions["F"].width = 8
+    ws.column_dimensions["G"].width = 7
     ws.column_dimensions["H"].width = 14
+    ws.column_dimensions["I"].width = 14
     ws.freeze_panes = "A2"
 
     buf = io.BytesIO()
@@ -419,7 +429,7 @@ def shared_search(q: str, mayorista: Optional[str] = None): return _search_share
 def shared_export(lista: str): return _export_shared(lista)
 
 @router_shared.get("/{lista}")
-def shared_get_items(lista: str): return _get_items_shared(lista)
+def shared_get_items(lista: str, mayorista: Optional[str] = None): return _get_items_shared(lista, mayorista)
 
 @router_shared.post("/{lista}/item")
 def shared_add_item(lista: str, data: ItemIn): return _add_item_shared(lista, data)
