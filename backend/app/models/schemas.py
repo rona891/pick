@@ -32,6 +32,8 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     rol: str
+    acceso_sobrantes: bool = False
+    acceso_novedades: bool = False
 
 
 class StatsResponse(BaseModel):
@@ -84,12 +86,22 @@ class AdminVerify(BaseModel):
 class UserCreate(BaseModel):
     username: str
     password: str
+    rol: str = 'operario'
+
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    rol: Optional[str] = None
+    acceso_sobrantes: Optional[bool] = None
+    acceso_novedades: Optional[bool] = None
 
 
 class UserOut(BaseModel):
     id: int
     username: str
     rol: str = 'operario'
+    acceso_sobrantes: bool = False
+    acceso_novedades: bool = False
     created_at: Optional[datetime] = None
 
 

@@ -13,6 +13,20 @@ let descripTimer = null;
 let cameras = [];
 let currentCameraIndex = 0;
 
+// ── Estado: scanner por cliente ────────────────────────────────────────────
+let currentClientePicks = [];  // picks del cliente abierto en el sheet
+let clienteScanMode = false;   // true cuando el scanner está en modo cliente
+let clienteActual = '';        // nombre del cliente cuyo sheet está abierto
+
+// ── Estado: filtro de repartos en Clientes tab ─────────────────────────────
+let filtroRepartosClientes = new Set();  // repartos seleccionados como chips
+
+// ── Estado: filtro de repartos en Pick tab ─────────────────────────────────
+let filtroRepartosPick = new Set();      // repartos seleccionados en Pick
+let zonaRepartoMap = {};                 // { 'MERLO': 'Merlo', 'VILLA LARCA': 'Sur Arriba', ... }
+let _lastPickSearch = null;              // { code: string } para re-ejecutar al cambiar filtro
+let _highlightedCard = null;             // tarjeta resaltada actualmente en el sheet de cliente
+
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   aplicarModo();
@@ -34,39 +48,120 @@ document.addEventListener('DOMContentLoaded', () => {
       if (target === 'usuarios') loadUsers();
       if (target === 'nueva-semana') loadSemanasAdmin();
       if (target === 'zonas') loadZonas();
+      if (target === 'reparto') loadAsignaciones();
+      if (target === 'historial') loadHistorial();
     });
   });
 });
 
 // ── Views ──────────────────────────────────────────────────────────────────
-function showLogin() {
-  document.getElementById('login-view').classList.remove('hidden');
-  document.getElementById('mayorista-view').classList.add('hidden');
+function _hideAllViews() {
+  document.getElementById('login-view').classList.add('hidden');
+  document.getElementById('hub-view').classList.add('hidden');
   document.getElementById('app-view').classList.add('hidden');
+  document.getElementById('sobrantes-view').classList.add('hidden');
+  document.getElementById('novedades-view').classList.add('hidden');
+}
+
+function showNovedades() {
+  stopNovScanner();
+  _hideAllViews();
+  const m = getMayorista();
+  aplicarTema(m);
+  document.getElementById('nov-view-badge').textContent = m.toUpperCase();
+  document.getElementById('nov-view-badge').className = `sob-view-badge sob-view-badge-${m}`;
+  document.getElementById('nov-usuario').textContent = localStorage.getItem('username') || '';
+  document.getElementById('novedades-view').classList.remove('hidden');
+  initNovedades();
+}
+
+function showLogin() {
+  _hideAllViews();
+  document.getElementById('login-view').classList.remove('hidden');
   document.getElementById('login-error').classList.add('hidden');
 }
 
-function showMayoristaSelector() {
-  document.getElementById('mayorista-view').classList.remove('hidden');
-  document.getElementById('login-view').classList.add('hidden');
-  document.getElementById('app-view').classList.add('hidden');
+function showHub() {
+  stopSobScanner();
+  _hideAllViews();
+  document.getElementById('hub-view').classList.remove('hidden');
+  const tieneHerr = tieneSobrantes() || tieneNovedades();
+  document.getElementById('hub-herramientas').classList.toggle('hidden', !tieneHerr);
+  document.getElementById('hub-btn-sobrantes').classList.toggle('hidden', !tieneSobrantes());
+  document.getElementById('hub-btn-novedades').classList.toggle('hidden', !tieneNovedades());
+  document.getElementById('hub-sob-selector').classList.add('hidden');
+  document.getElementById('hub-nov-selector').classList.add('hidden');
+  document.getElementById('hub-admin-btn').classList.toggle('hidden', !esAdmin());
+  const hubTheme = document.getElementById('hub-theme-btn');
+  if (hubTheme) hubTheme.textContent = esLightMode() ? '🌙' : '☀';
+  document.getElementById('hub-usuario').textContent = localStorage.getItem('username') || '';
 }
 
-function showApp() {
-  document.getElementById('login-view').classList.add('hidden');
-  document.getElementById('mayorista-view').classList.add('hidden');
+function showSobrantes() {
+  _hideAllViews();
+  const m = getMayorista();
+  aplicarTema(m);
+  document.getElementById('sob-view-badge').textContent = m.toUpperCase();
+  document.getElementById('sob-view-badge').className = `sob-view-badge sob-view-badge-${m}`;
+  document.getElementById('sob-usuario').textContent = localStorage.getItem('username') || '';
+  document.getElementById('sobrantes-view').classList.remove('hidden');
+  initSobrantes();
+}
+
+function volverAlHub() {
+  stopSobScanner();
+  showHub();
+}
+
+// Alias para compatibilidad con llamadas existentes
+function showMayoristaSelector() { showHub(); }
+
+function showApp(initialTab = 'pick') {
+  _hideAllViews();
   document.getElementById('app-view').classList.remove('hidden');
-  document.querySelector('.tab-btn[data-tab="admin"]').classList.toggle('hidden', !esAdmin());
+  const adminBtn = document.querySelector('.tab-btn[data-tab="admin"]');
+  adminBtn.classList.toggle('hidden', !esAdminOVendedor());
+  if (esVendedor()) document.getElementById('nav-admin-label').textContent = 'Gestión';
+  else document.getElementById('nav-admin-label').textContent = 'Panel';
   document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
   const m = getMayorista();
   aplicarTema(m);
   document.getElementById('topbar-logo').src = m === 'diarco' ? 'diarco.png' : 'yaguar.png';
-  loadSemanas().then(() => loadStats());
-  switchTab('pick');
+  loadSemanas().then(() => { loadStats(); });
+  loadZonaRepartoMap();
+  switchTab(initialTab);
+  if (initialTab === 'pick') loadChipsRepartoPick();
   prewarmCamera();
   renderHistorial();
   setTimeout(() => document.getElementById('barcode-input').focus(), 200);
 }
+
+// ── Permisos en tiempo real ────────────────────────────────────────────────
+async function checkPermissions() {
+  if (!getToken()) return;
+  try {
+    const me = await api.getMe();
+    const prevSob = localStorage.getItem('acceso_sobrantes');
+    const prevNov = localStorage.getItem('acceso_novedades');
+    const newSob = me.acceso_sobrantes ? '1' : '0';
+    const newNov = me.acceso_novedades ? '1' : '0';
+    localStorage.setItem('acceso_sobrantes', newSob);
+    localStorage.setItem('acceso_novedades', newNov);
+    // Si cambiaron los permisos y el hub está visible, refrescar sus botones
+    if ((prevSob !== newSob || prevNov !== newNov)) {
+      const hubVisible = !document.getElementById('hub-view').classList.contains('hidden');
+      if (hubVisible) showHub();
+    }
+  } catch { /* silencioso */ }
+}
+
+// Chequear al volver a la pestaña del browser
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) checkPermissions();
+});
+
+// Chequear cada 15 segundos mientras la app está activa
+setInterval(() => { if (!document.hidden) checkPermissions(); }, 15000);
 
 // ── Modo claro / oscuro ────────────────────────────────────────────────────
 function esLightMode() {
@@ -93,17 +188,73 @@ function aplicarTema(mayorista) {
 
 document.querySelectorAll('.mayorista-card').forEach((btn) => {
   btn.addEventListener('click', () => {
-    setMayorista(btn.dataset.mayorista);
-    aplicarTema(btn.dataset.mayorista);
-    showApp();
+    const m = btn.dataset.mayorista;
+    const destino = btn.dataset.destino || 'pick';
+    setMayorista(m);
+    aplicarTema(m);
+    if (destino === 'sobrantes') {
+      showSobrantes();
+    } else if (destino === 'novedades') {
+      showNovedades();
+    } else {
+      showApp('pick');
+    }
   });
 });
 
 function cambiarMayorista() {
   localStorage.removeItem('mayorista_ts');
   aplicarTema(null);
-  showMayoristaSelector();
+  showHub();
 }
+
+document.getElementById('hub-btn-sobrantes').addEventListener('click', () => {
+  document.getElementById('hub-sob-selector').classList.remove('hidden');
+});
+
+document.getElementById('sob-back-btn').addEventListener('click', volverAlHub);
+
+document.getElementById('hub-btn-novedades').addEventListener('click', () => {
+  document.getElementById('hub-sob-selector').classList.add('hidden');
+  document.getElementById('hub-nov-selector').classList.remove('hidden');
+});
+document.getElementById('hub-nov-cancelar').addEventListener('click', () => {
+  document.getElementById('hub-nov-selector').classList.add('hidden');
+});
+
+// ── Hub topbar: Usuarios, Tema, Cuenta, Salir ──────────────────────────────
+document.getElementById('hub-admin-btn').addEventListener('click', () => {
+  document.getElementById('usuarios-modal').classList.remove('hidden');
+  loadUsers();
+});
+
+document.getElementById('usuarios-modal-close').addEventListener('click', () => {
+  document.getElementById('usuarios-modal').classList.add('hidden');
+});
+
+document.getElementById('hub-theme-btn').addEventListener('click', () => {
+  localStorage.setItem('lightMode', esLightMode() ? '0' : '1');
+  aplicarModo();
+  document.getElementById('hub-theme-btn').textContent = esLightMode() ? '🌙' : '☀';
+});
+
+document.getElementById('hub-cuenta-btn').addEventListener('click', () => {
+  document.getElementById('pw-form').reset();
+  document.getElementById('username-form').reset();
+  document.getElementById('pw-modal').classList.remove('hidden');
+});
+
+document.getElementById('hub-salir-btn').addEventListener('click', async () => {
+  await api.logout().catch(() => {});
+  clearToken();
+  stopSobScanner();
+  adminUnlocked = false;
+  showLogin();
+});
+
+document.getElementById('hub-sob-cancelar').addEventListener('click', () => {
+  document.getElementById('hub-sob-selector').classList.add('hidden');
+});
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 document.getElementById('login-form').addEventListener('submit', async (e) => {
@@ -121,6 +272,8 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     const res = await api.login(username, password);
     setToken(res.access_token);
     setRol(res.rol);
+    localStorage.setItem('acceso_sobrantes', res.acceso_sobrantes ? '1' : '0');
+    localStorage.setItem('acceso_novedades', res.acceso_novedades ? '1' : '0');
     localStorage.setItem('username', username);
     if (mayoristaCaducado()) {
       showMayoristaSelector();
@@ -176,6 +329,13 @@ document.getElementById('semana-select').addEventListener('change', (e) => {
 
 // ── Stats ──────────────────────────────────────────────────────────────────
 async function loadStats() {
+  if (!semanaActual) {
+    document.getElementById('stat-total').textContent = 0;
+    document.getElementById('stat-completed').textContent = 0;
+    document.getElementById('stat-pending').textContent = 0;
+    updateProgressBar(1, 1); // 100% — no hay picks pendientes
+    return;
+  }
   try {
     const stats = await api.getStats(semanaActual);
     document.getElementById('stat-total').textContent = stats.total;
@@ -203,17 +363,21 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   document.querySelectorAll('.tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== tab));
-
-  if (tab === 'clientes') loadResumen();
+  if (scannerActive && tab !== 'pick') { clienteScanMode = false; stopScanner(); }
+  if (sobScannerActive && tab !== 'sobrantes') stopSobScanner();
+  if (histScannerActive && tab !== 'admin') stopHistScanner();
+  if (tab === 'clientes') { loadChipsReparto(); loadResumen(); }
   if (tab === 'admin') initAdmin();
+  if (tab === 'sobrantes') initSobrantes();
 }
 
 // ── Tab: Pick ──────────────────────────────────────────────────────────────
-document.getElementById('search-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const val = document.getElementById('barcode-input').value.trim();
+// El input de barcode está oculto; se llena por el scanner. Este listener
+// permite pegar un código desde el portapapeles (uso interno/admin).
+document.getElementById('barcode-input').addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter') return;
+  const val = e.target.value.trim();
   if (!val) return;
-  // Para DIARCO: primero intenta por barcode (EAN-13/EAN-14), luego por cod_art DIARCO
   if (getMayorista() === 'diarco') {
     await searchDiarco(val);
   } else {
@@ -224,18 +388,29 @@ document.getElementById('search-form').addEventListener('submit', async (e) => {
 
 async function searchDiarco(val) {
   // Intenta por barcode EAN (unidad o bulto), si falla busca por código DIARCO
+  _lastPickSearch = { code: val };
   const results = document.getElementById('results');
   results.innerHTML = '<p class="loading">Buscando...</p>';
   try {
-    const picks = await api.getByBarcode(val, semanaActual);
+    let picks = await api.getByBarcode(val, semanaActual);
     addToHistorial(val, picks[0]?.descrip || val);
+    picks = filtrarPicksPorReparto(picks);
+    if (!picks.length && filtroRepartosPick.size) {
+      results.innerHTML = `<p class="error-msg">Sin pedidos en los repartos seleccionados</p>`;
+      return;
+    }
     renderPicks(picks, results);
     loadStats();
   } catch {
     // Fallback: buscar por código de artículo DIARCO
     try {
-      const picks = await api.getByCodArt(val, semanaActual);
+      let picks = await api.getByCodArt(val, semanaActual);
       addToHistorial(val, picks[0]?.descrip || val);
+      picks = filtrarPicksPorReparto(picks);
+      if (!picks.length && filtroRepartosPick.size) {
+        results.innerHTML = `<p class="error-msg">Sin pedidos en los repartos seleccionados</p>`;
+        return;
+      }
       renderPicks(picks, results);
       loadStats();
     } catch {
@@ -248,8 +423,13 @@ async function searchByCodArt(codArt) {
   const results = document.getElementById('results');
   results.innerHTML = '<p class="loading">Buscando...</p>';
   try {
-    const picks = await api.getByCodArt(codArt, semanaActual);
+    let picks = await api.getByCodArt(codArt, semanaActual);
     addToHistorial(codArt, picks[0]?.descrip || codArt);
+    picks = filtrarPicksPorReparto(picks);
+    if (!picks.length && filtroRepartosPick.size) {
+      results.innerHTML = `<p class="error-msg">Sin pedidos en los repartos seleccionados</p>`;
+      return;
+    }
     renderPicks(picks, results);
     loadStats();
   } catch (err) {
@@ -258,12 +438,18 @@ async function searchByCodArt(codArt) {
 }
 
 async function searchBarcode(codBar) {
+  _lastPickSearch = { code: codBar };
   const results = document.getElementById('results');
   results.innerHTML = '<p class="loading">Buscando...</p>';
 
   try {
-    const picks = await api.getByBarcode(codBar, semanaActual);
+    let picks = await api.getByBarcode(codBar, semanaActual);
     addToHistorial(codBar, picks[0]?.descrip || codBar);
+    picks = filtrarPicksPorReparto(picks);
+    if (!picks.length && filtroRepartosPick.size) {
+      results.innerHTML = `<p class="error-msg">Sin pedidos en los repartos seleccionados</p>`;
+      return;
+    }
 
     const todosEntregados = picks.length > 0 && picks.every(p => (p.estado || '').startsWith('completado'));
 
@@ -366,10 +552,17 @@ function formatImporte(n) {
 }
 
 function formatRestante(uni, cantidad, bul, uxb) {
-  uni = uni || 0; cantidad = cantidad || 0; bul = bul || 0; uxb = uxb || 0;
+  uni = uni || 0; cantidad = cantidad || 0; uxb = uxb || 0;
   const restante = Math.max(0, uni - cantidad);
-  const restanteBul = (uxb > 0 && restante % uxb === 0) ? restante / uxb : 0;
-  return formatCantidad(restante, restanteBul, uxb);
+  if (uxb > 1 && restante >= uxb) {
+    const bulRest = Math.floor(restante / uxb);
+    const uniRest = restante % uxb;
+    const main = uniRest > 0
+      ? `${bulRest} bul y ${uniRest} uni`
+      : `${bulRest} bulto${bulRest !== 1 ? 's' : ''}`;
+    return { main, sub: `× ${uxb} uni/bulto` };
+  }
+  return { main: `${restante} uni`, sub: uxb > 1 ? `× ${uxb} uni/bulto` : null };
 }
 
 function getEntregadoLabel(uni, bul, uxb) {
@@ -453,48 +646,16 @@ function renderControls(card, cantidad, isCompleted) {
       await saveQuantity(id, 0, card);
     });
   } else {
-    let current = cantidad;
     ctrl.innerHTML = `
       <button class="btn-entregado">${entLabel}</button>
-      <div class="pick-stepper">
-        <button class="btn-step-minus">−</button>
-        <input class="step-value" type="number" min="0" max="${uni}" value="${current}" inputmode="numeric" />
-        <button class="btn-step-plus">+</button>
-        <button class="btn-save">Guardar</button>
-      </div>
+      <button class="btn-parcial">Entregar parcial...</button>
     `;
-
-    const inputEl = ctrl.querySelector('.step-value');
-
-    const syncFromInput = () => {
-      let v = parseInt(inputEl.value);
-      if (isNaN(v) || v < 0) v = 0;
-      if (v > uni) v = uni;
-      current = v;
-      inputEl.value = current;
-    };
-
     ctrl.querySelector('.btn-entregado').addEventListener('click', () => saveQuantity(id, uni, card));
-
-    ctrl.querySelector('.btn-step-minus').addEventListener('click', () => {
-      syncFromInput();
-      current = Math.max(0, current - 1);
-      inputEl.value = current;
+    ctrl.querySelector('.btn-parcial').addEventListener('click', () => {
+      const descrip = card.querySelector('.pick-descrip')?.textContent || '';
+      const nombre = card.querySelector('.pick-meta span')?.textContent || '';
+      openParcialModal(id, uni, uxb, bul, card, descrip, nombre, cantidad);
     });
-
-    ctrl.querySelector('.btn-step-plus').addEventListener('click', () => {
-      syncFromInput();
-      current = Math.min(uni, current + 1);
-      inputEl.value = current;
-    });
-
-    inputEl.addEventListener('change', syncFromInput);
-    inputEl.addEventListener('blur', syncFromInput);
-    inputEl.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { syncFromInput(); saveQuantity(id, current, card); }
-    });
-
-    ctrl.querySelector('.btn-save').addEventListener('click', () => { syncFromInput(); saveQuantity(id, current, card); });
   }
 }
 
@@ -509,6 +670,7 @@ async function saveQuantity(id, cantidad, card) {
     const isParcial = cantidad > 0 && cantidad < uni;
     card.classList.toggle('completed', isCompleted);
     card.classList.toggle('parcial', isParcial);
+    if (_highlightedCard === card) _clearHighlight();
     card.querySelector('.pick-estado').textContent = res.estado;
     card.querySelector('.pick-estado').className = `pick-estado ${estadoClass(res.estado)}`;
 
@@ -533,6 +695,93 @@ async function saveQuantity(id, cantidad, card) {
     showToast(err.message, 'error');
   }
 }
+
+// ── Modal de entrega parcial ───────────────────────────────────────────────
+let _parcialPick = null;
+
+function openParcialModal(id, uni, uxb, bul, card, descrip, nombre, cantidadActual = 0) {
+  _parcialPick = { id, uni, uxb, bul, card, cantidadActual };
+  const sinBultos = uxb <= 1;
+  document.getElementById('parcial-modal-title').textContent = 'Entrega parcial';
+  document.getElementById('parcial-modal-desc').textContent = `${descrip}${nombre ? ' — ' + nombre : ''}`;
+  document.getElementById('parcial-bultos-wrap').classList.toggle('hidden', sinBultos);
+  document.getElementById('parcial-uni-label').textContent = sinBultos ? 'Unidades' : 'Unidades sueltas';
+  document.getElementById('parcial-bultos').value = 0;
+  document.getElementById('parcial-unidades').value = 0;
+
+  // Nota de ayuda: visible solo si ya se entregó algo
+  const ayuda = document.getElementById('parcial-ayuda');
+  if (cantidadActual > 0) {
+    const bulAct = uxb > 1 ? Math.floor(cantidadActual / uxb) : 0;
+    const uniAct = uxb > 1 ? cantidadActual % uxb : cantidadActual;
+    const cantStr = bulAct > 0
+      ? (uniAct > 0 ? `${bulAct} bul y ${uniAct} uni` : `${bulAct} bul`)
+      : `${uniAct} uni`;
+    ayuda.textContent = `Ya se registraron ${cantStr}. Para corregir una entrega errónea podés ingresar valores negativos (hasta −${cantStr}).`;
+    ayuda.classList.remove('hidden');
+  } else {
+    ayuda.classList.add('hidden');
+  }
+
+  _actualizarParcialPreview();
+  document.getElementById('parcial-modal').classList.remove('hidden');
+  const primerInput = sinBultos
+    ? document.getElementById('parcial-unidades')
+    : document.getElementById('parcial-bultos');
+  setTimeout(() => primerInput.focus(), 100);
+}
+
+function _actualizarParcialPreview() {
+  if (!_parcialPick) return;
+  const { uni, uxb, cantidadActual } = _parcialPick;
+  const bultos = parseInt(document.getElementById('parcial-bultos').value) || 0;
+  const unidades = parseInt(document.getElementById('parcial-unidades').value) || 0;
+  const delta = (uxb > 1 ? uxb * bultos : 0) + unidades;
+  const nuevaCantidad = cantidadActual + delta;
+  const preview = document.getElementById('parcial-total-preview');
+  const ok = delta !== 0 && nuevaCantidad >= 0 && nuevaCantidad <= uni;
+  let msg = `Nueva cantidad: ${nuevaCantidad} uni`;
+  if (nuevaCantidad < 0) msg = `Resultado negativo (${nuevaCantidad} uni)`;
+  else if (nuevaCantidad > uni) msg = `Excede el pedido (${nuevaCantidad}/${uni} uni)`;
+  else if (delta === 0) msg = 'Ingresá una cantidad distinta de cero';
+  preview.textContent = msg;
+  preview.className = `parcial-total ${ok ? '' : 'parcial-total-error'}`;
+  document.getElementById('parcial-confirmar').disabled = !ok;
+}
+
+function cerrarParcialModal() {
+  _parcialPick = null;
+  document.getElementById('parcial-modal').classList.add('hidden');
+}
+
+document.getElementById('parcial-modal-close').addEventListener('click', cerrarParcialModal);
+document.getElementById('parcial-cancelar').addEventListener('click', cerrarParcialModal);
+
+document.querySelectorAll('.btn-parcial-step').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const field = btn.dataset.field;
+    const input = document.getElementById(`parcial-${field}`);
+    const delta = parseInt(btn.dataset.delta);
+    const val = (parseInt(input.value) || 0) + delta;
+    input.value = val; // sin floor — permite negativos
+    _actualizarParcialPreview();
+  });
+});
+
+['parcial-bultos', 'parcial-unidades'].forEach((inputId) => {
+  document.getElementById(inputId).addEventListener('input', _actualizarParcialPreview);
+});
+
+document.getElementById('parcial-confirmar').addEventListener('click', async () => {
+  if (!_parcialPick) return;
+  const { id, uni, uxb, card, cantidadActual } = _parcialPick;
+  const bultos = parseInt(document.getElementById('parcial-bultos').value) || 0;
+  const unidades = parseInt(document.getElementById('parcial-unidades').value) || 0;
+  const delta = (uxb > 1 ? uxb * bultos : 0) + unidades;
+  const nuevaCantidad = Math.max(0, Math.min(uni, cantidadActual + delta));
+  cerrarParcialModal();
+  await saveQuantity(id, nuevaCantidad, card);
+});
 
 // ── Chequeo cliente completo ───────────────────────────────────────────────
 function checkClienteCompleto(nombre) {
@@ -696,20 +945,28 @@ document.getElementById('scan-btn').addEventListener('click', async () => {
 function onScanResult(result) {
   if (!result) return;
   const code = result.getText();
-  document.getElementById('barcode-input').value = code;
   if (navigator.vibrate) navigator.vibrate(80);
+  const enModoCliente = clienteScanMode;
   stopScanner();
-  if (getMayorista() === 'diarco') {
-    searchDiarco(code);
+  if (enModoCliente) {
+    clienteScanMode = true;  // mantener modo activo para que handleClienteScan pueda reabrirlo
+    handleClienteScan(code);
   } else {
-    searchBarcode(code);
+    document.getElementById('barcode-input').value = code;
+    if (getMayorista() === 'diarco') {
+      searchDiarco(code);
+    } else {
+      searchBarcode(code);
+    }
   }
 }
 
 async function startScanner(deviceId = null) {
   const container = document.getElementById('scanner-container');
   container.classList.remove('hidden');
-  document.getElementById('scan-btn').textContent = 'Detener';
+  const scanBtn = document.getElementById('scan-btn');
+  scanBtn.textContent = 'Detener';
+  scanBtn.classList.add('scanner-active-label');
   scannerActive = true;
 
   await requestWakeLock();
@@ -800,16 +1057,170 @@ function stopScanner() {
   currentCameraIndex = 0;
   document.getElementById('scanner-container').classList.remove('scanner-open');
   document.getElementById('scanner-container').classList.add('hidden');
-  document.getElementById('scan-btn').textContent = 'Escanear';
+  const scanBtnStop = document.getElementById('scan-btn');
+  scanBtnStop.textContent = 'Escanear';
+  scanBtnStop.classList.remove('scanner-active-label');
   document.getElementById('switch-camera-btn').classList.add('hidden');
+
+}
+
+// ── Zona→Reparto map (compartido entre Pick y Clientes) ────────────────────
+async function loadZonaRepartoMap() {
+  try {
+    const zonas = await api.getZonas();
+    zonaRepartoMap = {};
+    zonas.forEach((z) => { if (z.reparto) zonaRepartoMap[z.nombre.toUpperCase()] = z.reparto; });
+  } catch (_) {}
+}
+
+// ── Chips de reparto en pestaña Pick ──────────────────────────────────────
+function _actualizarBotonFiltroPick() {
+  const btn = document.getElementById('btn-toggle-filtro-pick');
+  if (!btn) return;
+  if (!filtroRepartosPick.size) {
+    btn.textContent = 'Reparto: Todos ▾';
+    btn.classList.remove('filtro-toggle-active');
+  } else if (filtroRepartosPick.size === 1) {
+    btn.textContent = `Reparto: ${[...filtroRepartosPick][0]} ▾`;
+    btn.classList.add('filtro-toggle-active');
+  } else {
+    btn.textContent = `Reparto: ${filtroRepartosPick.size} sel. ▾`;
+    btn.classList.add('filtro-toggle-active');
+  }
+}
+
+async function loadChipsRepartoPick() {
+  const outerWrap = document.getElementById('filtro-reparto-pick-wrap');
+  const dropdown = document.getElementById('filtro-reparto-pick');
+  const container = document.getElementById('chips-reparto-pick');
+  if (!outerWrap || !dropdown || !container) return;
+
+  try {
+    const repartos = await api.getRepartos();
+    if (!repartos.length) { outerWrap.classList.add('hidden'); return; }
+
+    outerWrap.classList.remove('hidden');
+
+    const stored = localStorage.getItem(`filtro_repartos_pick_${getMayorista()}`);
+    if (stored) {
+      try { filtroRepartosPick = new Set(JSON.parse(stored)); } catch { filtroRepartosPick = new Set(); }
+    }
+
+    _actualizarBotonFiltroPick();
+
+    // Toggle del dropdown
+    const toggleBtn = document.getElementById('btn-toggle-filtro-pick');
+    toggleBtn.onclick = () => dropdown.classList.toggle('hidden');
+
+    container.innerHTML = repartos.map((r) => {
+      const active = filtroRepartosPick.has(r.nombre) ? ' active' : '';
+      return `<button class="chip-reparto${active}" data-reparto="${r.nombre}">${r.nombre}</button>`;
+    }).join('');
+
+    container.querySelectorAll('.chip-reparto').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const rep = chip.dataset.reparto;
+        if (filtroRepartosPick.has(rep)) {
+          filtroRepartosPick.delete(rep);
+          chip.classList.remove('active');
+        } else {
+          filtroRepartosPick.add(rep);
+          chip.classList.add('active');
+        }
+        localStorage.setItem(`filtro_repartos_pick_${getMayorista()}`, JSON.stringify([...filtroRepartosPick]));
+        _actualizarBotonFiltroPick();
+        // Re-ejecutar la última búsqueda con el nuevo filtro (Task 4)
+        if (_lastPickSearch) {
+          if (getMayorista() === 'diarco') searchDiarco(_lastPickSearch.code);
+          else searchBarcode(_lastPickSearch.code);
+        }
+      });
+    });
+  } catch (_) {
+    outerWrap.classList.add('hidden');
+  }
+}
+
+// Filtra un array de picks según el filtro de repartos activo en Pick tab
+function filtrarPicksPorReparto(picks) {
+  if (!filtroRepartosPick.size) return picks;
+  return picks.filter((p) => {
+    const localidad = (p.localidad || '').toUpperCase();
+    const reparto = zonaRepartoMap[localidad];
+    return reparto && filtroRepartosPick.has(reparto);
+  });
 }
 
 // ── Tab: Clientes ──────────────────────────────────────────────────────────
+
+// Carga los chips de reparto para el filtro en la pestaña Clientes
+function _actualizarBotonFiltroClientes() {
+  const btn = document.getElementById('btn-toggle-filtro-clientes');
+  if (!btn) return;
+  if (!filtroRepartosClientes.size) {
+    btn.textContent = 'Reparto: Todos ▾';
+    btn.classList.remove('filtro-toggle-active');
+  } else if (filtroRepartosClientes.size === 1) {
+    btn.textContent = `Reparto: ${[...filtroRepartosClientes][0]} ▾`;
+    btn.classList.add('filtro-toggle-active');
+  } else {
+    btn.textContent = `Reparto: ${filtroRepartosClientes.size} sel. ▾`;
+    btn.classList.add('filtro-toggle-active');
+  }
+}
+
+async function loadChipsReparto() {
+  const outerWrap = document.getElementById('filtro-reparto-clientes-wrap');
+  const dropdown = document.getElementById('filtro-reparto-clientes');
+  const container = document.getElementById('chips-reparto-clientes');
+  if (!outerWrap || !dropdown || !container) return;
+
+  try {
+    const repartos = await api.getRepartos();
+    if (!repartos.length) { outerWrap.classList.add('hidden'); return; }
+
+    outerWrap.classList.remove('hidden');
+
+    const stored = localStorage.getItem(`filtro_repartos_${getMayorista()}`);
+    if (stored) {
+      try { filtroRepartosClientes = new Set(JSON.parse(stored)); } catch { filtroRepartosClientes = new Set(); }
+    }
+
+    _actualizarBotonFiltroClientes();
+
+    const toggleBtn = document.getElementById('btn-toggle-filtro-clientes');
+    toggleBtn.onclick = () => dropdown.classList.toggle('hidden');
+
+    container.innerHTML = repartos.map((r) => {
+      const active = filtroRepartosClientes.has(r.nombre) ? ' active' : '';
+      return `<button class="chip-reparto${active}" data-reparto="${r.nombre}">${r.nombre}</button>`;
+    }).join('');
+
+    container.querySelectorAll('.chip-reparto').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const rep = chip.dataset.reparto;
+        if (filtroRepartosClientes.has(rep)) {
+          filtroRepartosClientes.delete(rep);
+          chip.classList.remove('active');
+        } else {
+          filtroRepartosClientes.add(rep);
+          chip.classList.add('active');
+        }
+        localStorage.setItem(`filtro_repartos_${getMayorista()}`, JSON.stringify([...filtroRepartosClientes]));
+        _actualizarBotonFiltroClientes();
+        loadResumen();
+      });
+    });
+  } catch (_) {
+    outerWrap.classList.add('hidden');
+  }
+}
+
 async function loadResumen() {
   const container = document.getElementById('resumen-list');
   container.innerHTML = '<p class="loading">Cargando...</p>';
   try {
-    resumenData = await api.getResumen(semanaActual);
+    resumenData = await api.getResumen(semanaActual, [...filtroRepartosClientes]);
     renderResumen();
   } catch (err) {
     container.innerHTML = `<p class="error-msg">${err.message}</p>`;
@@ -905,49 +1316,127 @@ function renderResumen(searchQ = '') {
 
 // ── Picks por cliente (bottom-sheet) ──────────────────────────────────────
 async function abrirPicksCliente(nombre) {
+  clienteActual = nombre;
   document.getElementById('cliente-picks-title').textContent = nombre;
   document.getElementById('cliente-picks-progress').textContent = '';
+  document.getElementById('scan-cliente-banner').classList.add('hidden');
   const content = document.getElementById('cliente-picks-content');
   content.innerHTML = '<p class="loading">Cargando...</p>';
   document.getElementById('cliente-picks-overlay').classList.remove('hidden');
+  document.getElementById('scan-cliente-btn').classList.add('hidden');
 
   try {
     const picks = await api.getPicksPorCliente(nombre, semanaActual);
+    currentClientePicks = picks;
     if (!picks.length) {
       content.innerHTML = '<p class="loading">Sin items</p>';
     } else {
       renderPicks(picks, content);
       updateSheetProgress();
+      document.getElementById('scan-cliente-btn').classList.remove('hidden');
     }
   } catch (err) {
     content.innerHTML = `<p class="error-msg">${err.message}</p>`;
   }
 }
 
-document.getElementById('cliente-picks-close').addEventListener('click', () => {
+function cerrarSheetCliente() {
+  stopScanner();
+  clienteScanMode = false;
+  currentClientePicks = [];
+  clienteActual = '';
+  _clearHighlight();
+  document.getElementById('scan-cliente-banner').classList.add('hidden');
+  document.getElementById('scan-cliente-btn').classList.add('hidden');
   document.getElementById('cliente-picks-overlay').classList.add('hidden');
   loadResumen();
-});
+}
+
+function _clearHighlight() {
+  if (_highlightedCard) {
+    _highlightedCard.classList.remove('scan-highlight');
+    _highlightedCard = null;
+  }
+}
+
+function _setHighlight(card) {
+  _clearHighlight();
+  if (card) {
+    card.classList.add('scan-highlight');
+    _highlightedCard = card;
+  }
+}
+
+function scanAlert(msg) {
+  return new Promise((resolve) => {
+    document.getElementById('scan-alert-msg').textContent = msg;
+    const overlay = document.getElementById('scan-alert-overlay');
+    overlay.classList.remove('hidden');
+    const ok = document.getElementById('scan-alert-ok');
+    function onOk() {
+      overlay.classList.add('hidden');
+      ok.removeEventListener('click', onOk);
+      resolve();
+    }
+    ok.addEventListener('click', onOk);
+  });
+}
+
+document.getElementById('cliente-picks-close').addEventListener('click', cerrarSheetCliente);
 
 document.getElementById('cliente-picks-overlay').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) {
-    document.getElementById('cliente-picks-overlay').classList.add('hidden');
-    loadResumen();
-  }
+  if (e.target === e.currentTarget) cerrarSheetCliente();
 });
+
+// ── Scanner por cliente ────────────────────────────────────────────────────
+document.getElementById('scan-cliente-btn').addEventListener('click', () => {
+  clienteScanMode = true;
+  document.getElementById('scan-cliente-nombre-banner').textContent = clienteActual;
+  document.getElementById('scan-cliente-banner').classList.remove('hidden');
+  startScanner();
+});
+
+async function handleClienteScan(code) {
+  const match = currentClientePicks.find((p) =>
+    p.cod_bar === code || p.cod_bar_bulto === code || p.cod_art === code
+  );
+
+  if (match) {
+    playBeep(880, 80);
+    const content = document.getElementById('cliente-picks-content');
+    const card = content.querySelector(`[data-pick-id="${match.id}"]`);
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      _setHighlight(card); // resaltado persistente hasta nueva acción
+    }
+    // Reabrir scanner automáticamente para el siguiente escaneo
+    setTimeout(() => { if (clienteScanMode) startScanner(); }, 600);
+  } else {
+    // Modal bloqueante — no reabre el scanner hasta que el operario toque OK
+    await scanAlert(`Este artículo no está en el pedido de ${clienteActual}.`);
+    // clienteScanMode sigue true; el operario presiona "Escanear" para continuar
+  }
+}
 
 
 // ── Tab: Admin ─────────────────────────────────────────────────────────────
 function initAdmin() {
-  if (adminUnlocked || esAdmin()) {
+  const vendedor = esVendedor();
+  if (adminUnlocked || esAdmin() || vendedor) {
     adminUnlocked = true;
     document.getElementById('admin-lock').classList.add('hidden');
     document.getElementById('admin-panel').classList.remove('hidden');
 
-    const esDiarco = getMayorista() === 'diarco';
+    // Usuarios siempre oculto del panel (movido al hub)
+    document.querySelector('.admin-tab-btn[data-admin-tab="usuarios"]').classList.add('hidden');
+    // Vendedor: ocultar Semanas, Zonas, Reparto e Historial
+    document.querySelector('.admin-tab-btn[data-admin-tab="nueva-semana"]').classList.toggle('hidden', vendedor);
+    document.querySelector('.admin-tab-btn[data-admin-tab="zonas"]').classList.toggle('hidden', vendedor);
+    document.querySelector('.admin-tab-btn[data-admin-tab="reparto"]').classList.toggle('hidden', vendedor);
+    document.querySelector('.admin-tab-btn[data-admin-tab="historial"]').classList.toggle('hidden', vendedor);
 
-    if (esDiarco) {
-      // Activar la primera tab visible (Semanas)
+    const esDiarco = getMayorista() === 'diarco';
+    if (esDiarco && !vendedor) {
       document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.add('hidden'));
       const firstBtn = document.querySelector('.admin-tab-btn:not(.hidden)');
@@ -959,6 +1448,9 @@ function initAdmin() {
         if (target === 'clientes') loadClientes();
       }
     } else {
+      // Asegurar que Clientes esté activo para Yaguar o vendedor
+      document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.adminTab === 'clientes'));
+      document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.toggle('hidden', p.dataset.adminPanel !== 'clientes'));
       loadClientes();
     }
   } else {
@@ -1022,10 +1514,39 @@ function registrarClientePendiente(codigo, nombreObs) {
 
 document.getElementById('btn-nuevo-cliente').addEventListener('click', () => {
   if (getMayorista() === 'yaguar') {
-    abrirVerificacionCodigo();
+    document.getElementById('tipo-cliente-modal').classList.remove('hidden');
   } else {
     openClienteForm(null);
   }
+});
+
+document.getElementById('tipo-cliente-close').addEventListener('click', () => {
+  document.getElementById('tipo-cliente-modal').classList.add('hidden');
+});
+
+document.getElementById('btn-tipo-cf').addEventListener('click', async () => {
+  document.getElementById('tipo-cliente-modal').classList.add('hidden');
+  try {
+    const res = await api.getCodigoLibreYaguar();
+    openClienteForm(null, res.codigo, null, true); // true = es CF, mostrar botón no_zona
+  } catch {
+    showToast('No hay códigos libres disponibles', 'error');
+  }
+});
+
+document.getElementById('btn-tipo-fa').addEventListener('click', () => {
+  document.getElementById('tipo-cliente-modal').classList.add('hidden');
+  openClienteForm(null, null, null, false); // false = Factura A, código editable
+});
+
+// ── Info-btn: toggle de ayuda contextual ──────────────────────────────────
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.info-btn');
+  if (!btn) return;
+  const content = btn.parentElement.querySelector('.info-content');
+  if (!content) return;
+  const visible = content.classList.toggle('visible');
+  btn.classList.toggle('active', visible);
 });
 
 // ── Admin búsqueda de clientes ─────────────────────────────────────────────
@@ -1038,22 +1559,23 @@ document.getElementById('admin-clientes-search').addEventListener('input', (e) =
 
 async function loadClientes() {
   const m = getMayorista();
-  const esYaguar = m === 'yaguar';
-  document.getElementById('th-codigo-yaguar').style.display = esYaguar ? '' : 'none';
-  document.getElementById('th-flete-yaguar').style.display = esYaguar ? '' : 'none';
-  document.getElementById('btn-exportar-clientes').classList.toggle('hidden', !esYaguar);
-  const colspan = esYaguar ? 8 : 6;
+  document.getElementById('btn-exportar-clientes').classList.remove('hidden');
   const tbody = document.getElementById('clientes-tbody');
-  tbody.innerHTML = `<tr><td colspan="${colspan}" class="loading">Cargando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="4" class="loading">Cargando...</td></tr>`;
   try {
     const clientes = await api.getClientes();
-    const dn = 'display:none';
     tbody.innerHTML = clientes.map((c) => {
-      const flete = c.flete != null ? (Math.round(c.flete * 10000) / 100) + '%' : '';
-      const yHide = esYaguar ? '' : dn;
-      return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})"><td class="td-full" style="${yHide}">${c.id_yaguar ?? ''}</td><td class="td-full">${c.nombre ?? ''}</td><td>${c.localidad ?? ''}</td><td>${c.telefono ?? ''}</td><td>${c.contacto ?? ''}</td><td>${c.vendedor ?? ''}</td><td style="${yHide}">${flete}</td><td onclick="event.stopPropagation()"><div class="td-actions"><button class="btn-edit" onclick="openClienteForm(${c.id})">Editar</button><button class="btn-del" onclick="deleteCliente(${c.id})">Eliminar</button></div></td></tr>`;
+      const flete = c.flete != null ? (Math.round(c.flete * 10000) / 100) + '%' : '—';
+      return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})">
+        <td class="td-full td-cod">${c.id_yaguar ?? '—'}</td>
+        <td class="td-full">${c.nombre ?? ''}</td>
+        <td>${flete}</td>
+        <td onclick="event.stopPropagation()"><div class="td-actions">
+          <button class="btn-edit" onclick="openClienteForm(${c.id})">Editar</button>
+          <button class="btn-del" onclick="deleteCliente(${c.id})">Eliminar</button>
+        </div></td>
+      </tr>`;
     }).join('');
-    // Reaplicar filtro de búsqueda si hay texto
     const q = document.getElementById('admin-clientes-search').value.toLowerCase();
     if (q) {
       document.querySelectorAll('#clientes-tbody tr').forEach((row) => {
@@ -1061,16 +1583,16 @@ async function loadClientes() {
       });
     }
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="${colspan}" class="error-msg">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="error-msg">${err.message}</td></tr>`;
   }
   loadSinRegistrar();
 }
 
 document.getElementById('btn-exportar-clientes').addEventListener('click', () => {
-  window.location.href = '/api/yaguar/export/clientes';
+  window.location.href = `/api/${getMayorista()}/export/clientes`;
 });
 
-async function openClienteForm(id, codigoPreverificado = null, nombrePre = null) {
+async function openClienteForm(id, codigoPreverificado = null, nombrePre = null, esCF = null) {
   editingClienteId = id;
   document.getElementById('modal-title').textContent = id ? 'Editar cliente' : 'Nuevo cliente';
 
@@ -1082,10 +1604,15 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null)
   document.getElementById('cf-id-label').textContent = esYaguar ? 'Código Yaguar' : 'Código DIARCO';
   document.getElementById('cf-flete-wrap').style.display = esYaguar ? '' : 'none';
 
-  // Yaguar: readonly (auto-asignado). DIARCO: editable manualmente.
-  idInput.readOnly = esYaguar;
+  // Yaguar CF: readonly (código del pool). Yaguar FA y Diarco: editable.
+  const esReadonly = esYaguar && (esCF === true || (esCF === null && !!codigoPreverificado && !id));
+  idInput.readOnly = esReadonly;
   idInput.value = '';
-  idInput.placeholder = esYaguar ? '' : 'Ingresá el código DIARCO';
+  idInput.placeholder = esYaguar && !esReadonly ? 'Ingresá el código Yaguar' : (esYaguar ? '' : 'Ingresá el código DIARCO');
+
+  // Botón "No existe en mi zona": solo para Yaguar CF nuevos
+  const btnNoZona = document.getElementById('btn-no-en-zona');
+  btnNoZona.classList.toggle('hidden', !(esYaguar && esCF === true && !id));
 
   const fields = ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'];
   fields.forEach((f) => { document.getElementById(`cf-${f}`).value = ''; });
@@ -1117,6 +1644,23 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null)
 
 document.getElementById('modal-close').addEventListener('click', () => {
   document.getElementById('cliente-modal').classList.add('hidden');
+});
+
+document.getElementById('btn-no-en-zona').addEventListener('click', async () => {
+  const codigo = document.getElementById('cf-id_yaguar').value;
+  if (!codigo) return;
+  try {
+    const res = await api.marcarNoZona(codigo);
+    showToast(`Código ${codigo} marcado como no disponible`, 'info');
+    if (res.nuevo_codigo) {
+      document.getElementById('cf-id_yaguar').value = res.nuevo_codigo;
+    } else {
+      showToast('No quedan más códigos libres', 'error');
+      document.getElementById('cliente-modal').classList.add('hidden');
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 });
 
 document.getElementById('cliente-form').addEventListener('submit', async (e) => {
@@ -1165,14 +1709,16 @@ async function deleteCliente(id) {
 
 // ── Modal: clientes faltantes post-import ──────────────────────────────────
 let _cfmPendientes = [];
-let _cfmNombres = {};   // {id: nombre_observacion} para pre-rellenar
+let _cfmNombres = {};
 let _cfmEsYaguar = true;
+let _cfmNoCF = new Set();
 let _cfmIdx = 0;
 
-async function abrirModalClientesFaltantes(ids, nombres = {}, esYaguar = true) {
+async function abrirModalClientesFaltantes(ids, nombres = {}, esYaguar = true, noCF = []) {
   _cfmPendientes = ids;
   _cfmNombres = nombres;
   _cfmEsYaguar = esYaguar;
+  _cfmNoCF = new Set(noCF);
   _cfmIdx = 0;
   await _cfmMostrar();
 }
@@ -1188,8 +1734,7 @@ async function _cfmMostrar() {
   document.getElementById('cfm-id_yaguar').value = id;
   document.getElementById('cfm-progreso').textContent = `${_cfmIdx + 1} de ${total}`;
 
-  // Alerta de monotributo solo para Yaguar
-  document.getElementById('cfm-alerta').classList.toggle('hidden', !_cfmEsYaguar);
+  document.getElementById('cfm-no-cf-aviso').classList.toggle('hidden', !_cfmNoCF.has(id));
 
   // Pre-rellenar nombre desde OBSERVACION si está disponible
   document.getElementById('cfm-nombre').value = _cfmNombres[id] || '';
@@ -1241,70 +1786,6 @@ document.getElementById('cfm-close').addEventListener('click', () => {
   loadClientes();
 });
 
-// ── Modal: verificar código Yaguar antes de crear cliente ─────────────────
-let _codigoPendienteVerif = null;
-
-async function abrirVerificacionCodigo() {
-  _codigoPendienteVerif = null;
-  const display = document.getElementById('verify-codigo-display');
-  const btnConfirmar = document.getElementById('verify-confirmar');
-  const btnNoApto = document.getElementById('verify-no-apto');
-  display.textContent = 'Buscando...';
-  btnConfirmar.disabled = true;
-  btnNoApto.disabled = true;
-  document.getElementById('verify-codigo-modal').classList.remove('hidden');
-  try {
-    const res = await api.getCodigoLibreYaguar();
-    _codigoPendienteVerif = res.codigo;
-    display.textContent = res.codigo;
-    btnConfirmar.disabled = false;
-    btnNoApto.disabled = false;
-  } catch {
-    display.textContent = 'Sin códigos disponibles';
-    showToast('No hay códigos libres disponibles', 'error');
-  }
-}
-
-document.getElementById('verify-close').addEventListener('click', () => {
-  document.getElementById('verify-codigo-modal').classList.add('hidden');
-});
-
-document.getElementById('verify-no-apto').addEventListener('click', async () => {
-  if (!_codigoPendienteVerif) return;
-  const display = document.getElementById('verify-codigo-display');
-  const btnConfirmar = document.getElementById('verify-confirmar');
-  const btnNoApto = document.getElementById('verify-no-apto');
-  btnNoApto.disabled = true;
-  btnConfirmar.disabled = true;
-  const anterior = _codigoPendienteVerif;
-  display.textContent = 'Marcando...';
-  try {
-    const res = await api.marcarNoApto(anterior);
-    showToast(`Código ${anterior} descartado`, 'info');
-    if (res.nuevo_codigo) {
-      _codigoPendienteVerif = res.nuevo_codigo;
-      display.textContent = res.nuevo_codigo;
-      btnNoApto.disabled = false;
-      btnConfirmar.disabled = false;
-    } else {
-      display.textContent = 'Sin códigos disponibles';
-      showToast('No quedan más códigos libres', 'error');
-    }
-  } catch (err) {
-    showToast(err.message, 'error');
-    display.textContent = anterior;
-    _codigoPendienteVerif = anterior;
-    btnNoApto.disabled = false;
-    btnConfirmar.disabled = false;
-  }
-});
-
-document.getElementById('verify-confirmar').addEventListener('click', () => {
-  if (!_codigoPendienteVerif) return;
-  const codigo = _codigoPendienteVerif;
-  document.getElementById('verify-codigo-modal').classList.add('hidden');
-  openClienteForm(null, codigo);
-});
 
 // ── Admin: Semanas ─────────────────────────────────────────────────────────
 async function loadSemanasAdmin() {
@@ -1315,26 +1796,48 @@ async function loadSemanasAdmin() {
 
   // Descripción y formulario según mayorista
   document.getElementById('semanas-desc').innerHTML = m === 'diarco'
-    ? 'Acá se cargan los pedidos de DIARCO. Subí el archivo <strong>MobileAssistantBU.db</strong> de la app DIARCO, completá el nombre y las fechas, y presioná <strong>Importar picks</strong>.'
-    : 'Acá se cargan los pedidos de Yaguar. Subí los archivos <strong>.db</strong> exportados de la app Yaguar (uno por vendedor), completá el nombre y las fechas, y presioná <strong>Importar picks</strong>.';
+    ? `<p>Una <strong>semana</strong> es una sesión de picking: representa todos los pedidos de un rango de fechas que hay que separar en el depósito. Al importar, la app genera automáticamente una tarjeta por cada artículo de cada cliente dentro de ese rango.</p>
+       <p>Las semanas aparecen en el selector de la pantalla de pick para que los operarios elijan sobre cuál trabajar. Podés marcar semanas viejas como <strong>Ocultas</strong> para que no aparezcan en ese selector — los datos se conservan para análisis futuro.</p>
+       <p>El botón <strong>↓ Excel</strong> en cada semana cargada exporta el detalle de picks y cantidades entregadas de esa semana.</p>`
+    : `<p>Una <strong>semana</strong> es una sesión de picking: representa todos los pedidos de un rango de fechas que hay que separar en el depósito. Al importar, la app genera automáticamente una tarjeta por cada artículo de cada cliente dentro de ese rango.</p>
+       <p>Las semanas aparecen en el selector de la pantalla de pick para que los operarios elijan sobre cuál trabajar. Podés marcar semanas viejas como <strong>Ocultas</strong> para que no aparezcan en ese selector — los datos se conservan para análisis futuro.</p>
+       <p>El botón <strong>↓ Excel</strong> en cada semana cargada exporta el detalle de picks y cantidades entregadas de esa semana.</p>`;
   document.getElementById('import-yaguar').classList.toggle('hidden', m === 'diarco');
   document.getElementById('import-diarco').classList.toggle('hidden', m !== 'diarco');
 
   try {
-    const semanas = await api.getSemanas();
+    const semanas = await api.getSemanasAdmin();
     if (semanas.length === 0) {
       list.innerHTML = '<p class="semana-admin-empty">No hay semanas cargadas</p>';
       return;
     }
-    list.innerHTML = semanas.map((s) => `
-      <div class="semana-admin-item">
-        <span class="semana-nombre-tag">${s.nombre}</span>
-        <a class="btn-export" href="${api.exportPicksUrl(s.nombre)}" download>↓ Excel</a>
-        <button class="btn-del" onclick="deleteSemana(${s.id}, '${s.nombre.replace(/'/g, "\\'")}')">Eliminar</button>
-      </div>
-    `).join('');
+    list.innerHTML = semanas.map((s) => {
+      const visible = s.visible !== false;
+      return `
+        <div class="semana-admin-item">
+          <span class="semana-nombre-tag${visible ? '' : ' semana-oculta'}">${s.nombre}</span>
+          <button class="btn-toggle-visible ${visible ? 'btn-toggle-on' : 'btn-toggle-off'}"
+                  onclick="toggleSemanaVisible(${s.id}, ${!visible})"
+                  title="${visible ? 'Ocultar de operarios' : 'Mostrar a operarios'}">
+            ${visible ? 'Visible' : 'Oculta'}
+          </button>
+          <a class="btn-export" href="${api.exportPicksUrl(s.nombre)}" download>↓ Excel</a>
+          <button class="btn-del" onclick="deleteSemana(${s.id}, '${s.nombre.replace(/'/g, "\\'")}')">Eliminar</button>
+        </div>
+      `;
+    }).join('');
   } catch (err) {
     list.innerHTML = `<p class="error-msg">${err.message}</p>`;
+  }
+}
+
+async function toggleSemanaVisible(id, visible) {
+  try {
+    await api.toggleSemanaVisible(id, visible);
+    loadSemanasAdmin();
+    loadSemanas();
+  } catch (err) {
+    showToast(err.message, 'error');
   }
 }
 
@@ -1355,36 +1858,91 @@ async function deleteSemana(id, nombre) {
 }
 
 // ── Admin: Usuarios ────────────────────────────────────────────────────────
+const ROL_COLORS = { superadmin: 'var(--accent)', admin: 'var(--green)', vendedor: '#7eb8ff', operario: 'var(--muted)' };
+const ROL_LABELS = { superadmin: 'Superadmin', admin: 'Admin', vendedor: 'Vendedor', operario: 'Operario' };
+
 async function loadUsers() {
   const tbody = document.getElementById('users-tbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="4" class="loading">Cargando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="5" class="loading">Cargando...</td></tr>';
   try {
     const users = await api.getUsers();
     tbody.innerHTML = users.map((u) => {
       const esSuperadmin = u.rol === 'superadmin';
-      const esAdminUser = u.rol === 'admin';
-      const rolLabel = esSuperadmin ? '<span style="color:var(--accent)">Superadmin</span>'
-                     : esAdminUser  ? '<span style="color:var(--green)">Admin</span>'
-                     :                '<span style="color:var(--muted)">Operario</span>';
-      const esSuperadminActual = getRol() === 'superadmin';
-      const toggleBtn = (esSuperadmin || !esSuperadminActual) ? '' : `
-        <label class="rol-switch" title="${esAdminUser ? 'Quitar admin' : 'Dar admin'}">
-          <input type="checkbox" ${esAdminUser ? 'checked' : ''} onchange="toggleRol(${u.id}, '${u.rol}', this)">
-          <span class="rol-switch-track"><span class="rol-switch-thumb"></span></span>
-          <span class="rol-switch-label">${esAdminUser ? 'Admin' : 'Operario'}</span>
-        </label>`;
-      const delBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
+      const rolLabel = `<span style="color:${ROL_COLORS[u.rol] || 'var(--muted)'}">${ROL_LABELS[u.rol] || u.rol}</span>`;
+      const sobLabel = esSuperadmin
+        ? '<span style="color:var(--accent);font-size:11px">Siempre</span>'
+        : `<span style="color:${u.acceso_sobrantes ? 'var(--green)' : 'var(--muted)'}">${u.acceso_sobrantes ? 'Sí' : 'No'}</span>`;
+      const novLabel = esSuperadmin
+        ? '<span style="color:var(--accent);font-size:11px">Siempre</span>'
+        : `<span style="color:${u.acceso_novedades ? 'var(--green)' : 'var(--muted)'}">${u.acceso_novedades ? 'Sí' : 'No'}</span>`;
+      const actions = esSuperadmin ? '<span style="color:var(--muted)">—</span>' : `
+        <button class="btn-edit" onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades})">Editar</button>
+        <button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
+      const clickAttr = esSuperadmin ? '' : `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades})" style="cursor:pointer"`;
       return `
-        <tr>
+        <tr ${clickAttr}>
           <td>${u.username}</td>
           <td>${rolLabel}</td>
+          <td>${sobLabel}</td>
+          <td>${novLabel}</td>
           <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
-          <td class="td-actions">${esSuperadmin ? '<span style="color:var(--muted)">—</span>' : toggleBtn + delBtn}</td>
+          <td class="td-actions" onclick="event.stopPropagation()">${actions}</td>
         </tr>`;
     }).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" class="error-msg">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="error-msg">${err.message}</td></tr>`;
+  }
+}
+
+// ── Modal editar usuario ───────────────────────────────────────────────────
+function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades) {
+  document.getElementById('edit-user-id').value = id;
+  document.getElementById('edit-username').value = username;
+  document.getElementById('edit-rol').value = rol;
+  document.getElementById('edit-sobrantes').checked = !!accesoSobrantes;
+  document.getElementById('edit-novedades').checked = !!accesoNovedades;
+  // Cualquier admin puede cambiar rol
+  document.getElementById('edit-rol-group').classList.remove('hidden');
+  document.getElementById('edit-user-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('edit-username').focus(), 50);
+}
+
+function closeEditUser() {
+  document.getElementById('edit-user-modal').classList.add('hidden');
+}
+
+document.getElementById('edit-user-close').addEventListener('click', closeEditUser);
+document.getElementById('edit-user-cancel').addEventListener('click', closeEditUser);
+
+document.getElementById('edit-user-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = parseInt(document.getElementById('edit-user-id').value);
+  const data = {
+    username: document.getElementById('edit-username').value.trim(),
+    acceso_sobrantes: document.getElementById('edit-sobrantes').checked,
+    acceso_novedades: document.getElementById('edit-novedades').checked,
+  };
+  data.rol = document.getElementById('edit-rol').value;
+  try {
+    await api.updateUser(id, data);
+    showToast('Usuario actualizado', 'success');
+    closeEditUser();
+    loadUsers();
+    await checkPermissions(); // actualizar permisos del usuario actual de inmediato
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
+
+async function toggleSobrantes(id, checkbox) {
+  try {
+    await api.updateSobrantesAcceso(id, checkbox.checked);
+    showToast(`Acceso a sobrantes ${checkbox.checked ? 'activado' : 'desactivado'}`, 'success');
+    loadUsers();
+  } catch (err) {
+    checkbox.checked = !checkbox.checked;
+    showToast(err.message, 'error');
   }
 }
 
@@ -1415,8 +1973,9 @@ document.getElementById('nuevo-usuario-form').addEventListener('submit', async (
   e.preventDefault();
   const username = document.getElementById('nu-email').value.trim();
   const password = document.getElementById('nu-password').value;
+  const rol = document.getElementById('nu-rol').value;
   try {
-    await api.createUser(username, password);
+    await api.createUser(username, password, rol);
     showToast(`Usuario ${username} creado`, 'success');
     document.getElementById('nuevo-usuario-form').reset();
     loadUsers();
@@ -1490,7 +2049,7 @@ document.getElementById('btn-importar-semana').addEventListener('click', async (
         Los siguientes IDs no están en la tabla de clientes:
         <div class="import-missing-list">${tags}</div>
       `;
-      abrirModalClientesFaltantes(res.clientes_no_encontrados, {}, true);
+      abrirModalClientesFaltantes(res.clientes_no_encontrados, {}, true, res.no_encontrados_no_cf || []);
     }
     resultPanel.classList.remove('hidden');
   } catch (err) {
@@ -1795,3 +2354,924 @@ function showToast(msg, type = 'info') {
   toast.className = `toast toast-${type} show`;
   setTimeout(() => toast.classList.remove('show'), 2800);
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SOBRANTES
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _sobListas = [];
+let _sobListaActual = null;
+let _sobItems = [];
+let sobScannerActive = false;
+let _sobCodeReader = null;
+let histScannerActive = false;
+let _histCodeReader = null;
+let _sobCameras = [];
+let _sobCamIdx = 0;
+
+async function initSobrantes() {
+  await loadSobListas();
+}
+
+async function loadSobListas() {
+  try {
+    _sobListas = await api.sobGetListas();
+  } catch { _sobListas = []; }
+
+  const sel = document.getElementById('sob-lista-select');
+  if (_sobListas.length === 0) {
+    const now = new Date();
+    const hoy = `${String(now.getDate()).padStart(2,'0')}-${String(now.getMonth()+1).padStart(2,'0')}-${now.getFullYear()}`;
+    const nombre = `Sobrantes ${hoy}`;
+    _sobListaActual = nombre;
+    sel.innerHTML = `<option value="${nombre}">${nombre}</option>`;
+  } else {
+    sel.innerHTML = _sobListas.map(l =>
+      `<option value="${l.lista}">${l.lista}</option>`
+    ).join('');
+    if (!_sobListaActual || !_sobListas.find(l => l.lista === _sobListaActual)) {
+      _sobListaActual = _sobListas[0].lista;
+    }
+    sel.value = _sobListaActual;
+  }
+  await loadSobItems();
+}
+
+async function loadSobItems() {
+  const lista = document.getElementById('sob-lista-select').value;
+  _sobListaActual = lista;
+  if (!lista) { renderSobItems([]); return; }
+  try {
+    _sobItems = await api.sobGetItems(lista);
+  } catch { _sobItems = []; }
+  renderSobItems(_sobItems);
+}
+
+function renderSobItems(items) {
+  const container = document.getElementById('sob-items');
+  const exportBar = document.getElementById('sob-export-bar');
+  const exportLink = document.getElementById('sob-export-link');
+
+  if (items.length === 0) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:8px 0">Escaneá o buscá un producto para empezar.</p>';
+    exportBar.classList.add('hidden');
+    return;
+  }
+
+  exportBar.classList.remove('hidden');
+  exportLink.href = api.sobExportUrl(_sobListaActual);
+  exportLink.download = `sobrantes_${_sobListaActual}.xlsx`;
+
+  container.innerHTML = items.map(item => `
+    <div class="sob-item" data-id="${item.id}">
+      <div class="sob-item-top">
+        <div class="sob-item-info">
+          <div class="sob-item-header-row">
+            <span class="sob-mayorista-badge sob-mayorista-${item.mayorista || 'otro'}">${(item.mayorista || '?').toUpperCase()}</span>
+            <div class="sob-item-descrip">${item.descrip || item.cod_bar || item.cod_art || '—'}</div>
+          </div>
+          <div class="sob-item-cod">${[item.cod_bar, item.cod_art].filter(Boolean).join(' · ')}</div>
+        </div>
+        <button class="sob-item-remove" data-id="${item.id}" title="Quitar artículo">✕</button>
+      </div>
+      <div class="sob-steppers">
+        <div class="sob-stepper">
+          <span class="sob-stepper-label">UNI</span>
+          <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="unidades">−</button>
+          <span class="sob-stepper-val" data-id="${item.id}" data-field="unidades">${item.unidades}</span>
+          <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="unidades">+</button>
+        </div>
+        <div class="sob-stepper">
+          <span class="sob-stepper-label">BUL</span>
+          <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="bultos">−</button>
+          <span class="sob-stepper-val" data-id="${item.id}" data-field="bultos">${item.bultos}</span>
+          <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="bultos">+</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// Delegated stepper clicks
+document.getElementById('sob-items').addEventListener('click', async (e) => {
+  const btn = e.target.closest('.sob-btn');
+  if (btn) {
+    const id = parseInt(btn.dataset.id);
+    const field = btn.dataset.field;
+    const item = _sobItems.find(i => i.id === id);
+    if (!item) return;
+    const delta = btn.classList.contains('btn-step-plus') ? 1 : -1;
+    item[field] = Math.max(0, item[field] + delta);
+    document.querySelector(`.sob-stepper-val[data-id="${id}"][data-field="${field}"]`).textContent = item[field];
+    try {
+      await api.sobUpdateItem(_sobListaActual, id, item.unidades, item.bultos);
+    } catch { showToast('Error al actualizar', 'error'); }
+    return;
+  }
+  const removeBtn = e.target.closest('.sob-item-remove');
+  if (removeBtn) {
+    const id = parseInt(removeBtn.dataset.id);
+    try {
+      await api.sobDeleteItem(_sobListaActual, id);
+      _sobItems = _sobItems.filter(i => i.id !== id);
+      renderSobItems(_sobItems);
+    } catch { showToast('Error al eliminar', 'error'); }
+  }
+});
+
+// Buscar / escanear
+async function sobBuscar(codBar) {
+  if (!codBar.trim()) return;
+  const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
+  if (!lista) { showToast('Creá una lista primero', 'error'); return; }
+
+  let cod_art = null, descrip = null, mayorista = 'yaguar', precio_unit = null, uxb = 0;
+  try {
+    const lookup = await api.sobLookup(codBar.trim());
+    cod_art = lookup.cod_art;
+    descrip = lookup.descrip;
+    mayorista = lookup.mayorista || 'yaguar';
+    precio_unit = lookup.precio_unit ?? null;
+    uxb = lookup.uxb || 0;
+  } catch { /* no pasa nada, igual agregamos con solo el barcode */ }
+
+  try {
+    const res = await api.sobAddItem(lista, { cod_bar: codBar.trim(), cod_art, descrip, mayorista, precio_unit, uxb });
+    if (res.action === 'existing') {
+      // Resaltar el existente
+      _sobItems = await api.sobGetItems(lista);
+      renderSobItems(_sobItems);
+      setTimeout(() => {
+        const el = document.querySelector(`.sob-item[data-id="${res.id}"]`);
+        if (el) { el.classList.add('highlight'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        setTimeout(() => el?.classList.remove('highlight'), 1500);
+      }, 50);
+    } else {
+      _sobItems = await api.sobGetItems(lista);
+      await loadSobListas();
+      renderSobItems(_sobItems);
+      // Scroll al nuevo (primer elemento)
+      setTimeout(() => document.querySelector('.sob-item')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+  } catch (err) { showToast(err.message, 'error'); }
+  document.getElementById('sob-barcode-input').value = '';
+}
+
+document.getElementById('sob-barcode-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sobBuscar(e.target.value); }
+});
+
+// Búsqueda por descripción
+let _sobDescripTimer = null;
+document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
+  clearTimeout(_sobDescripTimer);
+  const q = e.target.value.trim();
+  const results = document.getElementById('sob-descrip-results');
+  if (q.length < 2) { results.classList.add('hidden'); return; }
+  _sobDescripTimer = setTimeout(async () => {
+    try {
+      const items = await api.sobSearch(q);
+      if (!items.length) {
+        results.innerHTML = '<div class="descrip-result-empty">Sin resultados</div>';
+        results.classList.remove('hidden');
+        return;
+      }
+      results.innerHTML = items.map(i =>
+        `<div class="descrip-result-item" data-bar="${i.cod_bar || ''}" data-art="${i.cod_art || ''}" data-descrip="${(i.descrip || '').replace(/"/g, '&quot;')}" data-mayorista="${i.mayorista || 'yaguar'}" data-precio="${i.precio_unit ?? ''}" data-uxb="${i.uxb || 0}">
+          <span class="descrip-result-text">${i.descrip}</span>
+          <span class="sob-mayorista-badge sob-mayorista-${i.mayorista || 'otro'}">${(i.mayorista || '?').toUpperCase()}</span>
+        </div>`
+      ).join('');
+      results.classList.remove('hidden');
+    } catch { results.classList.add('hidden'); }
+  }, 250);
+});
+
+document.getElementById('sob-descrip-results').addEventListener('click', async (e) => {
+  const item = e.target.closest('.descrip-result-item');
+  if (!item) return;
+  document.getElementById('sob-descrip-results').classList.add('hidden');
+  document.getElementById('sob-descrip-input').value = '';
+  const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
+  if (!lista) { showToast('Creá una lista primero', 'error'); return; }
+  try {
+    const res = await api.sobAddItem(lista, {
+      cod_bar: item.dataset.bar || null,
+      cod_art: item.dataset.art || null,
+      descrip: item.dataset.descrip || null,
+      mayorista: item.dataset.mayorista || 'yaguar',
+      precio_unit: item.dataset.precio ? parseFloat(item.dataset.precio) : null,
+      uxb: parseInt(item.dataset.uxb) || 0,
+    });
+    if (res.action === 'existing') {
+      _sobItems = await api.sobGetItems(lista);
+      renderSobItems(_sobItems);
+      setTimeout(() => {
+        const el = document.querySelector(`.sob-item[data-id="${res.id}"]`);
+        if (el) { el.classList.add('highlight'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+        setTimeout(() => el?.classList.remove('highlight'), 1500);
+      }, 50);
+    } else {
+      _sobItems = await api.sobGetItems(lista);
+      await loadSobListas();
+      renderSobItems(_sobItems);
+      setTimeout(() => document.querySelector('.sob-item')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#sob-descrip-input') && !e.target.closest('#sob-descrip-results')) {
+    document.getElementById('sob-descrip-results')?.classList.add('hidden');
+  }
+});
+
+// Nueva lista — modal custom
+document.getElementById('sob-nueva-btn').addEventListener('click', () => {
+  const now = new Date();
+  const hoy = `${String(now.getDate()).padStart(2,'0')}-${String(now.getMonth()+1).padStart(2,'0')}-${now.getFullYear()}`;
+  const input = document.getElementById('sob-nueva-input');
+  input.value = `Sobrantes ${hoy}`;
+  document.getElementById('sob-nueva-modal').classList.remove('hidden');
+  setTimeout(() => { input.focus(); input.select(); }, 50);
+});
+
+document.getElementById('sob-nueva-confirm').addEventListener('click', async () => {
+  const nombre = document.getElementById('sob-nueva-input').value.trim().replace(/\//g, '-');
+  if (!nombre) return;
+  document.getElementById('sob-nueva-modal').classList.add('hidden');
+  try {
+    await api.sobCrearLista(nombre);
+    _sobListaActual = nombre;
+    _sobItems = [];
+    await loadSobListas();
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+document.getElementById('sob-nueva-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('sob-nueva-confirm').click();
+  if (e.key === 'Escape') document.getElementById('sob-nueva-modal').classList.add('hidden');
+});
+
+// Cambiar lista
+document.getElementById('sob-lista-select').addEventListener('change', loadSobItems);
+
+// Eliminar lista
+document.getElementById('sob-del-lista-btn').addEventListener('click', async () => {
+  const lista = document.getElementById('sob-lista-select').value;
+  if (!lista) return;
+  if (!confirm(`¿Eliminar la lista "${lista}"? Esta acción no se puede deshacer.`)) return;
+  try {
+    await api.sobDeleteLista(lista);
+    _sobListaActual = null;
+    await loadSobListas();
+    showToast('Lista eliminada', 'info');
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+// ── Scanner sobrantes ─────────────────────────────────────────────────────────
+document.getElementById('sob-scan-btn').addEventListener('click', async () => {
+  if (sobScannerActive) stopSobScanner();
+  else await startSobScanner();
+});
+
+// ── Scanner historial ─────────────────────────────────────────────────────────
+document.getElementById('hist-scan-btn').addEventListener('click', async () => {
+  if (histScannerActive) stopHistScanner();
+  else await startHistScanner();
+});
+
+async function startSobScanner(deviceId = null) {
+  const container = document.getElementById('sob-scanner-container');
+  container.classList.remove('hidden');
+  document.getElementById('sob-scan-btn').textContent = 'Detener';
+  sobScannerActive = true;
+  const hints = new Map([[2, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39]], [3, true]]);
+  _sobCodeReader = new ZXing.BrowserMultiFormatReader(hints, 0);
+  const targetId = deviceId ?? localStorage.getItem('pick_last_camera') ?? null;
+  await _sobCodeReader.decodeFromVideoDevice(targetId, 'sob-scanner-video', async (result) => {
+    if (result) {
+      const code = result.getText();
+      stopSobScanner();
+      await sobBuscar(code);
+    }
+  });
+  container.classList.add('scanner-open');
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  _sobCameras = devices.filter(d => d.kind === 'videoinput');
+  document.getElementById('sob-switch-camera-btn').classList.toggle('hidden', _sobCameras.length <= 1);
+}
+
+function stopSobScanner() {
+  if (!sobScannerActive) return;
+  sobScannerActive = false;
+  if (_sobCodeReader) { _sobCodeReader.reset(); _sobCodeReader = null; }
+  const video = document.getElementById('sob-scanner-video');
+  if (video?.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  document.getElementById('sob-scanner-container').classList.remove('scanner-open');
+  document.getElementById('sob-scanner-container').classList.add('hidden');
+  document.getElementById('sob-scan-btn').textContent = 'Escanear';
+  document.getElementById('sob-switch-camera-btn').classList.add('hidden');
+}
+
+function switchSobCamera() {
+  if (!_sobCameras.length) return;
+  _sobCamIdx = (_sobCamIdx + 1) % _sobCameras.length;
+  stopSobScanner();
+  startSobScanner(_sobCameras[_sobCamIdx].deviceId);
+}
+
+async function startHistScanner(deviceId = null) {
+  const container = document.getElementById('hist-scanner-container');
+  container.classList.remove('hidden');
+  container.classList.add('scanner-open');
+  document.getElementById('hist-scan-btn').textContent = 'Detener';
+  histScannerActive = true;
+  const hints = new Map([[2, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39]], [3, true]]);
+  _histCodeReader = new ZXing.BrowserMultiFormatReader(hints, 0);
+  const targetId = deviceId ?? localStorage.getItem('pick_last_camera') ?? null;
+  await _histCodeReader.decodeFromVideoDevice(targetId, 'hist-scanner-video', (result) => {
+    if (result) {
+      const code = result.getText();
+      stopHistScanner();
+      const input = document.getElementById('hist-filter-producto');
+      if (input) { input.value = code; renderHistorial(); }
+    }
+  });
+}
+
+function stopHistScanner() {
+  if (!histScannerActive) return;
+  histScannerActive = false;
+  if (_histCodeReader) { _histCodeReader.reset(); _histCodeReader = null; }
+  const video = document.getElementById('hist-scanner-video');
+  if (video?.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  const container = document.getElementById('hist-scanner-container');
+  container.classList.remove('scanner-open');
+  container.classList.add('hidden');
+  document.getElementById('hist-scan-btn').textContent = 'Escanear';
+}
+
+// ── Historial ─────────────────────────────────────────────────────────────
+let _historialRows = [];
+
+async function loadHistorial() {
+  const resumenWrap = document.getElementById('historial-resumen');
+  const tablaWrap = document.getElementById('historial-tabla-wrap');
+  const semSel = document.getElementById('hist-semana-sel');
+  const usuSel = document.getElementById('hist-filter-usuario');
+
+  resumenWrap.innerHTML = '<p class="loading">Cargando...</p>';
+  tablaWrap.innerHTML = '';
+
+  // Cargar semanas para el selector propio del historial
+  try {
+    const semanas = await api.getSemanas();
+    semSel.innerHTML = semanas.length
+      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('')
+      : '<option value="">Sin semanas</option>';
+    // Preseleccionar la semana activa del pick tab si está disponible
+    if (semanaActual && semanas.find((s) => s.nombre === semanaActual)) semSel.value = semanaActual;
+  } catch (_) {
+    semSel.innerHTML = '<option value="">Error cargando semanas</option>';
+  }
+
+  // Cargar todos los usuarios para el selector (una sola vez)
+  try {
+    const users = await api.getUsers();
+    usuSel.innerHTML = '<option value="">Todos los usuarios</option>' +
+      users.map((u) => `<option value="${u.username}">${u.username}</option>`).join('');
+  } catch (_) {}
+
+  async function fetchYRender() {
+    resumenWrap.innerHTML = '<p class="loading">Cargando...</p>';
+    tablaWrap.innerHTML = '';
+    try {
+      _historialRows = await api.getHistorial(semSel.value);
+      renderHistorial();
+    } catch (err) {
+      resumenWrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
+    }
+  }
+
+  semSel.onchange = fetchYRender;
+  document.getElementById('hist-filter-producto').oninput = renderHistorial;
+  usuSel.onchange = renderHistorial;
+  document.getElementById('historial-solo-errores').onchange = renderHistorial;
+
+  await fetchYRender();
+}
+
+function renderHistorial() {
+  const resumenWrap = document.getElementById('historial-resumen');
+  const tablaWrap = document.getElementById('historial-tabla-wrap');
+  const soloErrores = document.getElementById('historial-solo-errores')?.checked;
+  const filtroProd = (document.getElementById('hist-filter-producto')?.value || '').toLowerCase();
+  const filtroUser = document.getElementById('hist-filter-usuario')?.value || '';
+  const esc = (s) => (s || '—').replace(/</g, '&lt;');
+
+  // Resumen por usuario (sobre todos los datos, sin filtro)
+  const porUsuario = {};
+  _historialRows.forEach((r) => {
+    const u = r.updated_by || '?';
+    if (!porUsuario[u]) porUsuario[u] = { completados: 0, incompletos: 0 };
+    if (r.estado?.startsWith('completado')) porUsuario[u].completados++;
+    else porUsuario[u].incompletos++;
+  });
+
+  if (!_historialRows.length) {
+    resumenWrap.innerHTML = '<p class="muted-text">Sin actividad registrada. Los artículos aparecen aquí la primera vez que un operario registra una cantidad.</p>';
+    tablaWrap.innerHTML = '';
+    return;
+  }
+
+  resumenWrap.innerHTML = `
+    <div class="historial-chips-wrap">
+      ${Object.entries(porUsuario).map(([u, d]) => `
+        <div class="historial-user-chip">
+          <span class="historial-user-name">${esc(u)}</span>
+          <span class="historial-stat ok">${d.completados} ✓</span>
+          ${d.incompletos ? `<span class="historial-stat err">${d.incompletos} incompletos</span>` : ''}
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  // Aplicar filtros a la tabla
+  const filtrados = _historialRows.filter((r) => {
+    if (soloErrores && r.estado?.startsWith('completado')) return false;
+    if (filtroUser && r.updated_by !== filtroUser) return false;
+    if (filtroProd) {
+      const hayMatch = (r.cod_art || '').toLowerCase().includes(filtroProd) ||
+                       (r.descrip || '').toLowerCase().includes(filtroProd);
+      if (!hayMatch) return false;
+    }
+    return true;
+  });
+
+  if (!filtrados.length) {
+    tablaWrap.innerHTML = '<p class="muted-text" style="margin-top:12px">Sin resultados para los filtros aplicados.</p>';
+    return;
+  }
+
+  tablaWrap.innerHTML = `
+    <div class="table-wrap" style="margin-top:8px">
+      <table class="clientes-table">
+        <thead>
+          <tr>
+            <th>Artículo</th>
+            <th>Cliente</th>
+            <th>Req.</th>
+            <th>Entregado</th>
+            <th>Usuario</th>
+            <th>Fecha y hora</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filtrados.map((r) => {
+            const completo = r.estado?.startsWith('completado');
+            const dt = r.updated_at ? new Date(r.updated_at) : null;
+            const fecha = dt
+              ? dt.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) +
+                ' ' + dt.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+              : '—';
+            return `<tr class="${completo ? '' : 'historial-row-error'}">
+              <td title="${esc(r.descrip)}">${esc(r.cod_art)}<br><small>${esc(r.descrip?.slice(0, 30))}${(r.descrip?.length > 30) ? '…' : ''}</small></td>
+              <td>${esc(r.nombre)}</td>
+              <td>${r.uni ?? '—'}</td>
+              <td><strong>${r.cantidad_entregada ?? 0}</strong> uni</td>
+              <td><strong>${esc(r.updated_by)}</strong></td>
+              <td style="white-space:nowrap;font-size:12px">${fecha}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ── Asignaciones admin ────────────────────────────────────────────────────
+async function loadAsignaciones() {
+  const sel = document.getElementById('reparto-semana-sel');
+  const wrap = document.getElementById('reparto-asignaciones-wrap');
+  wrap.innerHTML = '<p class="loading">Cargando...</p>';
+  try {
+    const [semanas, repartos, users] = await Promise.all([
+      api.getSemanas(),
+      api.getRepartos(),
+      api.getUsers(),
+    ]);
+    sel.innerHTML = semanas.length
+      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('')
+      : '<option value="">Sin semanas cargadas</option>';
+    if (semanaActual && semanas.find((s) => s.nombre === semanaActual)) sel.value = semanaActual;
+    await renderAsignaciones(repartos, users, sel.value);
+    sel.onchange = () => renderAsignaciones(repartos, users, sel.value);
+  } catch (err) {
+    wrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
+  }
+}
+
+async function renderAsignaciones(repartos, users, semana) {
+  const wrap = document.getElementById('reparto-asignaciones-wrap');
+  if (!semana) { wrap.innerHTML = '<p class="muted-text">No hay semanas disponibles.</p>'; return; }
+  wrap.innerHTML = '<p class="loading">Cargando asignaciones...</p>';
+  try {
+    const asignaciones = await api.getAsignaciones(semana);
+    const esc = (s) => (s || '').replace(/</g, '&lt;');
+    const userOptions = users.map((u) => `<option value="${u.id}">${esc(u.username)}</option>`).join('');
+    wrap.innerHTML = `
+      <table class="clientes-table" style="margin-top:12px">
+        <thead><tr><th>Reparto</th><th>Usuario asignado</th></tr></thead>
+        <tbody>
+          ${repartos.map((r) => `
+            <tr>
+              <td><strong>${esc(r.nombre)}</strong></td>
+              <td>
+                <select class="reparto-user-sel" data-reparto="${esc(r.nombre)}" style="width:100%">
+                  <option value="">— Sin asignar —</option>
+                  ${userOptions}
+                </select>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <button id="btn-guardar-repartos" class="btn-primary" style="margin-top:14px">Guardar</button>
+      <span id="reparto-save-msg" style="margin-left:10px;font-size:13px;color:var(--green);display:none">Guardado</span>
+    `;
+    // Preseleccionar usuarios ya asignados
+    asignaciones.forEach((a) => {
+      const sel = wrap.querySelector(`.reparto-user-sel[data-reparto="${a.reparto}"]`);
+      if (sel) sel.value = a.user_id;
+    });
+    // Guardar todo de una vez
+    wrap.querySelector('#btn-guardar-repartos').addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      btn.textContent = '...';
+      try {
+        const existentes = await api.getAsignaciones(semana);
+        const ops = repartos.map(async (r) => {
+          const sel = wrap.querySelector(`.reparto-user-sel[data-reparto="${r.nombre}"]`);
+          const userId = parseInt(sel?.value);
+          const anterior = existentes.find((x) => x.reparto === r.nombre);
+          if (userId) {
+            await api.setAsignacion({ semana, reparto: r.nombre, user_id: userId });
+          } else if (anterior) {
+            await api.deleteAsignacion(anterior.id);
+          }
+        });
+        await Promise.all(ops);
+        const msg = wrap.querySelector('#reparto-save-msg');
+        msg.style.display = 'inline';
+        setTimeout(() => { msg.style.display = 'none'; }, 2000);
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Guardar';
+      }
+    });
+  } catch (err) {
+    wrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// NOVEDADES
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _novSemana = '';
+let _novItem = null;
+let _novCliente = null;
+let _novTipo = '';
+let _novBultos = 0;
+let _novUnidades = 0;
+let _novScannerActive = false;
+let _novCodeReader = null;
+let _novClientes = [];           // todos los clientes del sistema
+let _novClientesFiltrados = [];  // clientes que pidieron el ítem seleccionado
+let _novDescripTimer = null;
+
+async function initNovedades() {
+  const sel = document.getElementById('nov-semana-select');
+  try {
+    const semanas = await api.getSemanas();
+    if (!semanas.length) {
+      sel.innerHTML = '<option value="">Sin semanas</option>';
+      _novSemana = '';
+    } else {
+      sel.innerHTML = semanas.map(s => `<option value="${s.nombre}">${s.nombre}</option>`).join('');
+      _novSemana = semanas[0].nombre;
+      sel.value = _novSemana;
+    }
+  } catch { sel.innerHTML = '<option value="">Error</option>'; }
+  try { _novClientes = await api.getClientes(); } catch { _novClientes = []; }
+  _resetNovForm();
+  await loadNovedades();
+}
+
+document.getElementById('nov-semana-select').addEventListener('change', (e) => {
+  _novSemana = e.target.value;
+  loadNovedades();
+});
+
+async function loadNovedades() {
+  const container = document.getElementById('nov-items');
+  const exportBar = document.getElementById('nov-export-bar');
+  if (!_novSemana) { container.innerHTML = ''; exportBar.classList.add('hidden'); return; }
+  try {
+    const items = await api.novGetItems(_novSemana);
+    renderNovedades(items);
+  } catch (err) {
+    container.innerHTML = `<p class="error-msg">${err.message}</p>`;
+  }
+}
+
+function renderNovedades(items) {
+  const container = document.getElementById('nov-items');
+  const exportBar = document.getElementById('nov-export-bar');
+  const exportLink = document.getElementById('nov-export-link');
+  if (!items.length) {
+    container.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:8px 0">No hay novedades para esta semana.</p>';
+    exportBar.classList.add('hidden');
+    return;
+  }
+  exportBar.classList.remove('hidden');
+  exportLink.href = api.novExportUrl(_novSemana);
+  exportLink.download = `novedades_${getMayorista()}_${_novSemana.replace(/\s/g, '_')}.xlsx`;
+  const tipoBadge = { devolucion: 'Devolución', faltante: 'Faltante', cambio: 'Cambio' };
+  const tipoColor = { devolucion: 'var(--orange)', faltante: 'var(--red)', cambio: '#7eb8ff' };
+  container.innerHTML = items.map(item => {
+    const uxb = item.uxb || 0;
+    const uniTotal = (item.bultos || 0) * uxb + (item.unidades || 0);
+    const cantStr = uxb > 1
+      ? `${item.bultos} bul × ${uxb} + ${item.unidades} uni (${uniTotal} total)`
+      : `${item.unidades} uni`;
+    return `<div class="nov-item" data-id="${item.id}">
+      <div class="nov-item-top">
+        <span class="nov-tipo-badge" style="color:${tipoColor[item.tipo] || 'var(--muted)'}">
+          ${tipoBadge[item.tipo] || item.tipo}
+        </span>
+        <span class="nov-item-cliente">${item.cliente_nombre || item.cliente || '—'}</span>
+        <button class="sob-item-remove nov-del-btn" data-id="${item.id}">✕</button>
+      </div>
+      <div class="nov-item-descrip">${item.descrip || item.cod_art || '—'}</div>
+      <div class="nov-item-meta">
+        <span class="nov-item-cant">${cantStr}</span>
+        ${item.observaciones ? `<span class="nov-item-obs">${item.observaciones}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  container.querySelectorAll('.nov-del-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      try { await api.novDeleteItem(parseInt(btn.dataset.id)); await loadNovedades(); }
+      catch (err) { showToast(err.message, 'error'); }
+    });
+  });
+}
+
+// ── Búsqueda de ítem ────────────────────────────────────────────────────────
+
+document.getElementById('nov-barcode-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') novBuscarPorCodigo(e.target.value.trim());
+});
+
+async function novBuscarPorCodigo(cod) {
+  if (!cod) return;
+  try {
+    const res = await api.novLookup(cod, _novSemana);
+    if (res.found) _setNovItem({ cod_bar: cod, cod_art: res.cod_art, descrip: res.descrip, uxb: res.uxb || 0 });
+    else showToast('Producto no encontrado', 'error');
+  } catch { showToast('Error en la búsqueda', 'error'); }
+}
+
+document.getElementById('nov-descrip-input').addEventListener('input', (e) => {
+  clearTimeout(_novDescripTimer);
+  const q = e.target.value.trim();
+  const results = document.getElementById('nov-descrip-results');
+  if (q.length < 2) { results.classList.add('hidden'); return; }
+  _novDescripTimer = setTimeout(async () => {
+    try {
+      const items = await api.novSearch(q, _novSemana);
+      if (!items.length) {
+        results.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
+      } else {
+        results.innerHTML = items.map(i => `
+          <div class="descrip-item" data-bar="${i.cod_bar||''}" data-art="${i.cod_art||''}"
+               data-descrip="${(i.descrip||'').replace(/"/g,'&quot;')}" data-uxb="${i.uxb||0}">
+            <span class="descrip-item-name">${i.descrip||''}</span>
+            <span class="descrip-item-code">${i.cod_art||''}</span>
+          </div>`).join('');
+        results.querySelectorAll('.descrip-item').forEach(el => {
+          el.addEventListener('click', () => {
+            document.getElementById('nov-descrip-input').value = '';
+            results.classList.add('hidden');
+            _setNovItem({ cod_bar: el.dataset.bar||null, cod_art: el.dataset.art||null, descrip: el.dataset.descrip||null, uxb: parseInt(el.dataset.uxb)||0 });
+          });
+        });
+      }
+      results.classList.remove('hidden');
+    } catch { results.classList.add('hidden'); }
+  }, 300);
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#nov-descrip-input') && !e.target.closest('#nov-descrip-results'))
+    document.getElementById('nov-descrip-results')?.classList.add('hidden');
+});
+
+async function _setNovItem(item) {
+  _novItem = item;
+  _novClientesFiltrados = [];
+  document.getElementById('nov-barcode-input').value = '';
+  document.getElementById('nov-item-cod').textContent = item.cod_art || item.cod_bar || '';
+  document.getElementById('nov-item-descrip').textContent = item.descrip || '';
+  document.getElementById('nov-item-selected').classList.remove('hidden');
+  // Habilitar botón de cliente ahora que hay ítem seleccionado
+  const clienteBtn = document.getElementById('nov-cliente-btn');
+  clienteBtn.disabled = false;
+  clienteBtn.textContent = 'Elegir cliente...';
+  // Cargar clientes que pidieron este ítem en la semana activa
+  try {
+    let picks = [];
+    if (item.cod_art) picks = await api.getByCodArt(item.cod_art, _novSemana).catch(() => []);
+    if (!picks.length && item.cod_bar) picks = await api.getByBarcode(item.cod_bar, _novSemana).catch(() => []);
+    const seen = new Set();
+    _novClientesFiltrados = picks
+      .filter(p => p.nombre && !seen.has(p.nombre) && seen.add(p.nombre))
+      .map(p => ({ nombre: p.nombre, id_yaguar: p.cliente }));
+  } catch {
+    _novClientesFiltrados = _novClientes;
+  }
+}
+document.getElementById('nov-item-clear').addEventListener('click', () => {
+  _novItem = null;
+  _novClientesFiltrados = [];
+  document.getElementById('nov-item-selected').classList.add('hidden');
+  document.getElementById('nov-barcode-input').value = '';
+  // Deshabilitar cliente y limpiar si estaba seleccionado
+  const clienteBtn = document.getElementById('nov-cliente-btn');
+  clienteBtn.disabled = true;
+  clienteBtn.textContent = 'Elegir cliente (primero seleccioná un artículo)';
+  _novCliente = null;
+  document.getElementById('nov-cliente-selected').classList.add('hidden');
+  document.getElementById('nov-cliente-btn').classList.remove('hidden');
+});
+
+// ── Scanner ──────────────────────────────────────────────────────────────────
+
+document.getElementById('nov-scan-btn').addEventListener('click', async () => {
+  if (_novScannerActive) stopNovScanner(); else await startNovScanner();
+});
+
+async function startNovScanner(deviceId = null) {
+  const container = document.getElementById('nov-scanner-container');
+  container.classList.remove('hidden');
+  container.classList.add('scanner-open');
+  document.getElementById('nov-scan-btn').textContent = 'Detener';
+  _novScannerActive = true;
+  const hints = new Map([[2, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.UPC_A]], [3, true]]);
+  _novCodeReader = new ZXing.BrowserMultiFormatReader(hints, 0);
+  const targetId = deviceId ?? localStorage.getItem('pick_last_camera') ?? null;
+  await _novCodeReader.decodeFromVideoDevice(targetId, 'nov-scanner-video', async (result) => {
+    if (result) { stopNovScanner(); await novBuscarPorCodigo(result.getText()); }
+  });
+}
+
+function stopNovScanner() {
+  if (!_novScannerActive) return;
+  _novScannerActive = false;
+  if (_novCodeReader) { _novCodeReader.reset(); _novCodeReader = null; }
+  const video = document.getElementById('nov-scanner-video');
+  if (video?.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  document.getElementById('nov-scanner-container').classList.remove('scanner-open');
+  document.getElementById('nov-scanner-container').classList.add('hidden');
+  document.getElementById('nov-scan-btn').textContent = '📷';
+}
+
+// ── Slide de cliente ─────────────────────────────────────────────────────────
+
+document.getElementById('nov-cliente-btn').addEventListener('click', openNovClienteSlide);
+document.getElementById('nov-cliente-modal-close').addEventListener('click', () => {
+  document.getElementById('nov-cliente-modal').classList.add('hidden');
+});
+document.getElementById('nov-cliente-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) document.getElementById('nov-cliente-modal').classList.add('hidden');
+});
+document.getElementById('nov-cliente-search').addEventListener('input', (e) => {
+  renderNovClienteList(e.target.value.trim().toLowerCase());
+});
+
+function openNovClienteSlide() {
+  document.getElementById('nov-cliente-search').value = '';
+  renderNovClienteList('');
+  document.getElementById('nov-cliente-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('nov-cliente-search').focus(), 100);
+}
+
+function renderNovClienteList(q) {
+  const list = document.getElementById('nov-cliente-list');
+  const base = (_novItem && _novClientesFiltrados.length) ? _novClientesFiltrados : _novClientes;
+  const filtered = q
+    ? base.filter(c => (c.nombre||'').toLowerCase().includes(q) || (c.id_yaguar||'').toLowerCase().includes(q))
+    : base;
+  const esFiltrado = _novItem && _novClientesFiltrados.length > 0;
+  const header = esFiltrado
+    ? `<p style="padding:10px 16px 4px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Clientes que pidieron este artículo (${_novClientesFiltrados.length})</p>`
+    : '';
+  if (!filtered.length) { list.innerHTML = header + '<p style="padding:8px 16px;color:var(--muted);font-size:13px">Sin resultados</p>'; return; }
+  list.innerHTML = header + filtered.map(c => `
+    <button class="nov-cliente-row" data-cod="${c.id_yaguar||''}" data-nombre="${(c.nombre||'').replace(/"/g,'&quot;')}">
+      <span class="nov-cliente-row-nombre">${c.nombre||'—'}</span>
+      <span class="nov-cliente-row-cod">${c.id_yaguar||''}</span>
+    </button>`).join('');
+  list.querySelectorAll('.nov-cliente-row').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _setNovCliente(btn.dataset.cod, btn.dataset.nombre);
+      document.getElementById('nov-cliente-modal').classList.add('hidden');
+    });
+  });
+}
+
+function _setNovCliente(codigo, nombre) {
+  _novCliente = { codigo, nombre };
+  document.getElementById('nov-cliente-cod').textContent = codigo;
+  document.getElementById('nov-cliente-nombre').textContent = nombre;
+  document.getElementById('nov-cliente-selected').classList.remove('hidden');
+  document.getElementById('nov-cliente-btn').classList.add('hidden');
+}
+document.getElementById('nov-cliente-clear').addEventListener('click', () => {
+  _novCliente = null;
+  document.getElementById('nov-cliente-selected').classList.add('hidden');
+  document.getElementById('nov-cliente-btn').classList.remove('hidden');
+});
+
+// ── Tipo ─────────────────────────────────────────────────────────────────────
+
+document.querySelectorAll('.nov-tipo-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    _novTipo = btn.dataset.tipo;
+    document.querySelectorAll('.nov-tipo-btn').forEach(b => b.classList.toggle('active', b.dataset.tipo === _novTipo));
+  });
+});
+
+// ── Steppers ─────────────────────────────────────────────────────────────────
+
+document.querySelectorAll('.nov-step-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const field = btn.dataset.novField;
+    const delta = btn.classList.contains('btn-step-plus') ? 1 : -1;
+    if (field === 'bultos') {
+      _novBultos = Math.max(0, _novBultos + delta);
+      document.getElementById('nov-val-bultos').textContent = _novBultos;
+    } else {
+      _novUnidades = Math.max(0, _novUnidades + delta);
+      document.getElementById('nov-val-unidades').textContent = _novUnidades;
+    }
+  });
+});
+
+// ── Agregar ───────────────────────────────────────────────────────────────────
+
+document.getElementById('nov-agregar-btn').addEventListener('click', async () => {
+  if (!_novItem) { showToast('Seleccioná un artículo primero', 'error'); return; }
+  if (!_novCliente) { showToast('Seleccioná un cliente primero', 'error'); return; }
+  if (!_novTipo) { showToast('Seleccioná el tipo de novedad (Devolución, Faltante o Cambio)', 'error'); return; }
+  if (_novBultos === 0 && _novUnidades === 0) { showToast('Ingresá al menos 1 unidad o bulto', 'error'); return; }
+  try {
+    await api.novAddItem({
+      semana: _novSemana,
+      cod_bar: _novItem.cod_bar,
+      cod_art: _novItem.cod_art,
+      descrip: _novItem.descrip,
+      cliente: _novCliente.codigo,
+      cliente_nombre: _novCliente.nombre,
+      tipo: _novTipo,
+      observaciones: document.getElementById('nov-observaciones').value.trim() || null,
+      unidades: _novUnidades,
+      bultos: _novBultos,
+      uxb: _novItem.uxb || 0,
+    });
+    showToast('Novedad registrada', 'success');
+    _resetNovForm();
+    await loadNovedades();
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+function _resetNovForm() {
+  _novItem = null; _novCliente = null; _novTipo = 'devolucion'; _novBultos = 0; _novUnidades = 0;
+  ['nov-barcode-input','nov-descrip-input','nov-observaciones'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('nov-item-selected').classList.add('hidden');
+  document.getElementById('nov-cliente-selected').classList.add('hidden');
+  const clienteBtn = document.getElementById('nov-cliente-btn');
+  clienteBtn.classList.remove('hidden');
+  clienteBtn.disabled = true;
+  clienteBtn.textContent = 'Elegir cliente (primero seleccioná un artículo)';
+  document.getElementById('nov-val-bultos').textContent = '0';
+  document.getElementById('nov-val-unidades').textContent = '0';
+  _novTipo = '';
+  document.querySelectorAll('.nov-tipo-btn').forEach(b => b.classList.remove('active'));
+}
+
+document.getElementById('nov-back-btn').addEventListener('click', () => { stopNovScanner(); showHub(); });

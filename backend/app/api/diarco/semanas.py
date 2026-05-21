@@ -26,7 +26,7 @@ import tempfile
 import os
 import re
 import unicodedata
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 
 # Items que DIARCO usa internamente y no forman parte del picking real.
 # - cod_art no numérico: items de sistema (ej: 'Semaforo')
@@ -41,8 +41,13 @@ def _es_item_real(cod_art: str, descrip: str) -> bool:
         return False
     descrip_lower = (descrip or "").lower()
     return not any(excluida in descrip_lower for excluida in DESCRIP_EXCLUIDAS)
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 from app.db.database import get_db
+
+
+class VisibleIn(BaseModel):
+    visible: bool
 
 router = APIRouter(prefix="/diarco/semanas", tags=["Diarco - Semanas"])
 
@@ -240,6 +245,7 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
                     pass
 
             importe_excluidos_sin_iva = 0.0  # acumula sin IVA de ítems excluidos
+            trans_start = len(picks)          # índice donde empiezan los picks de esta transacción
 
             # Artículos del pedido (pasos GWS.ELEM)
             # Formula × V2 × V4 = total sin IVA del ítem
@@ -274,33 +280,42 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
                 uni = qty * uxb if qty_en_bultos and uxb > 0 else qty
                 bul = uni // uxb if uxb > 0 else 0
 
-                pass  # el total real se calcula al final por diferencia con los excluidos
+                try:
+                    formula_sin_iva = float(item["Formula"] or 0)
+                except (ValueError, TypeError):
+                    formula_sin_iva = 0.0
 
                 picks.append({
-                    "cod_bar":       barcodes_13.get(cod_art),
-                    "cod_bar_bulto": barcodes_14.get(cod_art),
-                    "cod_art":       cod_art,
-                    "descrip":       descrip_limpia,
-                    "nombre":        nombre_cliente,   # OBSERVACION o CTE como fallback
-                    "nombre_obs":    nombre_obs_limpio, # solo OBSERVACION, nunca CTE
-                    "cliente":       cod_cliente,
-                    "localidad":     localidad,        # del sufijo en OBSERVACION (no DIR)
-                    "uni":           uni,
-                    "bul":           bul,
-                    "uxb":           uxb,
+                    "cod_bar":         barcodes_13.get(cod_art),
+                    "cod_bar_bulto":   barcodes_14.get(cod_art),
+                    "cod_art":         cod_art,
+                    "descrip":         descrip_limpia,
+                    "nombre":          nombre_cliente,
+                    "nombre_obs":      nombre_obs_limpio,
+                    "cliente":         cod_cliente,
+                    "localidad":       localidad,
+                    "uni":             uni,
+                    "bul":             bul,
+                    "uxb":             uxb,
+                    "_formula_sin_iva": formula_sin_iva,  # temporal, se reemplaza abajo
+                    "precio_unit":     None,
                 })
+            trans_end = len(picks)
 
             # Convertir excluidos a con-IVA proporcionalmente:
-            # excluidos_con_iva = excluidos_sin_iva × (total_con_iva / total_sin_iva)
-            # Así nunca puede dar negativo: los excluidos son parte del total,
-            # por lo que excluidos_sin_iva ≤ total_sin_iva siempre.
             if total_orden_sin_iva > 0 and importe_excluidos_sin_iva > 0:
                 iva_ratio = total_orden_con_iva / total_orden_sin_iva
                 importe_excluidos_con_iva = importe_excluidos_sin_iva * iva_ratio
             else:
+                iva_ratio = (total_orden_con_iva / total_orden_sin_iva) if total_orden_sin_iva > 0 else 1.0
                 importe_excluidos_con_iva = 0.0
             importe_trans_con_iva = total_orden_con_iva - importe_excluidos_con_iva
             totales[cod_cliente] = totales.get(cod_cliente, 0.0) + importe_trans_con_iva
+
+            # Aplicar iva_ratio a los picks de esta transacción
+            for i in range(trans_start, trans_end):
+                f = picks[i].pop("_formula_sin_iva", 0.0)
+                picks[i]["precio_unit"] = round(f * iva_ratio, 4) if f else None
 
         conn.close()
     finally:
@@ -310,13 +325,28 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
 
 
 @router.get("/")
-def list_semanas_diarco():
+def list_semanas_diarco(all: Optional[bool] = Query(default=False)):
     with get_db() as cur:
-        cur.execute(
-            "SELECT id, nombre, created_at FROM semanas WHERE mayorista = %s ORDER BY created_at DESC",
-            (MAYORISTA,),
-        )
+        if all:
+            cur.execute(
+                "SELECT id, nombre, visible, created_at FROM semanas WHERE mayorista = %s ORDER BY created_at DESC",
+                (MAYORISTA,),
+            )
+        else:
+            cur.execute(
+                "SELECT id, nombre, visible, created_at FROM semanas WHERE mayorista = %s AND visible = true ORDER BY created_at DESC",
+                (MAYORISTA,),
+            )
         return [dict(r) for r in cur.fetchall()]
+
+
+@router.put("/{id}/visible")
+def toggle_semana_visible_diarco(id: int, data: VisibleIn):
+    with get_db() as cur:
+        cur.execute("UPDATE semanas SET visible = %s WHERE id = %s RETURNING id", (data.visible, id))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Semana no encontrada")
+    return {"ok": True}
 
 
 @router.post("/importar")
@@ -410,8 +440,8 @@ async def importar_semana_diarco(
                 """
                 INSERT INTO pick
                     (cod_bar, cod_bar_bulto, cod_art, descrip, nombre, cliente, localidad,
-                     uni, bul, uxb, cantidad_pickeada, estado, semana, importe_total, mayorista)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, 'diarco')
+                     uni, bul, uxb, cantidad_pickeada, estado, semana, importe_total, mayorista, precio_unit)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, 'diarco', %s)
                 """,
                 (
                     p["cod_bar"],
@@ -427,9 +457,28 @@ async def importar_semana_diarco(
                     f"entregado: 0/{uni} UNI",
                     nombre,
                     round(importe_total, 2),
+                    p.get("precio_unit"),
                 ),
             )
             inserted += 1
+
+    # Upsert de precios por artículo (tabla articulos_precios)
+    with get_db() as cur:
+        seen_arts = set()
+        for p in all_picks:
+            cod_art = p.get("cod_art")
+            if not cod_art or cod_art in seen_arts:
+                continue
+            precio_unit = p.get("precio_unit")
+            uxb_art = p.get("uxb") or 0
+            if precio_unit:
+                cur.execute("""
+                    INSERT INTO articulos_precios (cod_art, mayorista, precio_con_iva, uxb)
+                    VALUES (%s, 'diarco', %s, %s)
+                    ON CONFLICT (cod_art, mayorista) DO UPDATE
+                    SET precio_con_iva = EXCLUDED.precio_con_iva, uxb = EXCLUDED.uxb
+                """, (cod_art, round(precio_unit, 4), uxb_art))
+                seen_arts.add(cod_art)
 
     clientes_sin_datos = [{"id": cod, "nombre": obs} for cod, obs in sin_datos.items()]
 

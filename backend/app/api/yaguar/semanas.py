@@ -7,9 +7,14 @@
 import sqlite3
 import tempfile
 import os
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
-from typing import List
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
+from typing import List, Optional
+from pydantic import BaseModel
 from app.db.database import get_db
+
+
+class VisibleIn(BaseModel):
+    visible: bool
 
 router = APIRouter(prefix="/yaguar/semanas", tags=["Yaguar - Semanas"])
 
@@ -32,7 +37,9 @@ SELECT
     END                                              AS bul,
     CAST(a.ART_UNI_BULTO AS INTEGER)                 AS uxb,
     a.ART_DESCR                                      AS descrip,
-    SUBSTR(c.CLI_ID, -6)                             AS cliente_id
+    SUBSTR(c.CLI_ID, -6)                             AS cliente_id,
+    CAST(a.ART_PRECIO_DEFAULT AS REAL)               AS precio_default,
+    CAST(a.ART_PORC_IVA AS REAL)                     AS porc_iva
 FROM hpedidosDetalle AS pd
 JOIN PedidosFiltrados AS pc
     ON pd.PEDD_FECHA_REG = pc.PED_FECHA_REG AND pd.PEDD_USR_ID = pc.PED_USR_ID
@@ -69,17 +76,42 @@ def _query_db_file(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
         picks = [dict(r) for r in cur.fetchall()]
         cur.execute(TOTALES_SQL, (fecha_desde, fecha_hasta))
         totales = {r["cliente_id"]: float(r["total_importe"] or 0) for r in cur.fetchall()}
+        # Códigos que Yaguar sabe que NO son consumidor final (RESP. INSC., MONOTRIBUTO, etc.)
+        cur.execute("""
+            SELECT SUBSTR(CLI_ID, -6) AS codigo
+            FROM clientes
+            WHERE CLI_COND_IVA NOT IN (2, 5)
+        """)
+        no_cf = {r["codigo"] for r in cur.fetchall()}
         conn.close()
-        return picks, totales
+        return picks, totales, no_cf
     finally:
         os.unlink(tmp_path)
 
 
 @router.get("/")
-def list_semanas(mayorista: str = "yaguar"):
+def list_semanas(mayorista: str = "yaguar", all: Optional[bool] = Query(default=False)):
     with get_db() as cur:
-        cur.execute("SELECT id, nombre, created_at FROM semanas WHERE mayorista = %s ORDER BY created_at DESC", (mayorista,))
+        if all:
+            cur.execute(
+                "SELECT id, nombre, visible, created_at FROM semanas WHERE mayorista = %s ORDER BY created_at DESC",
+                (mayorista,)
+            )
+        else:
+            cur.execute(
+                "SELECT id, nombre, visible, created_at FROM semanas WHERE mayorista = %s AND visible = true ORDER BY created_at DESC",
+                (mayorista,)
+            )
         return [dict(r) for r in cur.fetchall()]
+
+
+@router.put("/{id}/visible")
+def toggle_semana_visible(id: int, data: VisibleIn):
+    with get_db() as cur:
+        cur.execute("UPDATE semanas SET visible = %s WHERE id = %s RETURNING id", (data.visible, id))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Semana no encontrada")
+    return {"ok": True}
 
 
 @router.post("/importar")
@@ -97,12 +129,14 @@ async def importar_semana(
 
     all_rows: list = []
     totales_por_cliente: dict = {}
+    codigos_no_cf: set = set()
     for archivo in archivos:
         content = await archivo.read()
-        rows, totales = _query_db_file(content, fecha_desde, fecha_hasta)
+        rows, totales, no_cf = _query_db_file(content, fecha_desde, fecha_hasta)
         all_rows.extend(rows)
         for cid, monto in totales.items():
             totales_por_cliente[cid] = totales_por_cliente.get(cid, 0) + monto
+        codigos_no_cf.update(no_cf)
 
     if not all_rows:
         raise HTTPException(400, "No se encontraron picks en ese rango de fechas. Verificá las fechas.")
@@ -146,12 +180,16 @@ async def importar_semana(
 
             importe_total = totales_por_cliente.get(cliente_id, 0)
 
+            precio_default = float(r["precio_default"] or 0)
+            porc_iva = float(r["porc_iva"] or 0)
+            precio_unit = round(precio_default * (1 + porc_iva / 100), 4) if precio_default else None
+
             cur.execute(
                 """
                 INSERT INTO pick
                     (cod_bar, cod_art, descrip, nombre, cliente, localidad, uni, bul, uxb,
-                     cantidad_pickeada, estado, semana, importe_total, mayorista)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, 'yaguar')
+                     cantidad_pickeada, estado, semana, importe_total, mayorista, precio_unit)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 0, %s, %s, %s, 'yaguar', %s)
                 """,
                 (
                     r["cod_bar"],
@@ -166,9 +204,30 @@ async def importar_semana(
                     f"entregado: 0/{uni} UNI",
                     nombre,
                     importe_total,
+                    precio_unit,
                 ),
             )
             inserted += 1
+
+    # Upsert de precios por artículo (tabla articulos_precios)
+    with get_db() as cur:
+        seen_arts = set()
+        for r in all_rows:
+            cod_art = str(r["cod_art"])
+            if cod_art in seen_arts:
+                continue
+            precio_default = float(r["precio_default"] or 0)
+            porc_iva = float(r["porc_iva"] or 0)
+            if precio_default > 0:
+                precio_con_iva = round(precio_default * (1 + porc_iva / 100), 4)
+                uxb_art = int(r["uxb"] or 0)
+                cur.execute("""
+                    INSERT INTO articulos_precios (cod_art, mayorista, precio_con_iva, uxb)
+                    VALUES (%s, 'yaguar', %s, %s)
+                    ON CONFLICT (cod_art, mayorista) DO UPDATE
+                    SET precio_con_iva = EXCLUDED.precio_con_iva, uxb = EXCLUDED.uxb
+                """, (cod_art, precio_con_iva, uxb_art))
+                seen_arts.add(cod_art)
 
     # Actualizar estado ocupado/libre.
     # Solo se tocan códigos que alguna vez aparecieron en picks
@@ -199,10 +258,26 @@ async def importar_semana(
               AND id_yaguar IN (SELECT cliente FROM codigos_con_historial)
         """)
 
+    # Marcar como no_apto los códigos libres que Yaguar identifica como no consumidor final.
+    # Solo se tocan códigos con estado='libre' — los ocupados no se modifican.
+    marcados_no_apto = 0
+    if codigos_no_cf:
+        with get_db() as cur:
+            cur.execute("""
+                UPDATE clientes_yaguar
+                SET estado = 'no_apto'
+                WHERE mayorista = 'yaguar'
+                  AND estado = 'libre'
+                  AND id_yaguar = ANY(%s)
+            """, (list(codigos_no_cf),))
+            marcados_no_apto = cur.rowcount
+
     return {
         "picks_importados": inserted,
         "semana": nombre,
         "clientes_no_encontrados": sorted(no_encontrados),
+        "no_encontrados_no_cf": sorted(no_encontrados & codigos_no_cf),
+        "codigos_marcados_no_apto": marcados_no_apto,
     }
 
 

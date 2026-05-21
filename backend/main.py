@@ -4,6 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import picks, auth, health, clientes, admin, zonas, export
 from app.api.yaguar import semanas as yaguar_semanas
 from app.api.diarco import semanas as diarco_semanas
+from app.api.sobrantes import router_yaguar as sob_yaguar, router_diarco as sob_diarco, router_shared as sob_shared
+from app.api.novedades import router_yaguar as nov_yaguar, router_diarco as nov_diarco
+from app.api.asignaciones import router_yaguar as asig_yaguar, router_diarco as asig_diarco
 # picks, clientes y export tienen routers dobles (uno por mayorista)
 from app.auth.jwt import hash_password
 from app.db.database import init_pool, get_db
@@ -15,6 +18,8 @@ async def lifespan(app: FastAPI):
     init_pool()
     with get_db() as cur:
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS rol VARCHAR NOT NULL DEFAULT 'operario'")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_sobrantes BOOLEAN NOT NULL DEFAULT false")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_novedades BOOLEAN NOT NULL DEFAULT false")
         # Crear superadmin si no existe ninguno
         cur.execute("SELECT COUNT(*) AS n FROM users WHERE rol = 'superadmin'")
         if cur.fetchone()["n"] == 0:
@@ -29,6 +34,8 @@ async def lifespan(app: FastAPI):
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS importe_total NUMERIC DEFAULT 0")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
         cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS cod_bar_bulto VARCHAR")
+        cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS updated_by VARCHAR")
+        cur.execute("ALTER TABLE pick ADD COLUMN IF NOT EXISTS precio_unit NUMERIC")
         # Tabla repartos con mayorista
         cur.execute("""
             CREATE TABLE IF NOT EXISTS repartos (
@@ -109,6 +116,7 @@ async def lifespan(app: FastAPI):
             )
         """)
         cur.execute("ALTER TABLE semanas ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
+        cur.execute("ALTER TABLE semanas ADD COLUMN IF NOT EXISTS visible BOOLEAN NOT NULL DEFAULT true")
         # Migrar constraint de semanas: UNIQUE(nombre) → UNIQUE(nombre, mayorista)
         cur.execute("""
             DO $$
@@ -123,6 +131,79 @@ async def lifespan(app: FastAPI):
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_pick_semana ON pick(semana)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_clientes_yaguar_id_yaguar ON clientes_yaguar(id_yaguar)")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS asignaciones_reparto (
+                id bigserial PRIMARY KEY,
+                semana varchar NOT NULL,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                reparto varchar NOT NULL,
+                user_id bigint REFERENCES users(id) ON DELETE SET NULL,
+                username varchar NOT NULL,
+                created_at timestamptz DEFAULT now(),
+                UNIQUE (semana, mayorista, reparto)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS sobrantes (
+                id bigserial PRIMARY KEY,
+                cod_bar varchar,
+                cod_art varchar,
+                descrip varchar,
+                unidades integer DEFAULT 0,
+                bultos integer DEFAULT 0,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                lista varchar NOT NULL,
+                created_at timestamptz DEFAULT now(),
+                precio_unit numeric,
+                uxb integer DEFAULT 0
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS novedades (
+                id bigserial PRIMARY KEY,
+                mayorista varchar NOT NULL,
+                semana varchar NOT NULL,
+                cod_bar varchar,
+                cod_art varchar,
+                descrip varchar,
+                cliente varchar,
+                cliente_nombre varchar,
+                tipo varchar NOT NULL,
+                observaciones varchar,
+                unidades integer DEFAULT 0,
+                bultos integer DEFAULT 0,
+                uxb integer DEFAULT 0,
+                created_at timestamptz DEFAULT now()
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_novedades_mayorista_semana ON novedades(mayorista, semana)")
+        cur.execute("ALTER TABLE sobrantes ADD COLUMN IF NOT EXISTS precio_unit NUMERIC")
+        cur.execute("ALTER TABLE sobrantes ADD COLUMN IF NOT EXISTS uxb INTEGER DEFAULT 0")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS articulos_precios (
+                cod_art TEXT NOT NULL,
+                mayorista TEXT NOT NULL,
+                precio_con_iva NUMERIC NOT NULL,
+                uxb INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (cod_art, mayorista)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS pick_auditoria (
+                id bigserial PRIMARY KEY,
+                pick_id bigint NOT NULL,
+                cod_art varchar,
+                descrip varchar,
+                nombre varchar,
+                mayorista varchar NOT NULL,
+                semana varchar NOT NULL,
+                uni integer,
+                cantidad_entregada integer NOT NULL,
+                estado varchar,
+                updated_by varchar NOT NULL,
+                created_at timestamptz DEFAULT now()
+            )
+        """)
         # Estado de códigos Yaguar (ocupado/libre/no_apto según últimas 10 semanas)
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS estado VARCHAR")
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS flete NUMERIC")
@@ -181,3 +262,13 @@ app.include_router(diarco_semanas.router, prefix="/api")
 app.include_router(picks.router_diarco, prefix="/api")
 app.include_router(clientes.router_diarco, prefix="/api")
 app.include_router(export.router_diarco, prefix="/api")
+# ── Sobrantes ─────────────────────────────────────────────────────────────────
+app.include_router(sob_shared, prefix="/api")
+app.include_router(sob_yaguar, prefix="/api")
+app.include_router(sob_diarco, prefix="/api")
+# ── Novedades ─────────────────────────────────────────────────────────────────
+app.include_router(nov_yaguar, prefix="/api")
+app.include_router(nov_diarco, prefix="/api")
+# ── Asignaciones de reparto ────────────────────────────────────────────────────
+app.include_router(asig_yaguar, prefix="/api")
+app.include_router(asig_diarco, prefix="/api")
