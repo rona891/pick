@@ -16,7 +16,7 @@ router_diarco = APIRouter(prefix="/diarco/clientes", tags=["Diarco - Clientes"])
 def _list(mayorista: str):
     with get_db() as cur:
         if mayorista == 'yaguar':
-            # Solo clientes ocupados; libres y no_apto no aparecen en la lista
+            # Solo clientes ocupados; libres, no_apto y no_zona no aparecen en la lista
             cur.execute(
                 "SELECT * FROM clientes_yaguar WHERE mayorista = %s AND (estado = 'ocupado' OR estado IS NULL) ORDER BY nombre",
                 (mayorista,)
@@ -161,6 +161,30 @@ def yaguar_codigo_libre():
     if not row:
         raise HTTPException(status_code=404, detail="No hay códigos libres disponibles")
     return {"codigo": row["id_yaguar"]}
+
+
+@router_yaguar.put("/marcar-no-zona")
+def yaguar_marcar_no_zona(payload: MarcarNoAptoIn):
+    with get_db() as cur:
+        cur.execute(
+            """UPDATE clientes_yaguar SET estado = 'no_zona', nombre = NULL,
+               localidad = NULL, direccion = NULL, telefono = NULL,
+               contacto = NULL, vendedor = NULL, flete = NULL
+               WHERE id_yaguar = %s AND mayorista = 'yaguar'""",
+            (payload.codigo,)
+        )
+        if cur.rowcount == 0:
+            cur.execute(
+                "INSERT INTO clientes_yaguar (id_yaguar, mayorista, estado) VALUES (%s, 'yaguar', 'no_zona')",
+                (payload.codigo,)
+            )
+        cur.execute(
+            """SELECT id_yaguar FROM clientes_yaguar
+               WHERE estado = 'libre' AND id_yaguar IS NOT NULL
+               ORDER BY id_yaguar LIMIT 1"""
+        )
+        row = cur.fetchone()
+    return {"nuevo_codigo": row["id_yaguar"] if row else None}
 
 
 @router_yaguar.put("/marcar-no-apto")

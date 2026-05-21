@@ -128,8 +128,38 @@ body {
 
 .hidden { display: none !important; }
 
-/* ── Selector de mayorista ────────────────────────────────────────────────── */
-#mayorista-view {
+/* ── Hub topbar ──────────────────────────────────────────────────────────── */
+.hub-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px 0;
+  width: 100%;
+  max-width: 380px;
+  align-self: center;
+  gap: 8px;
+}
+
+.hub-topbar-utils {
+  display: flex;
+  gap: 6px;
+}
+
+.hub-topbar-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 12px;
+  font-family: var(--font);
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.hub-topbar-btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* ── Hub / Selector de mayorista ─────────────────────────────────────────── */
+#hub-view, #mayorista-view {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -137,6 +167,109 @@ body {
   padding: 24px;
   background: var(--bg);
 }
+
+.hub {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+.hub-section { display: flex; flex-direction: column; gap: 16px; }
+
+.hub-section-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Herramientas: Sobrantes + Novedades */
+.hub-herr-cards {
+  display: flex;
+  gap: 12px;
+}
+
+.hub-herr-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 12px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color .2s;
+  position: relative;
+}
+.hub-herr-card:active { opacity: .8; }
+.hub-herr-card:not(:disabled):hover { border-color: var(--accent); }
+
+.hub-herr-icon {
+  font-size: 28px;
+  color: var(--accent);
+}
+
+.hub-herr-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font);
+}
+
+.hub-herr-disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.hub-herr-badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 6px;
+}
+
+/* Sub-selector de mayorista dentro de Herramientas */
+.hub-sub-selector {
+  margin-top: 8px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.hub-sub-title {
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Las mayorista-cards dentro del sub-selector son más pequeñas */
+.hub-sub-selector .mayorista-cards { flex-direction: row; gap: 12px; }
+.hub-sub-selector .mayorista-card { min-height: 80px; }
+.hub-sub-selector .mayorista-logo { max-width: 130px; max-height: 56px; }
+
+.hub-cancelar-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-family: var(--font);
+  cursor: pointer;
+  padding: 4px 0;
+}
+.hub-cancelar-btn:hover { color: var(--text); }
 
 .mayorista-selector { width: 100%; max-width: 380px; }
 
@@ -718,11 +851,27 @@ input:focus, select:focus { border-color: var(--accent); }
 .btn-undo:hover { color: var(--red); border-color: var(--red); }
 
 /* ── Clientes tab ─────────────────────────────────────────────────────────── */
+.clientes-filters-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  position: relative;
+}
+
 .filter-bar {
   display: flex;
   gap: 6px;
-  margin-bottom: 16px;
   flex-wrap: wrap;
+  margin-bottom: 0;
+}
+
+/* El dropdown de reparto en la fila de clientes abre hacia la izquierda */
+.filtro-reparto-dropdown-right {
+  left: auto;
+  right: 0;
 }
 
 .filter-btn {
@@ -1055,6 +1204,19 @@ input[type="date"]:focus { border-color: var(--accent); }
 .info-content strong { color: var(--text); }
 .info-content p { margin: 0 0 8px; }
 .info-content p:last-child { margin-bottom: 0; }
+.info-content code {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: var(--font);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--accent);
+  word-break: break-all;
+  line-height: 1.5;
+}
 
 .btn-upload {
   display: block;
@@ -1267,7 +1429,10 @@ input[type="date"]:focus { border-color: var(--accent); }
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.75);
+  z-index: 100;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1393,7 +1558,10 @@ input[type="date"]:focus { border-color: var(--accent); }
 .confirm-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.7);
+  z-index: 300;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1680,12 +1848,14 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
 .sob-stepper {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 8px 10px;
+  padding: 6px 8px;
 }
 
 .sob-stepper-label {
@@ -1699,8 +1869,9 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
 
 .sob-stepper-val {
   flex: 1;
+  min-width: 0;
   text-align: center;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text);
   font-family: var(--font);
@@ -1708,13 +1879,9 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
 }
 
 .sob-export-bar {
-  position: fixed;
-  bottom: 62px; /* encima del bottom-nav */
-  left: 0;
-  right: 0;
-  padding: 10px 16px;
-  background: linear-gradient(to top, var(--bg) 70%, transparent);
-  z-index: 150;
+  padding: 16px 16px 24px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
 }
 
 .sob-export-btn {
@@ -1876,6 +2043,9 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
 .pick-filters-row {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  position: relative;
   margin-bottom: 10px;
 }
 
@@ -2183,7 +2353,6 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   .nav-icon { font-size: 14px; }
   .nav-label { font-size: 13px; letter-spacing: .3px; }
 
-  .sob-export-bar { bottom: 0; }
 
   /* ── Semana row, progreso, stats: centrados y acotados ─────────────── */
   .semana-row,
@@ -2307,10 +2476,10 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
     gap: 16px;
   }
 
-  /* Sección de importar: ancho máximo razonable para el form */
+  /* Sección de importar: ocupa todo el ancho disponible */
   #import-yaguar,
   #import-diarco {
-    max-width: 560px;
+    max-width: 100%;
   }
 
   /* Nuevo usuario: más compacto */
@@ -2333,7 +2502,7 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   }
 
   /* Repartos/Zonas: tabla full width */
-  .repartos-orden-list { max-width: 480px; }
+  .repartos-orden-list { max-width: 100%; }
 
   /* Título de secciones admin más prominente */
   .admin-section-title {
@@ -2564,4 +2733,605 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
 .btn-reparto-borrar {
   padding: 4px 8px;
   font-size: 13px;
+}
+
+/* ── Filtro de repartos en pestaña Clientes ─────────────────────────────── */
+.filtro-reparto-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0 4px;
+  flex-wrap: wrap;
+}
+
+.filtro-reparto-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.filtro-reparto-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.chip-reparto {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font);
+  transition: background .15s, border-color .15s, color .15s;
+}
+
+.chip-reparto.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
+
+/* ── Scanner por cliente en bottom-sheet ────────────────────────────────── */
+.btn-scan-cliente {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-family: var(--font);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+
+.btn-scan-cliente:active {
+  background: var(--accent);
+  color: #000;
+}
+
+.scan-cliente-banner {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--text);
+  margin: 0 16px 4px;
+  flex-shrink: 0;
+}
+
+.scan-cliente-banner strong {
+  color: var(--accent);
+}
+
+/* ── Highlight de tarjeta al escanear en modo cliente ───────────────────── */
+@keyframes scanMatch {
+  0%   { box-shadow: 0 0 0 0 rgba(79, 255, 145, 0); background-color: transparent; }
+  15%  { box-shadow: 0 0 0 4px rgba(79, 255, 145, 0.6); background-color: rgba(79, 255, 145, 0.1); }
+  100% { box-shadow: 0 0 0 0 rgba(79, 255, 145, 0); background-color: transparent; }
+}
+
+.pick-card.scan-highlight {
+  animation: none; /* reemplazado por estado persistente al final del archivo */
+}
+
+/* ── Novedades ───────────────────────────────────────────────────────────── */
+#novedades-view {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.nov-view-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  letter-spacing: 1px;
+  color: var(--text);
+  flex: 1;
+}
+
+.nov-view-body {
+  flex: 1;
+  overflow: visible;
+}
+
+.nov-semana-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.nov-semana-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  flex-shrink: 0;
+}
+
+.nov-form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nov-selected-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.nov-selected-cod {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.nov-selected-label {
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nov-clear-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.btn-nov-slide {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  font-family: var(--font);
+  background: var(--bg);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s;
+}
+.btn-nov-slide:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.btn-nov-slide:disabled { opacity: .45; cursor: not-allowed; border-style: dashed; }
+
+.nov-tipo-row {
+  display: flex;
+  gap: 8px;
+}
+
+.nov-tipo-btn {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 13px;
+  font-family: var(--font);
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.nov-tipo-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #000;
+  font-weight: 600;
+}
+
+.nov-steppers {
+  display: flex;
+  gap: 12px;
+}
+
+.nov-stepper { flex: 1; }
+
+.nov-obs-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  resize: none;
+}
+.nov-obs-input:focus { border-color: var(--accent); outline: none; }
+
+.nov-items {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nov-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nov-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nov-tipo-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  flex-shrink: 0;
+}
+
+.nov-item-cliente {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nov-item-descrip {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.nov-item-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.nov-item-cant {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.nov-item-obs {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.nov-cliente-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.nov-cliente-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 14px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  gap: 12px;
+}
+.nov-cliente-row:active { background: var(--bg); }
+
+.nov-cliente-row-nombre {
+  font-size: 14px;
+  color: var(--text);
+  flex: 1;
+}
+
+.nov-cliente-row-cod {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* Modales de segundo nivel: aparecen encima de usuarios-modal (z:100) */
+#edit-user-modal,
+#scan-alert-overlay,
+#parcial-modal,
+#tipo-cliente-modal,
+#nov-cliente-modal { z-index: 200; }
+
+/* ── Modal standalone de usuarios ────────────────────────────────────────── */
+.usuarios-modal-box {
+  max-width: 580px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.usuarios-modal-body {
+  padding: 16px 20px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ── Hub: el hub-view necesita flex-direction column para el topbar ──────── */
+#hub-view {
+  flex-direction: column;
+  justify-content: flex-start;
+  padding-top: 12px;
+}
+
+#hub-view .hub {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  justify-content: center;
+  padding: 24px 0;
+}
+
+/* ── Sobrantes: botones de stepper más pequeños para que entren en la card ── */
+.sob-stepper .btn-step-minus,
+.sob-stepper .btn-step-plus {
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+/* ── Modal parcial: nota de ayuda ────────────────────────────────────────── */
+.parcial-ayuda {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+  padding: 6px 8px;
+  border-left: 2px solid var(--border);
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+/* ── Vista standalone: Sobrantes ────────────────────────────────────────── */
+#sobrantes-view {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.sob-view-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.sob-header-usuario {
+  flex: 1;
+  text-align: center;
+}
+
+.sob-back-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 14px;
+  font-family: var(--font);
+  cursor: pointer;
+  padding: 4px 0;
+  flex-shrink: 0;
+}
+
+.sob-view-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 20px;
+  letter-spacing: 1px;
+  color: var(--text);
+  flex: 1;
+}
+
+.sob-view-badge {
+  font-size: 11px;
+  font-family: var(--font);
+  font-weight: 600;
+  letter-spacing: .5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  color: var(--muted);
+}
+.sob-view-badge-yaguar { border-color: #F2E205; color: #F2E205; }
+.sob-view-badge-diarco  { border-color: #F22233; color: #F22233; }
+
+.sob-view-body {
+  flex: 1;
+  overflow: visible;
+}
+
+/* ── Admin tabs: grilla en dos filas en mobile (sin scroll oculto) ──────── */
+@media (max-width: 1023px) {
+  .admin-tabs {
+    flex-wrap: wrap;
+    gap: 4px;
+    overflow: visible;
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+  .admin-tab-btn {
+    flex: 1 1 calc(33.33% - 4px);
+    font-size: 11px;
+    padding: 8px 4px;
+    text-align: center;
+    justify-content: center;
+  }
+}
+
+/* ── Botón de escanear (Pick tab, prominente) ───────────────────────────── */
+.btn-scan-full {
+  display: block;
+  width: 100%;
+  padding: 14px 0;
+  font-size: 18px;
+  font-family: var(--font);
+  font-weight: 600;
+  letter-spacing: .5px;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: opacity .15s;
+}
+.btn-scan-full:active { opacity: .8; }
+.btn-scan-full.scanner-active-label { background: var(--red); color: #fff; }
+
+/* ── Controles de pick: dos botones ─────────────────────────────────────── */
+.btn-parcial {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 0;
+  font-size: 13px;
+  font-family: var(--font);
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color .15s;
+}
+.btn-parcial:active { border-color: var(--accent); }
+
+/* ── Modal de entrega parcial ────────────────────────────────────────────── */
+.parcial-modal-box { max-width: 360px; }
+.parcial-modal-body { padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 14px; }
+.parcial-desc { font-size: 12px; color: var(--muted); }
+.parcial-fields { display: flex; gap: 12px; }
+.parcial-field { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.parcial-field label { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+.parcial-stepper-row { display: flex; align-items: center; gap: 4px; }
+.btn-parcial-step {
+  width: 36px; height: 36px; font-size: 18px; font-family: var(--font);
+  background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius);
+  color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.parcial-stepper-row input {
+  flex: 1; min-width: 0; text-align: center; padding: 6px 4px;
+  font-size: 20px; font-family: var(--font); font-weight: 600;
+  background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); color: var(--text);
+}
+.parcial-total { font-size: 14px; font-weight: 600; text-align: center; padding: 6px 0; }
+.parcial-total-error { color: var(--red); }
+.parcial-actions { display: flex; gap: 10px; }
+.parcial-actions button { flex: 1; }
+
+/* ── Semana oculta en admin ──────────────────────────────────────────────── */
+.semana-oculta { opacity: .45; text-decoration: line-through; }
+.btn-toggle-visible {
+  padding: 4px 10px; font-size: 11px; font-family: var(--font);
+  border-radius: var(--radius); border: 1.5px solid; cursor: pointer;
+}
+.btn-toggle-on { border-color: var(--green); color: var(--green); background: transparent; }
+.btn-toggle-off { border-color: var(--muted); color: var(--muted); background: transparent; }
+
+/* ── Botón "No existe en mi zona" en form cliente ───────────────────────── */
+.cf-codigo-row { display: flex; gap: 8px; align-items: center; }
+.cf-codigo-row input { flex: 1; }
+.btn-no-zona {
+  padding: 6px 10px; font-size: 11px; font-family: var(--font);
+  background: transparent; border: 1.5px solid var(--red); color: var(--red);
+  border-radius: var(--radius); cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+
+/* ── Semana admin item (toggle + export + del) ──────────────────────────── */
+.semana-admin-item { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ── Filtro de reparto: dropdown button ─────────────────────────────────── */
+.filtro-dropdown-wrap { position: relative; }
+
+.btn-filtro-toggle {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: var(--font);
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .15s, color .15s;
+}
+.btn-filtro-toggle.filtro-toggle-active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.filtro-reparto-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 200;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 220px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4);
+}
+
+/* Evitar que el dropdown se corte fuera del viewport en mobile */
+@media (max-width: 480px) {
+  .filtro-reparto-dropdown { left: auto; right: 0; }
+}
+
+/* pick-filters-row actualizado para alinear con el dropdown */
+
+/* Highlight persistente (sin animación de fade-out) */
+.pick-card.scan-highlight {
+  box-shadow: 0 0 0 3px rgba(79, 255, 145, 0.55);
+  background-color: rgba(79, 255, 145, 0.07);
+  transition: none;
 }

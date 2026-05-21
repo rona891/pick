@@ -5,6 +5,7 @@ from app.api import picks, auth, health, clientes, admin, zonas, export
 from app.api.yaguar import semanas as yaguar_semanas
 from app.api.diarco import semanas as diarco_semanas
 from app.api.sobrantes import router_yaguar as sob_yaguar, router_diarco as sob_diarco, router_shared as sob_shared
+from app.api.novedades import router_yaguar as nov_yaguar, router_diarco as nov_diarco
 from app.api.asignaciones import router_yaguar as asig_yaguar, router_diarco as asig_diarco
 # picks, clientes y export tienen routers dobles (uno por mayorista)
 from app.auth.jwt import hash_password
@@ -18,6 +19,7 @@ async def lifespan(app: FastAPI):
     with get_db() as cur:
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS rol VARCHAR NOT NULL DEFAULT 'operario'")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_sobrantes BOOLEAN NOT NULL DEFAULT false")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_novedades BOOLEAN NOT NULL DEFAULT false")
         # Crear superadmin si no existe ninguno
         cur.execute("SELECT COUNT(*) AS n FROM users WHERE rol = 'superadmin'")
         if cur.fetchone()["n"] == 0:
@@ -114,6 +116,7 @@ async def lifespan(app: FastAPI):
             )
         """)
         cur.execute("ALTER TABLE semanas ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
+        cur.execute("ALTER TABLE semanas ADD COLUMN IF NOT EXISTS visible BOOLEAN NOT NULL DEFAULT true")
         # Migrar constraint de semanas: UNIQUE(nombre) → UNIQUE(nombre, mayorista)
         cur.execute("""
             DO $$
@@ -150,7 +153,39 @@ async def lifespan(app: FastAPI):
                 bultos integer DEFAULT 0,
                 mayorista varchar NOT NULL DEFAULT 'yaguar',
                 lista varchar NOT NULL,
+                created_at timestamptz DEFAULT now(),
+                precio_unit numeric,
+                uxb integer DEFAULT 0
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS novedades (
+                id bigserial PRIMARY KEY,
+                mayorista varchar NOT NULL,
+                semana varchar NOT NULL,
+                cod_bar varchar,
+                cod_art varchar,
+                descrip varchar,
+                cliente varchar,
+                cliente_nombre varchar,
+                tipo varchar NOT NULL,
+                observaciones varchar,
+                unidades integer DEFAULT 0,
+                bultos integer DEFAULT 0,
+                uxb integer DEFAULT 0,
                 created_at timestamptz DEFAULT now()
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_novedades_mayorista_semana ON novedades(mayorista, semana)")
+        cur.execute("ALTER TABLE sobrantes ADD COLUMN IF NOT EXISTS precio_unit NUMERIC")
+        cur.execute("ALTER TABLE sobrantes ADD COLUMN IF NOT EXISTS uxb INTEGER DEFAULT 0")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS articulos_precios (
+                cod_art TEXT NOT NULL,
+                mayorista TEXT NOT NULL,
+                precio_con_iva NUMERIC NOT NULL,
+                uxb INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (cod_art, mayorista)
             )
         """)
         cur.execute("""
@@ -231,6 +266,9 @@ app.include_router(export.router_diarco, prefix="/api")
 app.include_router(sob_shared, prefix="/api")
 app.include_router(sob_yaguar, prefix="/api")
 app.include_router(sob_diarco, prefix="/api")
+# ── Novedades ─────────────────────────────────────────────────────────────────
+app.include_router(nov_yaguar, prefix="/api")
+app.include_router(nov_diarco, prefix="/api")
 # ── Asignaciones de reparto ────────────────────────────────────────────────────
 app.include_router(asig_yaguar, prefix="/api")
 app.include_router(asig_diarco, prefix="/api")

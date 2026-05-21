@@ -39,9 +39,36 @@ def _stats(mayorista: str, semana: Optional[str]):
     return {"total": total, "completed": completed, "pending": total - completed}
 
 
-def _resumen(mayorista: str, semana: Optional[str]):
+def _resumen(mayorista: str, semana: Optional[str], repartos: list = None):
     with get_db() as cur:
-        if semana:
+        if repartos:
+            if semana:
+                cur.execute("""
+                    SELECT p.nombre,
+                           COUNT(*) AS total,
+                           COUNT(*) FILTER (WHERE p.estado LIKE 'completado%%') AS completados,
+                           MAX(p.importe_total) AS importe_total
+                    FROM pick p
+                    LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+                    LEFT JOIN repartos r ON z.reparto = r.nombre
+                    WHERE p.nombre IS NOT NULL AND p.semana = %s AND p.mayorista = %s
+                      AND r.nombre = ANY(%s)
+                    GROUP BY p.nombre ORDER BY p.nombre
+                """, (semana, mayorista, repartos))
+            else:
+                cur.execute("""
+                    SELECT p.nombre,
+                           COUNT(*) AS total,
+                           COUNT(*) FILTER (WHERE p.estado LIKE 'completado%%') AS completados,
+                           MAX(p.importe_total) AS importe_total
+                    FROM pick p
+                    LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+                    LEFT JOIN repartos r ON z.reparto = r.nombre
+                    WHERE p.nombre IS NOT NULL AND p.mayorista = %s
+                      AND r.nombre = ANY(%s)
+                    GROUP BY p.nombre ORDER BY p.nombre
+                """, (mayorista, repartos))
+        elif semana:
             cur.execute("""
                 SELECT nombre,
                        COUNT(*) AS total,
@@ -232,8 +259,8 @@ def yaguar_stats(semana: Optional[str] = Query(None)):
     return _stats("yaguar", semana)
 
 @router_yaguar.get("/resumen", response_model=List[PickResumen])
-def yaguar_resumen(semana: Optional[str] = Query(None)):
-    return _resumen("yaguar", semana)
+def yaguar_resumen(semana: Optional[str] = Query(None), repartos: List[str] = Query(default=[])):
+    return _resumen("yaguar", semana, repartos or None)
 
 @router_yaguar.get("/por-cliente")
 def yaguar_por_cliente(nombre: str = Query(...), semana: Optional[str] = Query(None)):
@@ -273,8 +300,8 @@ def diarco_stats(semana: Optional[str] = Query(None)):
     return _stats("diarco", semana)
 
 @router_diarco.get("/resumen", response_model=List[PickResumen])
-def diarco_resumen(semana: Optional[str] = Query(None)):
-    return _resumen("diarco", semana)
+def diarco_resumen(semana: Optional[str] = Query(None), repartos: List[str] = Query(default=[])):
+    return _resumen("diarco", semana, repartos or None)
 
 @router_diarco.get("/por-cliente")
 def diarco_por_cliente(nombre: str = Query(...), semana: Optional[str] = Query(None)):
