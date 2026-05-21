@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=10" />
+  <link rel="stylesheet" href="css/styles.css?v=41" />
 </head>
 <body>
 
@@ -24,18 +24,274 @@
     <button id="net-toast-close" class="net-toast-close" aria-label="Cerrar">✕</button>
   </div>
 
-  <!-- ── Selector de mayorista ────────────────────────────────────────── -->
-  <div id="mayorista-view" class="hidden">
-    <div class="mayorista-selector">
-      <div class="mayorista-title">¿Con qué mayorista trabajás hoy?</div>
-      <div class="mayorista-cards">
-        <button class="mayorista-card" data-mayorista="yaguar">
-          <img src="yaguar.png" alt="YAGUAR" class="mayorista-logo" />
-        </button>
-        <button class="mayorista-card" data-mayorista="diarco">
-          <img src="diarco.png" alt="DIARCO" class="mayorista-logo" />
-        </button>
+  <!-- ── Hub principal ────────────────────────────────────────────────── -->
+  <div id="hub-view" class="hidden">
+    <!-- Topbar del hub: admin button + utilidades -->
+    <div class="hub-topbar">
+      <button id="hub-admin-btn" class="hub-topbar-btn hidden" title="Gestión de usuarios">⚙ Usuarios</button>
+      <span id="hub-usuario" class="topbar-usuario"></span>
+      <div class="hub-topbar-utils">
+        <button id="hub-theme-btn" class="hub-topbar-btn" title="Cambiar modo"></button>
+        <button id="hub-cuenta-btn" class="hub-topbar-btn" title="Mi cuenta">Cuenta</button>
+        <button id="hub-salir-btn" class="hub-topbar-btn" title="Salir">Salir</button>
       </div>
+    </div>
+
+    <div class="hub">
+
+      <!-- Picking -->
+      <div class="hub-section">
+        <div class="hub-section-title">Picking</div>
+        <div class="mayorista-cards">
+          <button class="mayorista-card" data-mayorista="yaguar" data-destino="pick">
+            <img src="yaguar.png" alt="YAGUAR" class="mayorista-logo" />
+          </button>
+          <button class="mayorista-card" data-mayorista="diarco" data-destino="pick">
+            <img src="diarco.png" alt="DIARCO" class="mayorista-logo" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Herramientas (solo usuarios con acceso) -->
+      <div class="hub-section hub-herramientas hidden" id="hub-herramientas">
+        <div class="hub-section-title">Herramientas</div>
+        <div class="hub-herr-cards">
+          <button class="hub-herr-card" id="hub-btn-sobrantes">
+            <span class="hub-herr-icon">≋</span>
+            <span class="hub-herr-label">Sobrantes</span>
+          </button>
+          <button class="hub-herr-card hidden" id="hub-btn-novedades">
+            <span class="hub-herr-icon">★</span>
+            <span class="hub-herr-label">Novedades</span>
+          </button>
+        </div>
+
+        <!-- Sub-selector mayorista para Sobrantes -->
+        <div id="hub-sob-selector" class="hub-sub-selector hidden">
+          <div class="hub-sub-title">¿Sobrantes de qué mayorista?</div>
+          <div class="mayorista-cards">
+            <button class="mayorista-card" data-mayorista="yaguar" data-destino="sobrantes">
+              <img src="yaguar.png" alt="YAGUAR" class="mayorista-logo" />
+            </button>
+            <button class="mayorista-card" data-mayorista="diarco" data-destino="sobrantes">
+              <img src="diarco.png" alt="DIARCO" class="mayorista-logo" />
+            </button>
+          </div>
+          <button id="hub-sob-cancelar" class="hub-cancelar-btn">← Cancelar</button>
+        </div>
+
+        <!-- Sub-selector mayorista para Novedades -->
+        <div id="hub-nov-selector" class="hub-sub-selector hidden">
+          <div class="hub-sub-title">¿Novedades de qué mayorista?</div>
+          <div class="mayorista-cards">
+            <button class="mayorista-card" data-mayorista="yaguar" data-destino="novedades">
+              <img src="yaguar.png" alt="YAGUAR" class="mayorista-logo" />
+            </button>
+            <button class="mayorista-card" data-mayorista="diarco" data-destino="novedades">
+              <img src="diarco.png" alt="DIARCO" class="mayorista-logo" />
+            </button>
+          </div>
+          <button id="hub-nov-cancelar" class="hub-cancelar-btn">← Cancelar</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Vista standalone: Sobrantes ─────────────────────────────────── -->
+  <div id="sobrantes-view" class="hidden">
+
+    <div class="sob-view-header">
+      <button id="sob-back-btn" class="sob-back-btn">← Volver</button>
+      <span id="sob-usuario" class="topbar-usuario sob-header-usuario"></span>
+      <span id="sob-view-badge" class="sob-view-badge"></span>
+    </div>
+
+    <div class="sob-view-body">
+
+      <div class="panel-help-bar">
+        <div class="info-block">
+          <button class="info-btn">Ayuda</button>
+          <div class="info-content">
+            <p><strong>¿Para qué sirve?</strong> Para registrar los artículos que sobran al final del picking. Al exportar, el Excel incluye el precio con IVA de cada artículo para facilitar la liquidación.</p>
+            <p><strong>¿Cómo se usa?</strong><br>
+            1. Elegí una lista existente o creá una nueva con <strong>+ Nueva</strong><br>
+            2. Escaneá el código de barras del producto sobrante o buscalo por descripción<br>
+            3. Ajustá las <strong>unidades</strong> y los <strong>bultos</strong> con los botones − y +<br>
+            4. Cuando terminés, tocá <strong>↓ Exportar Excel</strong> para descargar la lista con precios</p>
+            <p>Si escaneás un producto que ya está en la lista, la app lo resalta en lugar de duplicarlo.</p>
+            <p>Las listas son independientes por mayorista (las de Yaguar no mezclan con las de DIARCO). Para acceder a sobrantes del otro mayorista, volvé al hub con <strong>← Volver</strong> y elegí de nuevo.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Selector de lista -->
+      <div class="sob-lista-card">
+        <div class="sob-lista-top">
+          <label class="sob-card-label">Lista activa</label>
+          <button id="sob-del-lista-btn" class="btn-link-del">Eliminar</button>
+        </div>
+        <select id="sob-lista-select" class="sob-lista-select"></select>
+        <button id="sob-nueva-btn" class="btn-secondary sob-nueva-btn">+ Nueva lista</button>
+      </div>
+
+      <!-- Buscador / scanner -->
+      <div class="sob-search-card">
+        <label class="sob-card-label">Agregar artículo</label>
+        <input type="text" id="sob-barcode-input" class="hidden" autocomplete="off" inputmode="numeric" />
+        <button type="button" id="sob-scan-btn" class="btn-scan-full" style="margin-bottom:6px">Escanear</button>
+        <div class="descrip-search-wrap">
+          <input type="text" id="sob-descrip-input" placeholder="O buscá por descripción..." autocomplete="off" />
+          <div id="sob-descrip-results" class="descrip-results hidden"></div>
+        </div>
+      </div>
+
+      <div id="sob-scanner-container" class="hidden">
+        <video id="sob-scanner-video" autoplay muted playsinline></video>
+        <button class="btn-scanner-close" onclick="stopSobScanner()">✕</button>
+        <div class="scanner-guide-overlay">
+          <div class="scanner-guide-rect"></div>
+          <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
+        </div>
+        <div class="scanner-controls">
+          <button id="sob-switch-camera-btn" class="btn-switch-camera hidden" onclick="switchSobCamera()">⟳ Cambiar cámara</button>
+        </div>
+      </div>
+
+      <!-- Lista de items -->
+      <div id="sob-items" class="sob-items"></div>
+
+      <!-- Barra inferior fija: exportar -->
+      <div id="sob-export-bar" class="sob-export-bar hidden">
+        <a id="sob-export-link" class="btn-primary sob-export-btn">↓ Exportar Excel</a>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Vista standalone: Novedades ─────────────────────────────────── -->
+  <div id="novedades-view" class="hidden">
+
+    <div class="sob-view-header">
+      <button id="nov-back-btn" class="sob-back-btn">← Volver</button>
+      <span id="nov-usuario" class="topbar-usuario sob-header-usuario"></span>
+      <span id="nov-view-badge" class="sob-view-badge"></span>
+    </div>
+
+    <div class="nov-view-body">
+
+      <div class="panel-help-bar">
+        <div class="info-block">
+          <button class="info-btn">Ayuda</button>
+          <div class="info-content">
+            <p><strong>¿Qué son las novedades?</strong> Son eventos que ocurren durante el reparto: artículos que faltaron, devoluciones de clientes, o cambios (el cliente devuelve el ítem para recibir uno nuevo).</p>
+            <p><strong>¿Cómo se registra una novedad?</strong><br>
+            1. Escaneá el artículo o buscalo por descripción<br>
+            2. Elegí el cliente (solo aparecen los que pidieron ese artículo en la semana activa)<br>
+            3. Seleccioná el tipo: <strong>Devolución</strong>, <strong>Faltante</strong> o <strong>Cambio</strong><br>
+            4. Ajustá los bultos y unidades sueltas con los botones − y +<br>
+            5. Opcionalmente, escribí una observación (ej: "rotura de envase")<br>
+            6. Tocá <strong>+ Agregar novedad</strong></p>
+            <p><strong>Importante:</strong> el artículo debe seleccionarse antes que el cliente. Esto asegura que solo podés elegir clientes que realmente pidieron ese ítem en la semana seleccionada.</p>
+            <p><strong>Exportar:</strong> el botón <strong>↓ Exportar Excel</strong> descarga todas las novedades de la semana seleccionada para el mayorista activo, con precios y cantidades.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Semana -->
+      <div class="nov-semana-row">
+        <label class="nov-semana-label">Semana</label>
+        <select id="nov-semana-select" class="semana-select"></select>
+      </div>
+
+      <!-- Formulario para agregar novedad -->
+      <div class="nov-form-card">
+        <div class="sob-card-label" style="margin-bottom:8px">Agregar novedad</div>
+
+        <!-- Scanner / búsqueda por código -->
+        <input type="text" id="nov-barcode-input" class="hidden" autocomplete="off" inputmode="numeric" />
+        <button type="button" id="nov-scan-btn" class="btn-scan-full" style="margin-bottom:6px">Escanear</button>
+        <div class="descrip-search-wrap">
+          <input type="text" id="nov-descrip-input" placeholder="O buscá por descripción..." autocomplete="off" />
+          <div id="nov-descrip-results" class="descrip-results hidden"></div>
+        </div>
+
+        <!-- Scanner -->
+        <div id="nov-scanner-container" class="hidden">
+          <video id="nov-scanner-video" autoplay muted playsinline></video>
+          <button class="btn-scanner-close" onclick="stopNovScanner()">✕</button>
+          <div class="scanner-guide-overlay">
+            <div class="scanner-guide-rect"></div>
+            <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
+          </div>
+        </div>
+
+        <!-- Ítem seleccionado -->
+        <div id="nov-item-selected" class="nov-selected-tag hidden">
+          <span id="nov-item-cod" class="nov-selected-cod"></span>
+          <span id="nov-item-descrip" class="nov-selected-label"></span>
+          <button id="nov-item-clear" class="nov-clear-btn">✕</button>
+        </div>
+
+        <!-- Cliente -->
+        <button id="nov-cliente-btn" class="btn-nov-slide">Elegir cliente...</button>
+        <div id="nov-cliente-selected" class="nov-selected-tag hidden">
+          <span id="nov-cliente-cod" class="nov-selected-cod"></span>
+          <span id="nov-cliente-nombre" class="nov-selected-label"></span>
+          <button id="nov-cliente-clear" class="nov-clear-btn">✕</button>
+        </div>
+
+        <!-- Tipo (obligatorio, ninguno seleccionado por defecto) -->
+        <div class="nov-tipo-row">
+          <button class="nov-tipo-btn" data-tipo="devolucion">Devolución</button>
+          <button class="nov-tipo-btn" data-tipo="faltante">Faltante</button>
+          <button class="nov-tipo-btn" data-tipo="cambio">Cambio</button>
+        </div>
+
+        <!-- Cantidades -->
+        <div class="nov-steppers">
+          <div class="nov-stepper sob-stepper">
+            <span class="nov-stepper-label sob-stepper-label">BUL</span>
+            <button class="btn-step-minus nov-step-btn" data-nov-field="bultos">−</button>
+            <span class="sob-stepper-val" id="nov-val-bultos">0</span>
+            <button class="btn-step-plus nov-step-btn" data-nov-field="bultos">+</button>
+          </div>
+          <div class="nov-stepper sob-stepper">
+            <span class="nov-stepper-label sob-stepper-label">UNI</span>
+            <button class="btn-step-minus nov-step-btn" data-nov-field="unidades">−</button>
+            <span class="sob-stepper-val" id="nov-val-unidades">0</span>
+            <button class="btn-step-plus nov-step-btn" data-nov-field="unidades">+</button>
+          </div>
+        </div>
+
+        <!-- Observaciones -->
+        <textarea id="nov-observaciones" class="nov-obs-input" placeholder="Observaciones (opcional)..." rows="2"></textarea>
+
+        <!-- Agregar -->
+        <button id="nov-agregar-btn" class="btn-primary" style="width:100%;margin-top:8px">+ Agregar novedad</button>
+      </div>
+
+      <!-- Lista de novedades -->
+      <div id="nov-items" class="nov-items"></div>
+
+      <!-- Exportar -->
+      <div id="nov-export-bar" class="sob-export-bar hidden">
+        <a id="nov-export-link" class="btn-primary sob-export-btn">↓ Exportar Excel</a>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Slide: selección de cliente para Novedades ────────────────────── -->
+  <div id="nov-cliente-modal" class="modal-overlay hidden cliente-picks-overlay">
+    <div class="cliente-picks-sheet">
+      <div class="modal-header sheet-header" style="padding:12px 16px">
+        <input type="text" id="nov-cliente-search" class="clientes-search-input"
+               placeholder="Buscar cliente..." autocomplete="off"
+               style="flex:1;margin-right:8px" />
+        <button id="nov-cliente-modal-close" class="modal-close">✕</button>
+      </div>
+      <div id="nov-cliente-list" class="nov-cliente-list"></div>
     </div>
   </div>
 
@@ -115,10 +371,6 @@
         <span class="nav-icon">◉</span>
         <span class="nav-label">Clientes</span>
       </button>
-      <button class="tab-btn" data-tab="sobrantes">
-        <span class="nav-icon">≋</span>
-        <span class="nav-label">Sobrantes</span>
-      </button>
       <button class="tab-btn hidden" data-tab="admin" id="nav-admin-btn">
         <span class="nav-icon">⚙</span>
         <span class="nav-label" id="nav-admin-label">Panel</span>
@@ -132,47 +384,32 @@
         <div class="info-block">
           <button class="info-btn">Ayuda</button>
           <div class="info-content">
-            <p><strong>¿Qué es el picking?</strong> Es separar la mercadería del depósito en bultos para cada cliente. Esta pantalla te muestra todo lo que hay que juntar en el día.</p>
-            <p><strong>¿Cómo busco un artículo?</strong> Hay tres formas:<br>
-            — Escaneás el código de barras con el botón <strong>Escanear</strong> (apuntá la cámara al código del producto)<br>
-            — Escribís el código de barras a mano en la cajita y tocás <strong>Buscar</strong><br>
-            — Escribís parte del nombre del artículo en <strong>"Buscar por descripción..."</strong></p>
-            <p><strong>¿Qué hago con cada tarjeta?</strong> Cada tarjeta es un artículo para un cliente. Arriba dice el nombre del cliente, abajo el artículo. Usá los botones <strong>−</strong> y <strong>+</strong> para registrar cuántas unidades separaste, o tocá el número del medio para escribirlo directo.</p>
+            <p><strong>¿Qué es el picking?</strong> Es separar la mercadería del depósito en bultos para cada cliente. Esta pantalla te muestra qué hay que juntar.</p>
+            <p><strong>¿Cómo busco un artículo?</strong><br>
+            — Tocá <strong>Escanear</strong> y apuntá la cámara al código de barras del producto<br>
+            — O escribí parte del nombre en <strong>"Buscar por descripción..."</strong></p>
+            <p><strong>¿Qué hago con cada tarjeta?</strong> Cada tarjeta es un artículo para un cliente. La cantidad que se muestra es lo que <em>queda por entregar</em>, expresada en bultos y unidades sueltas.<br>
+            — <strong>✓ ENTREGADO COMPLETO</strong>: marcá todo el pedido de ese artículo como entregado de una sola vez<br>
+            — <strong>Entregar parcial...</strong>: abrí un menú para indicar cuántos bultos y unidades sueltas entregaste. Si ya ingresaste algo y querés corregirlo, podés ingresar un valor negativo para revertirlo.</p>
             <p><strong>¿Qué significa el estado?</strong><br>
             — <strong>Pendiente</strong>: todavía no separaste nada<br>
             — <strong>Entregado parcial</strong> (tarjeta naranja): separaste menos de lo que pedía el cliente<br>
             — <strong>Completado</strong>: separaste todo lo que pidió el cliente</p>
-            <p><strong>Botón "Solo pendientes":</strong> filtra la lista para mostrar únicamente los artículos que todavía no fueron tocados. Muy útil cuando ya van varios y querés ver lo que falta.</p>
-            <p><strong>"Recientes":</strong> los últimos artículos que buscaste aparecen como chips para volver a encontrarlos rápido sin tener que escribir de nuevo.</p>
+            <p><strong>"Solo pendientes":</strong> oculta las tarjetas ya completadas para que veas solo lo que falta.</p>
+            <p><strong>"Recientes":</strong> los últimos artículos buscados aparecen como chips para relanzar la búsqueda rápido.</p>
+            <p><strong>Filtro por reparto:</strong> el botón <strong>"Reparto: Todos ▾"</strong> te permite filtrar los resultados para ver solo los artículos de ciertos repartos (útil para separar el trabajo del viernes y el lunes en DIARCO). Si el filtro está activo, al cambiar los repartos los resultados se actualizan solos.</p>
             <p><strong>La barra de arriba</strong> muestra el % del pick total completado entre todos los operarios.</p>
           </div>
         </div>
       </div>
 
-      <form id="search-form">
-        <div class="search-row">
-          <input type="text" id="barcode-input" placeholder="Código de barras..." autocomplete="off" />
-          <button type="button" id="scan-btn" class="btn-icon">Escanear</button>
-          <button type="submit" class="btn-search">Buscar</button>
-        </div>
-      </form>
+      <!-- Barcode input oculto: el JS lo usa como buffer interno, el operario no lo ve -->
+      <input type="text" id="barcode-input" class="hidden" autocomplete="off" />
+      <button type="button" id="scan-btn" class="btn-scan-full">Escanear</button>
 
       <div class="descrip-search-wrap">
         <input type="text" id="descrip-input" placeholder="Buscar por descripción..." autocomplete="off" />
         <div id="descrip-results" class="descrip-results hidden"></div>
-      </div>
-
-      <div id="scanner-container" class="hidden">
-        <video id="scanner-video" autoplay muted playsinline></video>
-        <button class="btn-scanner-close" onclick="stopScanner()">✕</button>
-        <div class="scanner-guide-overlay">
-          <div class="scanner-guide-rect"></div>
-          <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
-        </div>
-        <div class="scanner-controls">
-          <button id="switch-camera-btn" class="btn-switch-camera hidden" onclick="switchCamera()">⟳ Cambiar cámara</button>
-        </div>
-        <div id="focus-indicator" class="focus-indicator hidden"></div>
       </div>
 
       <div id="historial-wrap" class="historial-wrap hidden">
@@ -182,6 +419,12 @@
 
       <div class="pick-filters-row">
         <button id="solo-pendientes-btn" class="btn-solo-pend">Solo pendientes</button>
+        <div id="filtro-reparto-pick-wrap" class="filtro-dropdown-wrap hidden">
+          <button id="btn-toggle-filtro-pick" class="btn-filtro-toggle">Reparto: Todos ▾</button>
+          <div id="filtro-reparto-pick" class="filtro-reparto-dropdown hidden">
+            <div id="chips-reparto-pick" class="filtro-reparto-chips"></div>
+          </div>
+        </div>
       </div>
 
       <div id="results"></div>
@@ -194,94 +437,43 @@
         <div class="info-block">
           <button class="info-btn">Ayuda</button>
           <div class="info-content">
-            <p><strong>¿Para qué sirve esta pestaña?</strong> Muestra el resumen del pick agrupado por cliente. En lugar de ver artículo por artículo, acá ves cuánto lleva separado cada cliente de todo su pedido.</p>
-            <p><strong>¿Qué muestra cada fila?</strong> El nombre del cliente, su zona, el importe total del pedido, y una barrita de progreso que indica cuánto del pedido ya está separado.</p>
-            <p><strong>Los filtros de arriba:</strong><br>
-            — <strong>Todos</strong>: muestra todos los clientes de la semana<br>
-            — <strong>Completo</strong>: solo los clientes donde ya está todo separado<br>
-            — <strong>Incompleto</strong>: los clientes donde se separó algo pero no todo (entrega parcial)<br>
-            — <strong>Pendiente</strong>: los clientes donde todavía no se separó nada</p>
-            <p><strong>¿Para qué toco una fila?</strong> Al tocar un cliente se abre un desglose con todos los artículos de ese cliente y cuánto se separó de cada uno. Útil para revisar antes de cerrar el bulto.</p>
-            <p><strong>El buscador</strong> filtra por nombre de cliente. Si no te acordás bien cómo se escribe, con escribir dos o tres letras ya aparece.</p>
-            <p><strong>Los clientes están ordenados por importe</strong>, de mayor a menor. Los más importantes aparecen primero.</p>
+            <p><strong>¿Para qué sirve esta pestaña?</strong> Muestra el resumen del pick agrupado por cliente: cuántos ítems tiene cada uno y cuánto lleva separado.</p>
+            <p><strong>Los filtros de estado:</strong><br>
+            — <strong>Todos</strong>: todos los clientes de la semana<br>
+            — <strong>Completo</strong>: solo los que tienen todo separado<br>
+            — <strong>Incompleto</strong>: los que tienen algo separado pero no todo<br>
+            — <strong>Pendiente</strong>: los que todavía no tienen nada</p>
+            <p><strong>Filtro por reparto:</strong> el botón <strong>"Reparto: Todos ▾"</strong> filtra la lista para mostrar solo los clientes de ciertos repartos. Muy útil para DIARCO: el viernes podés filtrar solo "Sur Arriba" y "Merlo" para trabajar únicamente con esos clientes.</p>
+            <p><strong>¿Para qué toco un cliente?</strong> Al tocarlo se abre un panel con todos sus artículos. Desde ese panel podés:<br>
+            — Ver qué se separó y qué falta<br>
+            — Tocar <strong>Escanear</strong> para escanear artículos de ese cliente: si el artículo le pertenece, se resalta automáticamente; si no pertenece, aparece un aviso. El resaltado queda hasta que entregues el ítem, cerrés el panel, o escanees otro.</p>
+            <p><strong>El buscador</strong> filtra por nombre de cliente. Los clientes están ordenados por importe de mayor a menor.</p>
+            <p><strong>El ✓ a la izquierda</strong> de cada cliente marca que su papel/remito ya fue separado (se guarda en el dispositivo).</p>
           </div>
         </div>
       </div>
 
       <input type="text" id="clientes-search" class="clientes-search-input" placeholder="Buscar cliente..." autocomplete="off" />
-      <div class="filter-bar">
-        <button class="filter-btn active" data-filter="todos">Todos</button>
-        <button class="filter-btn" data-filter="completo">Completo</button>
-        <button class="filter-btn" data-filter="incompleto">Incompleto</button>
-        <button class="filter-btn" data-filter="pendiente">Pendiente</button>
+
+      <div class="clientes-filters-row">
+        <div class="filter-bar">
+          <button class="filter-btn active" data-filter="todos">Todos</button>
+          <button class="filter-btn" data-filter="completo">Completo</button>
+          <button class="filter-btn" data-filter="incompleto">Incompleto</button>
+          <button class="filter-btn" data-filter="pendiente">Pendiente</button>
+        </div>
+
+        <!-- Filtro por reparto (menú desplegable) -->
+        <div id="filtro-reparto-clientes-wrap" class="filtro-dropdown-wrap hidden">
+          <button id="btn-toggle-filtro-clientes" class="btn-filtro-toggle">Reparto: Todos ▾</button>
+          <div id="filtro-reparto-clientes" class="filtro-reparto-dropdown filtro-reparto-dropdown-right hidden">
+            <div id="chips-reparto-clientes" class="filtro-reparto-chips"></div>
+          </div>
+        </div>
       </div>
       <div id="resumen-list"></div>
     </div>
 
-    <!-- ── Panel: Sobrantes ──────────────────────────────────────────── -->
-    <div class="tab-panel hidden" data-panel="sobrantes">
-
-      <div class="panel-help-bar">
-        <div class="info-block">
-          <button class="info-btn">Ayuda</button>
-          <div class="info-content">
-            <p><strong>¿Para qué sirve esta pestaña?</strong> Para registrar los artículos que sobran al final del picking. Escaneás o buscás cada producto, ingresás cuántas unidades o bultos quedaron, y exportás la lista para mandársela a administración.</p>
-            <p><strong>¿Cómo se usa?</strong><br>
-            1. Elegí una lista existente o creá una nueva con <strong>+ Nueva</strong><br>
-            2. Escaneá el código de barras del producto sobrante o escribilo a mano<br>
-            3. Ajustá las <strong>unidades</strong> y los <strong>bultos</strong> con los botones − y +<br>
-            4. Cuando terminés, tocá <strong>Exportar Excel</strong> para descargar la lista</p>
-            <p>Si escaneás un producto que ya está en la lista, la app lo resalta en lugar de duplicarlo.</p>
-            <p>Las listas <strong>no se comparten</strong> entre Yaguar y DIARCO — cada mayorista tiene las suyas.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Selector de lista -->
-      <div class="sob-lista-card">
-        <div class="sob-lista-top">
-          <label class="sob-card-label">Lista activa</label>
-          <button id="sob-del-lista-btn" class="btn-link-del">Eliminar</button>
-        </div>
-        <select id="sob-lista-select" class="sob-lista-select"></select>
-        <button id="sob-nueva-btn" class="btn-secondary sob-nueva-btn">+ Nueva lista</button>
-      </div>
-
-      <!-- Buscador / scanner -->
-      <div class="sob-search-card">
-        <label class="sob-card-label">Agregar artículo</label>
-        <div class="search-row" style="margin-top:6px">
-          <input type="text" id="sob-barcode-input" placeholder="Código de barras..." autocomplete="off" inputmode="numeric" />
-          <button type="button" id="sob-scan-btn" class="btn-icon">📷</button>
-          <button type="button" id="sob-buscar-btn" class="btn-search">Buscar</button>
-        </div>
-        <div class="descrip-search-wrap">
-          <input type="text" id="sob-descrip-input" placeholder="O buscá por descripción..." autocomplete="off" />
-          <div id="sob-descrip-results" class="descrip-results hidden"></div>
-        </div>
-      </div>
-
-      <div id="sob-scanner-container" class="hidden">
-        <video id="sob-scanner-video" autoplay muted playsinline></video>
-        <button class="btn-scanner-close" onclick="stopSobScanner()">✕</button>
-        <div class="scanner-guide-overlay">
-          <div class="scanner-guide-rect"></div>
-          <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
-        </div>
-        <div class="scanner-controls">
-          <button id="sob-switch-camera-btn" class="btn-switch-camera hidden" onclick="switchSobCamera()">⟳ Cambiar cámara</button>
-        </div>
-      </div>
-
-      <!-- Lista de items -->
-      <div id="sob-items" class="sob-items"></div>
-
-      <!-- Barra inferior fija: exportar -->
-      <div id="sob-export-bar" class="sob-export-bar hidden">
-        <a id="sob-export-link" class="btn-primary sob-export-btn">↓ Exportar Excel</a>
-      </div>
-
-    </div>
 
     <!-- ── Panel: Admin ─────────────────────────────────────────────── -->
     <div class="tab-panel hidden" data-panel="admin">
@@ -316,10 +508,12 @@
           <div class="info-block">
             <button class="info-btn">Ayuda</button>
             <div class="info-content">
-              <p>Acá se gestionan todos los clientes. Cada cliente tiene un <strong>código Yaguar</strong> único, un nombre, una zona y un vendedor asignado.</p>
-              <p>Usá <strong>+ Nuevo</strong> para registrar un cliente nuevo — el sistema asigna automáticamente el próximo código disponible. Tocá cualquier fila para editar los datos de un cliente existente.</p>
-              <p>Si modificás el nombre o la zona de un cliente, todos los picks de ese cliente se actualizan automáticamente.</p>
-              <p>Si aparece una sección <strong>Sin registrar</strong> arriba de la tabla, son clientes que tienen picks importados pero todavía no tienen datos cargados.</p>
+              <p>La tabla muestra el <strong>código</strong>, el <strong>nombre del negocio</strong> y el <strong>flete</strong> de cada cliente. Tocá cualquier fila para ver y editar todos los datos (localidad, teléfono, contacto, vendedor). Si modificás el nombre o la zona, los picks de ese cliente se actualizan automáticamente.</p>
+              <p><strong>+ Nuevo (Yaguar):</strong> al crear un cliente nuevo primero elegís el tipo:<br>
+              — <strong>Consumidor Final</strong>: el sistema asigna automáticamente el próximo código libre (no se puede editar). Si ese código no pertenece a tu zona en Yaguar, tocá <strong>"No existe en mi zona"</strong> para descartarlo y pasar al siguiente.<br>
+              — <strong>Factura A</strong>: ingresás el código manualmente.</p>
+              <p><strong>+ Nuevo (DIARCO):</strong> el formulario se abre directo con el código editable.</p>
+              <p><strong>Sin registrar:</strong> si aparece esta sección arriba de la tabla, son clientes que aparecieron en picks importados pero todavía no tienen datos cargados. Tocá "Registrar" para completarlos.</p>
             </div>
           </div>
           <div class="admin-header">
@@ -332,13 +526,9 @@
             <table class="clientes-table">
               <thead>
                 <tr>
-                  <th id="th-codigo-yaguar">Cód.</th>
+                  <th>Cód.</th>
                   <th>Nombre</th>
-                  <th>Localidad</th>
-                  <th>Teléfono</th>
-                  <th>Contacto</th>
-                  <th>Vendedor</th>
-                  <th id="th-flete-yaguar">Flete</th>
+                  <th>Flete</th>
                   <th></th>
                 </tr>
               </thead>
@@ -380,9 +570,11 @@
             <div class="info-block">
               <button class="info-btn">Ayuda</button>
               <div class="info-content">
-                <p>Exportá el archivo desde la app Yaguar: <strong>Menú → Sincronizar → Exportar base de datos</strong>. Cada vendedor tiene su propio archivo.</p>
-                <p>Podés subir varios archivos a la vez — uno por vendedor. El sistema los procesa todos juntos y arma el pick completo de la semana.</p>
-                <p>Si reimportás una semana que ya existe con el mismo nombre, se reemplazan todos sus picks anteriores.</p>
+                <p><strong>¿De dónde sale el archivo?</strong> Conectá el celular del vendedor a la PC por USB y copiá el archivo desde la siguiente ruta. Cada vendedor tiene su propio archivo — subí uno por cada vendedor que haya tomado pedidos en ese rango de fechas.</p>
+                <p><strong>Ubicación del archivo en la PC:</strong><br><code>Este equipo › Dispositivo MTP USB › Almacenamiento interno compartido › Android › data › com.mobilenik.svm › files › svm.db</code></p>
+                <p><strong>¿Qué importa el sistema?</strong> Busca todos los pedidos cuya fecha cae entre "Fecha desde" y "Fecha hasta" y crea una tarjeta de pick por cada artículo de cada cliente. Si un cliente no está registrado en la app, se abrirá un formulario para cargarlo después de la importación.</p>
+                <p><strong>Nombre del pick:</strong> es el nombre que van a ver los operarios en el selector. Usá algo claro como "PICK 30-04-2026". Si ya existe una semana con ese nombre, se reemplazan todos sus picks anteriores.</p>
+                <p><strong>Visible / Oculta:</strong> en la lista de semanas cargadas podés ocultar semanas viejas con el botón "Oculta". Los operarios no las verán en el selector, pero los datos siguen guardados.</p>
               </div>
             </div>
             <input type="file" id="db-file-input" accept=".db" multiple class="hidden" />
@@ -397,9 +589,10 @@
             <div class="info-block" style="margin-bottom:16px">
               <button class="info-btn">Ayuda</button>
               <div class="info-content">
-                <p>Los importes que muestra la app <strong>incluyen IVA</strong> y se calculan proporcionalmente sobre los artículos que se pickean.</p>
-                <p>Se excluyen automáticamente los ítems de sistema que no se pickean físicamente, como <strong>heladeras exhibidoras</strong> y artículos sin código numérico.</p>
-                <p>Si reimportás una semana que ya existe con el mismo nombre, se reemplazan todos sus picks anteriores.</p>
+                <p><strong>¿Qué importa el sistema?</strong> Busca todos los pedidos dentro del rango de fechas y crea una tarjeta de pick por cada artículo de cada cliente. Se excluyen automáticamente los ítems de sistema que no se pickean (heladeras exhibidoras, artículos sin código numérico).</p>
+                <p><strong>Importes:</strong> los valores que muestra la app incluyen IVA y se calculan proporcionalmente sobre los artículos que sí se pickean.</p>
+                <p><strong>Nombre del pick:</strong> es el nombre que verán los operarios. Si ya existe una semana con ese nombre, se reemplazan todos sus picks anteriores.</p>
+                <p><strong>Visible / Oculta:</strong> en la lista de semanas cargadas podés ocultar semanas viejas. Los operarios no las verán en el selector pero los datos quedan guardados.</p>
               </div>
             </div>
             <div class="form-group">
@@ -419,8 +612,10 @@
             <div class="info-block">
               <button class="info-btn">Ayuda</button>
               <div class="info-content">
-                <p>Exportá el archivo desde la app DIARCO: <strong>Menú → Backup → MobileAssistantBU.db</strong>.</p>
-                <p>Podés subir varios archivos si tenés backups de distintos vendedores — el sistema los combina automáticamente.</p>
+                <p><strong>¿De dónde sale el archivo?</strong> Conectá el celular del vendedor a la PC por USB y copiá el archivo desde la siguiente ruta. Si hay varios vendedores, podés subir varios archivos a la vez — el sistema los combina automáticamente.</p>
+                <p><strong>Ubicación del archivo en la PC:</strong><br><code>Este equipo › Dispositivo MTP USB › Almacenamiento interno compartido › Android › data › com.inalambrik.android.drco › files › MobileAssistant › Users › VEN_52 › Backups › MobileAssistantBU.db</code><br>La carpeta dentro de <em>Users</em> puede ser <strong>VEN_52</strong> o <strong>VEN_53</strong> según el vendedor.</p>
+                <p><strong>Fechas:</strong> el sistema filtra los pedidos del DB que caigan dentro del rango "Fecha desde / Fecha hasta". Asegurate de que las fechas coincidan con el período de pedidos que querés importar.</p>
+                <p>Si un cliente del archivo no está registrado en la app, aparecerá un formulario para cargarlo luego de la importación.</p>
               </div>
             </div>
             <input type="file" id="diarco-file-input" accept=".db" multiple class="hidden" />
@@ -432,64 +627,18 @@
           <div id="import-result" class="import-result hidden"></div>
         </div>
 
-        <!-- Sub-panel: Usuarios -->
-        <div class="admin-tab-panel hidden" data-admin-panel="usuarios">
-          <div class="info-block">
-            <button class="info-btn">Ayuda</button>
-            <div class="info-content">
-              <p>Cada persona que usa la app necesita su propio usuario. Hay tres roles:</p>
-              <p><strong>Operario</strong> — solo ve los picks de su turno, no tiene acceso al panel Admin.</p>
-              <p><strong>Admin</strong> — puede importar semanas, gestionar clientes y exportar Excel, pero no puede cambiar roles de otros usuarios.</p>
-              <p><strong>Superadmin</strong> — acceso total, incluyendo cambiar roles. Solo puede haber uno (el usuario ADMIN).</p>
-              <p>Para eliminar un usuario tocá el <strong>✕</strong> en su fila. No se puede eliminar el superadmin ni el único usuario que quede.</p>
-            </div>
-          </div>
-          <div class="admin-section-title" style="margin-bottom:16px">Usuarios activos</div>
-          <div class="table-wrap" style="margin-bottom:24px">
-            <table class="clientes-table">
-              <thead>
-                <tr>
-                  <th>Usuario</th>
-                  <th>Rol</th>
-                  <th>Sobrantes</th>
-                  <th>Creado</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody id="users-tbody"></tbody>
-            </table>
-          </div>
-
-          <div class="admin-section-title" style="margin-bottom:12px">Nuevo usuario</div>
-          <form id="nuevo-usuario-form">
-            <div class="form-group">
-              <label>Usuario</label>
-              <input type="text" id="nu-email" required autocomplete="off" />
-            </div>
-            <div class="form-group">
-              <label>Contraseña</label>
-              <input type="password" id="nu-password" required minlength="6" />
-            </div>
-            <div class="form-group">
-              <label>Rol</label>
-              <select id="nu-rol">
-                <option value="operario">Operario</option>
-                <option value="vendedor">Vendedor</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <button type="submit" class="btn-primary">Crear usuario</button>
-          </form>
-        </div>
+        <!-- Sub-panel: Usuarios (movido al hub, se deja vacío aquí) -->
+        <div class="admin-tab-panel hidden" data-admin-panel="usuarios"></div>
 
         <!-- Sub-panel: Zonas -->
         <div class="admin-tab-panel hidden" data-admin-panel="zonas">
           <div class="info-block">
             <button class="info-btn">Ayuda</button>
             <div class="info-content">
-              <p>Las <strong>zonas</strong> son las localidades de los clientes (MERLO, VILLA LARCA, etc.). Cada zona debe estar asignada a un reparto para que los picks aparezcan en el orden correcto al pickear.</p>
-              <p>Los <strong>repartos</strong> agrupan zonas que salen en el mismo vehículo (Sur Abajo, Sur Arriba, Merlo, etc.). El orden de los repartos determina cómo se organizan los picks — usá las flechas <strong>▲▼</strong> para cambiarlo.</p>
-              <p>Cuando se importa una semana, las zonas nuevas que aparecen se crean automáticamente. Asignales un reparto acá para que queden ordenadas.</p>
+              <p>Las <strong>zonas</strong> son las localidades de los clientes (MERLO, VILLA LARCA, etc.). Cada zona debe estar asignada a un reparto.</p>
+              <p>Los <strong>repartos</strong> agrupan zonas que salen en el mismo vehículo (Sur Abajo, Sur Arriba, Merlo, etc.). El orden de los repartos determina cómo se ordenan las tarjetas en el pick — usá las flechas <strong>▲▼</strong> para cambiarlo.</p>
+              <p>Los repartos también se usan como filtro en las pestañas Pick y Clientes: el botón <strong>"Reparto: Todos ▾"</strong> te permite ver solo los clientes de los repartos que elegís. Para que el filtro funcione bien, todas las zonas deben tener un reparto asignado.</p>
+              <p>Cuando se importa una semana, las zonas nuevas se crean automáticamente. Asignales un reparto acá.</p>
             </div>
           </div>
           <div class="admin-section-title" style="margin-bottom:12px">Orden de repartos</div>
@@ -527,6 +676,18 @@
 
         <!-- Sub-panel: Auditoría -->
         <div class="admin-tab-panel hidden" data-admin-panel="historial">
+          <div class="info-block" style="margin-bottom:12px">
+            <button class="info-btn">Ayuda</button>
+            <div class="info-content">
+              <p>La auditoría registra cada vez que un operario entrega (total o parcialmente) un artículo. Usala para ver qué hizo cada uno, cuándo, y si las cantidades quedaron completas o parciales.</p>
+              <p><strong>Filtros disponibles:</strong><br>
+              — <strong>Semana</strong>: seleccioná la sesión de pick que querés revisar<br>
+              — <strong>Usuario</strong>: filtrá por operario para ver solo su actividad<br>
+              — <strong>Artículo</strong>: escribí el código o descripción, o escaneá el código de barras<br>
+              — <strong>Solo incompletos</strong>: muestra solo los artículos que se entregaron parcialmente (menos de lo pedido)</p>
+              <p>El resumen arriba muestra cuántos artículos completó e hizo incompletos cada operario en esa sesión.</p>
+            </div>
+          </div>
           <div class="admin-section-title" style="margin-bottom:12px">Auditoría de actividad</div>
           <div class="auditoria-filters">
             <div class="auditoria-filter-row">
@@ -571,6 +732,14 @@
 
         <!-- Sub-panel: Reparto -->
         <div class="admin-tab-panel hidden" data-admin-panel="reparto">
+          <div class="info-block" style="margin-bottom:12px">
+            <button class="info-btn">Ayuda</button>
+            <div class="info-content">
+              <p>Las asignaciones de reparto permiten indicar qué operario se encarga de pickear cada reparto (zona de entrega) en una semana específica. Esta información es de referencia — no bloquea ni restringe el acceso del operario a los picks.</p>
+              <p>Seleccioná la semana con el selector de arriba, asigná un usuario a cada reparto, y tocá <strong>Guardar</strong>. Si no querés asignar a nadie, dejá la opción en "Sin asignar".</p>
+              <p>Los repartos se configuran desde <strong>Panel → Zonas</strong>.</p>
+            </div>
+          </div>
           <div class="admin-section-title" style="margin-bottom:12px">Asignaciones de reparto</div>
           <div class="reparto-semana-row">
             <label for="reparto-semana-sel">Semana</label>
@@ -645,7 +814,13 @@
         <button id="modal-close" class="modal-close">✕</button>
       </div>
       <form id="cliente-form">
-        <div id="cf-id-yaguar-wrap" class="form-group"><label id="cf-id-label">Código Yaguar</label><input type="text" id="cf-id_yaguar" placeholder="Ej: 123456" autocomplete="off" /></div>
+        <div id="cf-id-yaguar-wrap" class="form-group">
+          <label id="cf-id-label">Código Yaguar</label>
+          <div class="cf-codigo-row">
+            <input type="text" id="cf-id_yaguar" placeholder="Ej: 123456" autocomplete="off" />
+            <button type="button" id="btn-no-en-zona" class="btn-no-zona hidden">No existe en mi zona</button>
+          </div>
+        </div>
         <div class="form-group"><label>Nombre</label><input type="text" id="cf-nombre" required /></div>
         <div class="form-group"><label>Zona *</label><select id="cf-localidad" required><option value="">— Seleccioná una zona —</option></select></div>
         <div class="form-group"><label>Dirección</label><input type="text" id="cf-direccion" /></div>
@@ -712,8 +887,12 @@
           <span id="cliente-picks-progress" class="sheet-progress"></span>
         </div>
         <div class="sheet-header-actions">
+          <button id="scan-cliente-btn" class="btn-scan-cliente hidden">📷 Escanear</button>
           <button id="cliente-picks-close" class="modal-close">✕</button>
         </div>
+      </div>
+      <div id="scan-cliente-banner" class="scan-cliente-banner hidden">
+        Escaneando para: <strong id="scan-cliente-nombre-banner"></strong>
       </div>
       <div id="cliente-picks-content" class="cliente-picks-content"></div>
     </div>
@@ -762,11 +941,139 @@
           <input type="checkbox" id="edit-sobrantes" style="width:16px;height:16px;cursor:pointer" />
           Acceso a sobrantes
         </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text)">
+          <input type="checkbox" id="edit-novedades" style="width:16px;height:16px;cursor:pointer" />
+          Acceso a novedades
+        </label>
         <div style="display:flex;gap:10px;margin-top:4px">
           <button type="button" class="btn-secondary" id="edit-user-cancel" style="flex:1">Cancelar</button>
           <button type="submit" class="btn-primary" style="flex:1">Guardar</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ── Modal: entrega parcial ─────────────────────────────────────────── -->
+  <div id="parcial-modal" class="modal-overlay hidden">
+    <div class="modal parcial-modal-box">
+      <div class="modal-header">
+        <span id="parcial-modal-title">Entrega parcial</span>
+        <button id="parcial-modal-close" class="modal-close">✕</button>
+      </div>
+      <div class="parcial-modal-body">
+        <div id="parcial-modal-desc" class="parcial-desc"></div>
+        <div class="parcial-fields">
+          <div class="parcial-field" id="parcial-bultos-wrap">
+            <label>Bultos</label>
+            <div class="parcial-stepper-row">
+              <button class="btn-parcial-step" data-field="bultos" data-delta="-1">−</button>
+              <input type="number" id="parcial-bultos" min="0" inputmode="numeric" value="0" />
+              <button class="btn-parcial-step" data-field="bultos" data-delta="1">+</button>
+            </div>
+          </div>
+          <div class="parcial-field">
+            <label id="parcial-uni-label">Unidades sueltas</label>
+            <div class="parcial-stepper-row">
+              <button class="btn-parcial-step" data-field="unidades" data-delta="-1">−</button>
+              <input type="number" id="parcial-unidades" min="0" inputmode="numeric" value="0" />
+              <button class="btn-parcial-step" data-field="unidades" data-delta="1">+</button>
+            </div>
+          </div>
+        </div>
+        <div id="parcial-total-preview" class="parcial-total"></div>
+        <div id="parcial-ayuda" class="parcial-ayuda hidden"></div>
+        <div class="parcial-actions">
+          <button id="parcial-cancelar" class="btn-secondary">Cancelar</button>
+          <button id="parcial-confirmar" class="btn-primary">Confirmar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: elegir tipo de cliente (CF o Factura A) ─────────────────── -->
+  <div id="tipo-cliente-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width:340px">
+      <div class="modal-header">
+        <span>Nuevo cliente Yaguar</span>
+        <button id="tipo-cliente-close" class="modal-close">✕</button>
+      </div>
+      <div style="padding:20px;display:flex;flex-direction:column;gap:12px">
+        <p style="font-size:13px;color:var(--muted)">¿Qué tipo de cliente es?</p>
+        <button id="btn-tipo-cf" class="btn-primary">Consumidor Final</button>
+        <button id="btn-tipo-fa" class="btn-secondary">Factura A (código manual)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scanner (global — funciona desde cualquier pestaña) -->
+  <div id="scanner-container" class="hidden">
+    <video id="scanner-video" autoplay muted playsinline></video>
+    <button class="btn-scanner-close" onclick="stopScanner()">✕</button>
+    <div class="scanner-guide-overlay">
+      <div class="scanner-guide-rect"></div>
+      <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
+    </div>
+    <div class="scanner-controls">
+      <button id="switch-camera-btn" class="btn-switch-camera hidden" onclick="switchCamera()">⟳ Cambiar cámara</button>
+    </div>
+    <div id="focus-indicator" class="focus-indicator hidden"></div>
+  </div>
+
+  <!-- ── Modal standalone: Gestión de usuarios (acceso desde hub) ─────── -->
+  <div id="usuarios-modal" class="modal-overlay hidden" style="align-items:flex-start;padding:16px">
+    <div class="modal usuarios-modal-box">
+      <div class="modal-header">
+        <span>Gestión de usuarios</span>
+        <button id="usuarios-modal-close" class="modal-close">✕</button>
+      </div>
+      <div class="usuarios-modal-body">
+        <div class="admin-section-title" style="margin-bottom:12px">Usuarios activos</div>
+        <div class="table-wrap" style="margin-bottom:20px">
+          <table class="clientes-table">
+            <thead>
+              <tr>
+                <th>Usuario</th>
+                <th>Rol</th>
+                <th>Sobrantes</th>
+                <th>Novedades</th>
+                <th>Creado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+        <div class="admin-section-title" style="margin-bottom:10px">Nuevo usuario</div>
+        <form id="nuevo-usuario-form">
+          <div class="form-group">
+            <label>Usuario</label>
+            <input type="text" id="nu-email" required autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label>Contraseña</label>
+            <input type="password" id="nu-password" required minlength="6" />
+          </div>
+          <div class="form-group">
+            <label>Rol</label>
+            <select id="nu-rol">
+              <option value="operario">Operario</option>
+              <option value="vendedor">Vendedor</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <button type="submit" class="btn-primary">Crear usuario</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de alerta de scan (no match en cliente) -->
+  <div id="scan-alert-overlay" class="confirm-overlay hidden">
+    <div class="confirm-box">
+      <div id="scan-alert-msg" class="confirm-msg"></div>
+      <div class="confirm-actions" style="justify-content:center">
+        <button id="scan-alert-ok" class="btn-primary" style="flex:none;min-width:100px">OK</button>
+      </div>
     </div>
   </div>
 
@@ -785,7 +1092,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=10"></script>
-  <script src="js/app.js?v=10"></script>
+  <script src="js/api.js?v=41"></script>
+  <script src="js/app.js?v=41"></script>
 </body>
 </html>

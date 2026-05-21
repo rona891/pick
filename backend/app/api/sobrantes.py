@@ -17,6 +17,8 @@ class ItemIn(BaseModel):
     cod_art: Optional[str] = None
     descrip: Optional[str] = None
     mayorista: Optional[str] = None
+    precio_unit: Optional[float] = None
+    uxb: Optional[int] = None
 
 class CantidadIn(BaseModel):
     unidades: int = 0
@@ -70,8 +72,8 @@ def _add_item(lista: str, data: ItemIn, mayorista: str):
         if existing:
             return {"action": "existing", **dict(existing)}
         cur.execute(
-            "INSERT INTO sobrantes (cod_bar, cod_art, descrip, unidades, bultos, lista, mayorista) VALUES (%s,%s,%s,0,0,%s,%s) RETURNING id, cod_bar, cod_art, descrip, unidades, bultos",
-            (cod_bar, cod_art, descrip, lista, mayorista)
+            "INSERT INTO sobrantes (cod_bar, cod_art, descrip, unidades, bultos, lista, mayorista, precio_unit, uxb) VALUES (%s,%s,%s,0,0,%s,%s,%s,%s) RETURNING id, cod_bar, cod_art, descrip, unidades, bultos",
+            (cod_bar, cod_art, descrip, lista, mayorista, data.precio_unit, data.uxb or 0)
         )
         return {"action": "added", **dict(cur.fetchone())}
 
@@ -105,17 +107,24 @@ def _delete_lista(lista: str, mayorista: str):
 def _lookup(cod_bar: str, mayorista: str):
     with get_db() as cur:
         for col in ("cod_bar", "cod_bar_bulto"):
-            cur.execute(f"SELECT cod_art, descrip FROM pick WHERE {col}=%s AND mayorista=%s LIMIT 1", (cod_bar, mayorista))
+            cur.execute(f"""
+                SELECT p.cod_art, p.descrip, COALESCE(p.uxb, ap.uxb, 0) AS uxb,
+                       COALESCE(p.precio_unit, ap.precio_con_iva) AS precio_unit
+                FROM pick p
+                LEFT JOIN articulos_precios ap ON ap.cod_art = p.cod_art AND ap.mayorista = p.mayorista
+                WHERE p.{col}=%s AND p.mayorista=%s LIMIT 1
+            """, (cod_bar, mayorista))
             row = cur.fetchone()
             if row:
-                return {"cod_art": row["cod_art"], "descrip": row["descrip"], "found": True}
-    return {"cod_art": None, "descrip": None, "found": False}
+                return {"cod_art": row["cod_art"], "descrip": row["descrip"],
+                        "uxb": row["uxb"] or 0, "precio_unit": row["precio_unit"], "found": True}
+    return {"cod_art": None, "descrip": None, "uxb": 0, "precio_unit": None, "found": False}
 
 
 def _search_descrip(q: str, mayorista: str):
     with get_db() as cur:
         cur.execute(
-            "SELECT DISTINCT cod_bar, cod_art, descrip FROM pick WHERE descrip ILIKE %s AND mayorista=%s ORDER BY descrip LIMIT 20",
+            "SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, uxb, precio_unit FROM pick WHERE descrip ILIKE %s AND mayorista=%s ORDER BY cod_art, descrip LIMIT 20",
             (f"%{q}%", mayorista)
         )
         return [dict(r) for r in cur.fetchall()]
@@ -142,12 +151,12 @@ def _export(lista: str, mayorista: str):
         cell.font = hfont
         cell.alignment = Alignment(horizontal="center")
 
-    alt = PatternFill("solid", fgColor="1E1E1E")
+    alt = PatternFill("solid", fgColor="FFFDE7")
     for i, r in enumerate(rows, 2):
         vals = [r["cod_bar"], r["cod_art"], r["descrip"], r["unidades"], r["bultos"]]
         for c, v in enumerate(vals, 1):
             cell = ws.cell(i, c, v)
-            cell.font = Font(color="FFFFFF")
+            cell.font = Font(color="141414")
             cell.alignment = Alignment(horizontal="center" if c > 3 else "left")
             if i % 2 == 0:
                 cell.fill = alt
@@ -269,27 +278,31 @@ def _lookup_shared(cod_bar: str):
     with get_db() as cur:
         for m in ("yaguar", "diarco"):
             for col in ("cod_bar", "cod_bar_bulto"):
-                cur.execute(
-                    f"SELECT cod_art, descrip FROM pick WHERE {col}=%s AND mayorista=%s LIMIT 1",
-                    (cod_bar, m)
-                )
+                cur.execute(f"""
+                    SELECT p.cod_art, p.descrip, COALESCE(p.uxb, ap.uxb, 0) AS uxb,
+                           COALESCE(p.precio_unit, ap.precio_con_iva) AS precio_unit
+                    FROM pick p
+                    LEFT JOIN articulos_precios ap ON ap.cod_art = p.cod_art AND ap.mayorista = p.mayorista
+                    WHERE p.{col}=%s AND p.mayorista=%s LIMIT 1
+                """, (cod_bar, m))
                 row = cur.fetchone()
                 if row:
-                    return {"cod_art": row["cod_art"], "descrip": row["descrip"], "mayorista": m, "found": True}
-    return {"cod_art": None, "descrip": None, "mayorista": None, "found": False}
+                    return {"cod_art": row["cod_art"], "descrip": row["descrip"], "mayorista": m,
+                            "uxb": row["uxb"] or 0, "precio_unit": row["precio_unit"], "found": True}
+    return {"cod_art": None, "descrip": None, "mayorista": None, "uxb": 0, "precio_unit": None, "found": False}
 
 
 def _search_shared(q: str, mayorista: Optional[str] = None):
     with get_db() as cur:
         if mayorista:
             cur.execute("""
-                SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista
+                SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista, uxb, precio_unit
                 FROM pick WHERE descrip ILIKE %s AND mayorista = %s
                 ORDER BY cod_art, descrip LIMIT 20
             """, (f"%{q}%", mayorista))
         else:
             cur.execute("""
-                SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista
+                SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista, uxb, precio_unit
                 FROM pick WHERE descrip ILIKE %s
                 ORDER BY cod_art, descrip LIMIT 20
             """, (f"%{q}%",))
@@ -318,10 +331,10 @@ def _add_item_shared(lista: str, data: ItemIn):
         if existing:
             return {"action": "existing", **dict(existing)}
         cur.execute(
-            """INSERT INTO sobrantes (cod_bar, cod_art, descrip, unidades, bultos, lista, mayorista)
-               VALUES (%s,%s,%s,0,0,%s,%s)
+            """INSERT INTO sobrantes (cod_bar, cod_art, descrip, unidades, bultos, lista, mayorista, precio_unit, uxb)
+               VALUES (%s,%s,%s,0,0,%s,%s,%s,%s)
                RETURNING id, cod_bar, cod_art, descrip, unidades, bultos, mayorista""",
-            (cod_bar, cod_art, descrip, lista, mayorista)
+            (cod_bar, cod_art, descrip, lista, mayorista, data.precio_unit, data.uxb or 0)
         )
         return {"action": "added", **dict(cur.fetchone())}
 
@@ -342,12 +355,15 @@ def _export_shared(lista: str):
     with get_db() as cur:
         cur.execute("""
             SELECT s.mayorista, s.cod_bar, s.cod_art, s.descrip, s.unidades, s.bultos,
-                   p.uxb, p.precio_unit
+                   COALESCE(s.uxb, ap.uxb, p.uxb, 0) AS uxb,
+                   COALESCE(s.precio_unit, ap.precio_con_iva, p.precio_unit) AS precio_unit
             FROM sobrantes s
+            LEFT JOIN articulos_precios ap
+                ON ap.cod_art = s.cod_art AND ap.mayorista = s.mayorista
             LEFT JOIN LATERAL (
                 SELECT uxb, precio_unit FROM pick
                 WHERE pick.cod_art = s.cod_art AND pick.mayorista = s.mayorista
-                ORDER BY created_at DESC LIMIT 1
+                ORDER BY id DESC LIMIT 1
             ) p ON true
             WHERE s.lista = %s
             ORDER BY s.mayorista, s.created_at DESC
@@ -361,25 +377,28 @@ def _export_shared(lista: str):
     hfill = PatternFill("solid", fgColor="E0FF4F")
     hfont = Font(bold=True, color="141414")
     headers = ["Mayorista", "Cód. Artículo", "Descripción",
-               "Unid.", "Bultos", "UxB", "Unid. Totales", "Precio c/IVA"]
+               "Unid.", "Bultos", "UxB", "Unid. Totales", "Precio unit. c/IVA", "Total c/IVA"]
     for c, h in enumerate(headers, 1):
         cell = ws.cell(1, c, h)
         cell.fill = hfill; cell.font = hfont
         cell.alignment = Alignment(horizontal="center")
 
-    alt = PatternFill("solid", fgColor="1E1E1E")
+    alt = PatternFill("solid", fgColor="FFFDE7")
     for i, r in enumerate(rows, 2):
         precio = round(float(r["precio_unit"]), 2) if r["precio_unit"] is not None else ""
         uxb = r["uxb"] or 0
         unid_totales = r["unidades"] + (uxb * r["bultos"]) if uxb else r["unidades"]
+        total = round(float(r["precio_unit"]) * unid_totales, 2) if r["precio_unit"] is not None else ""
         vals = [r["mayorista"], r["cod_art"], r["descrip"],
-                r["unidades"], r["bultos"], uxb or "", unid_totales, precio]
+                r["unidades"], r["bultos"], uxb or "", unid_totales, precio, total]
         for c, v in enumerate(vals, 1):
             cell = ws.cell(i, c, v)
-            cell.font = Font(color="FFFFFF")
+            cell.font = Font(color="141414")
             cell.alignment = Alignment(horizontal="center" if c > 3 else "left")
             if i % 2 == 0:
                 cell.fill = alt
+            if c in (8, 9) and isinstance(v, (int, float)):
+                cell.number_format = '"$"#,##0.00'
 
     ws.column_dimensions["A"].width = 12
     ws.column_dimensions["B"].width = 14
@@ -388,13 +407,14 @@ def _export_shared(lista: str):
     ws.column_dimensions["E"].width = 8
     ws.column_dimensions["F"].width = 7
     ws.column_dimensions["G"].width = 14
-    ws.column_dimensions["H"].width = 14
+    ws.column_dimensions["H"].width = 18
+    ws.column_dimensions["I"].width = 16
     ws.freeze_panes = "A2"
 
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = f"sobrantes_{lista.replace(' ', '_')}.xlsx"
+    fname = f"Sobrantes {lista}.xlsx"
     return StreamingResponse(
         buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={fname}"}

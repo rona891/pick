@@ -26,7 +26,7 @@ import tempfile
 import os
 import re
 import unicodedata
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 
 # Items que DIARCO usa internamente y no forman parte del picking real.
 # - cod_art no numérico: items de sistema (ej: 'Semaforo')
@@ -41,8 +41,13 @@ def _es_item_real(cod_art: str, descrip: str) -> bool:
         return False
     descrip_lower = (descrip or "").lower()
     return not any(excluida in descrip_lower for excluida in DESCRIP_EXCLUIDAS)
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 from app.db.database import get_db
+
+
+class VisibleIn(BaseModel):
+    visible: bool
 
 router = APIRouter(prefix="/diarco/semanas", tags=["Diarco - Semanas"])
 
@@ -320,13 +325,28 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
 
 
 @router.get("/")
-def list_semanas_diarco():
+def list_semanas_diarco(all: Optional[bool] = Query(default=False)):
     with get_db() as cur:
-        cur.execute(
-            "SELECT id, nombre, created_at FROM semanas WHERE mayorista = %s ORDER BY created_at DESC",
-            (MAYORISTA,),
-        )
+        if all:
+            cur.execute(
+                "SELECT id, nombre, visible, created_at FROM semanas WHERE mayorista = %s ORDER BY created_at DESC",
+                (MAYORISTA,),
+            )
+        else:
+            cur.execute(
+                "SELECT id, nombre, visible, created_at FROM semanas WHERE mayorista = %s AND visible = true ORDER BY created_at DESC",
+                (MAYORISTA,),
+            )
         return [dict(r) for r in cur.fetchall()]
+
+
+@router.put("/{id}/visible")
+def toggle_semana_visible_diarco(id: int, data: VisibleIn):
+    with get_db() as cur:
+        cur.execute("UPDATE semanas SET visible = %s WHERE id = %s RETURNING id", (data.visible, id))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Semana no encontrada")
+    return {"ok": True}
 
 
 @router.post("/importar")
@@ -441,6 +461,24 @@ async def importar_semana_diarco(
                 ),
             )
             inserted += 1
+
+    # Upsert de precios por artículo (tabla articulos_precios)
+    with get_db() as cur:
+        seen_arts = set()
+        for p in all_picks:
+            cod_art = p.get("cod_art")
+            if not cod_art or cod_art in seen_arts:
+                continue
+            precio_unit = p.get("precio_unit")
+            uxb_art = p.get("uxb") or 0
+            if precio_unit:
+                cur.execute("""
+                    INSERT INTO articulos_precios (cod_art, mayorista, precio_con_iva, uxb)
+                    VALUES (%s, 'diarco', %s, %s)
+                    ON CONFLICT (cod_art, mayorista) DO UPDATE
+                    SET precio_con_iva = EXCLUDED.precio_con_iva, uxb = EXCLUDED.uxb
+                """, (cod_art, round(precio_unit, 4), uxb_art))
+                seen_arts.add(cod_art)
 
     clientes_sin_datos = [{"id": cod, "nombre": obs} for cod, obs in sin_datos.items()]
 

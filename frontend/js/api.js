@@ -50,6 +50,7 @@ function clearToken() {
   localStorage.removeItem('rol');
   localStorage.removeItem('username');
   localStorage.removeItem('acceso_sobrantes');
+  localStorage.removeItem('acceso_novedades');
 }
 
 function getMayorista() {
@@ -89,6 +90,10 @@ function esAdminOVendedor() {
 
 function tieneSobrantes() {
   return localStorage.getItem('acceso_sobrantes') === '1';
+}
+
+function tieneNovedades() {
+  return localStorage.getItem('acceso_novedades') === '1';
 }
 
 async function request(method, path, body = null) {
@@ -152,7 +157,12 @@ const api = {
 
   // Picks — rutas separadas por mayorista (/api/yaguar/picks/ o /api/diarco/picks/)
   getStats: (semana) => request('GET', `/api/${getMayorista()}/picks/stats${semanaParam(semana)}`),
-  getResumen: (semana) => request('GET', `/api/${getMayorista()}/picks/resumen${semanaParam(semana)}`),
+  getResumen: (semana, repartos = []) => {
+    const params = new URLSearchParams();
+    if (semana) params.set('semana', semana);
+    repartos.forEach((r) => params.append('repartos', r));
+    return request('GET', `/api/${getMayorista()}/picks/resumen?${params}`);
+  },
   getByBarcode: (cod_bar, semana) => request('GET', `/api/${getMayorista()}/picks/barcode/${encodeURIComponent(cod_bar)}${semanaParam(semana)}`),
   getByCodArt: (cod_art, semana) => request('GET', `/api/${getMayorista()}/picks/art/${encodeURIComponent(cod_art)}${semanaParam(semana)}`),
   buscarPorDescrip: (q, semana) => request('GET', `/api/${getMayorista()}/picks/buscar?q=${encodeURIComponent(q)}${semana ? `&semana=${encodeURIComponent(semana)}` : ''}`),
@@ -168,6 +178,7 @@ const api = {
   getSinRegistrar: () => request('GET', `/api/${getMayorista()}/clientes/sin-registrar`),
   getCodigoLibreYaguar: () => request('GET', '/api/yaguar/clientes/codigo-libre'),
   marcarNoApto: (codigo) => request('PUT', '/api/yaguar/clientes/marcar-no-apto', { codigo }),
+  marcarNoZona: (codigo) => request('PUT', '/api/yaguar/clientes/marcar-no-zona', { codigo }),
 
   // Admin
   verifyAdmin: (password) => request('POST', '/api/admin/verify', { password }),
@@ -200,6 +211,8 @@ const api = {
 
   // Semanas (rutas separadas por mayorista)
   getSemanas: () => request('GET', `/api/${getMayorista()}/semanas/`),
+  getSemanasAdmin: () => request('GET', `/api/${getMayorista()}/semanas/?all=true`),
+  toggleSemanaVisible: (id, visible) => request('PUT', `/api/${getMayorista()}/semanas/${id}/visible`, { visible }),
   deleteSemana: (id) => request('DELETE', `/api/${getMayorista()}/semanas/${id}`),
   importarSemana: async (formData) => {
     const token = getToken();
@@ -219,6 +232,14 @@ const api = {
 
   // Historial
   getHistorial: (semana) => request('GET', `/api/${getMayorista()}/picks/historial${semanaParam(semana)}`),
+
+  // Novedades
+  novGetItems: (semana) => request('GET', `/api/${getMayorista()}/novedades/?semana=${encodeURIComponent(semana)}`),
+  novAddItem: (data) => request('POST', `/api/${getMayorista()}/novedades/`, data),
+  novDeleteItem: (id) => request('DELETE', `/api/${getMayorista()}/novedades/${id}`),
+  novLookup: (codBar, semana) => request('GET', `/api/${getMayorista()}/novedades/lookup/${encodeURIComponent(codBar)}?semana=${encodeURIComponent(semana || '')}`),
+  novSearch: (q, semana) => request('GET', `/api/${getMayorista()}/novedades/search?q=${encodeURIComponent(q)}&semana=${encodeURIComponent(semana || '')}`),
+  novExportUrl: (semana) => `/api/${getMayorista()}/novedades/export?semana=${encodeURIComponent(semana)}`,
 
   // Asignaciones de reparto
   getAsignaciones: (semana) => request('GET', `/api/${getMayorista()}/asignaciones/?semana=${encodeURIComponent(semana)}`),
