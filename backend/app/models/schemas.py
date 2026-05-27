@@ -34,6 +34,7 @@ class LoginResponse(BaseModel):
     rol: str
     acceso_sobrantes: bool = False
     acceso_novedades: bool = False
+    acceso_pick: bool = True
 
 
 class StatsResponse(BaseModel):
@@ -61,6 +62,7 @@ class Cliente(BaseModel):
     vendedor: Optional[str] = None
     id_yaguar: Optional[str] = None
     flete: Optional[float] = None
+    cod_sis: Optional[str] = None
 
 
 class ClienteCreate(BaseModel):
@@ -73,6 +75,7 @@ class ClienteCreate(BaseModel):
     mayorista: str = 'yaguar'
     id_yaguar: Optional[str] = None
     flete: Optional[float] = None
+    cod_sis: Optional[str] = None
 
 
 class MarcarNoAptoIn(BaseModel):
@@ -94,6 +97,7 @@ class UserUpdate(BaseModel):
     rol: Optional[str] = None
     acceso_sobrantes: Optional[bool] = None
     acceso_novedades: Optional[bool] = None
+    acceso_pick: Optional[bool] = None
 
 
 class UserOut(BaseModel):
@@ -102,6 +106,7 @@ class UserOut(BaseModel):
     rol: str = 'operario'
     acceso_sobrantes: bool = False
     acceso_novedades: bool = False
+    acceso_pick: bool = True
     created_at: Optional[datetime] = None
 
 

@@ -51,6 +51,7 @@ function clearToken() {
   localStorage.removeItem('username');
   localStorage.removeItem('acceso_sobrantes');
   localStorage.removeItem('acceso_novedades');
+  localStorage.removeItem('acceso_pick');
 }
 
 function getMayorista() {
@@ -94,6 +95,11 @@ function tieneSobrantes() {
 
 function tieneNovedades() {
   return localStorage.getItem('acceso_novedades') === '1';
+}
+
+function tienePick() {
+  const val = localStorage.getItem('acceso_pick');
+  return val === null || val === '1'; // default true si no existe aún
 }
 
 async function request(method, path, body = null) {
@@ -208,6 +214,7 @@ const api = {
 
   // Export — rutas separadas por mayorista (/api/yaguar/export/ o /api/diarco/export/)
   exportPicksUrl: (semana) => `/api/${getMayorista()}/export/picks?semana=${encodeURIComponent(semana)}`,
+  exportModUrl: (semana) => `/api/yaguar/export/mod?semana=${encodeURIComponent(semana)}`,
 
   // Semanas (rutas separadas por mayorista)
   getSemanas: () => request('GET', `/api/${getMayorista()}/semanas/`),

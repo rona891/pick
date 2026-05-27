@@ -20,6 +20,7 @@ async def lifespan(app: FastAPI):
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS rol VARCHAR NOT NULL DEFAULT 'operario'")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_sobrantes BOOLEAN NOT NULL DEFAULT false")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_novedades BOOLEAN NOT NULL DEFAULT false")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_pick BOOLEAN NOT NULL DEFAULT true")
         # Crear superadmin si no existe ninguno
         cur.execute("SELECT COUNT(*) AS n FROM users WHERE rol = 'superadmin'")
         if cur.fetchone()["n"] == 0:
@@ -173,10 +174,12 @@ async def lifespan(app: FastAPI):
                 unidades integer DEFAULT 0,
                 bultos integer DEFAULT 0,
                 uxb integer DEFAULT 0,
+                precio numeric(12,2),
                 created_at timestamptz DEFAULT now()
             )
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_novedades_mayorista_semana ON novedades(mayorista, semana)")
+        cur.execute("ALTER TABLE novedades ADD COLUMN IF NOT EXISTS precio numeric(12,2)")
         cur.execute("ALTER TABLE sobrantes ADD COLUMN IF NOT EXISTS precio_unit NUMERIC")
         cur.execute("ALTER TABLE sobrantes ADD COLUMN IF NOT EXISTS uxb INTEGER DEFAULT 0")
         cur.execute("""
@@ -207,6 +210,7 @@ async def lifespan(app: FastAPI):
         # Estado de códigos Yaguar (ocupado/libre/no_apto según últimas 10 semanas)
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS estado VARCHAR")
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS flete NUMERIC")
+        cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS cod_sis VARCHAR")
         # Marcar códigos conocidos como no aptos para factura B
         cur.execute("""
             UPDATE clientes_yaguar SET estado = 'no_apto'

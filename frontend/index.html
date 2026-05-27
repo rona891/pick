@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=41" />
+  <link rel="stylesheet" href="css/styles.css?v=54" />
 </head>
 <body>
 
@@ -46,7 +46,7 @@
     <div class="hub">
 
       <!-- Picking -->
-      <div class="hub-section">
+      <div class="hub-section" id="hub-picking-section">
         <div class="hub-section-title">Picking</div>
         <div class="mayorista-cards">
           <button class="mayorista-card" data-mayorista="yaguar" data-destino="pick">
@@ -160,6 +160,7 @@
           <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
         </div>
         <div class="scanner-controls">
+          <button id="sob-torch-btn" class="btn-switch-camera hidden" onclick="toggleTorch('sob-scanner-video','sob-torch-btn')">🔦 Flash</button>
           <button id="sob-switch-camera-btn" class="btn-switch-camera hidden" onclick="switchSobCamera()">⟳ Cambiar cámara</button>
         </div>
       </div>
@@ -192,14 +193,15 @@
           <div class="info-content">
             <p><strong>¿Qué son las novedades?</strong> Son eventos que ocurren durante el reparto: artículos que faltaron, devoluciones de clientes, o cambios (el cliente devuelve el ítem para recibir uno nuevo).</p>
             <p><strong>¿Cómo se registra una novedad?</strong><br>
-            1. Escaneá el artículo o buscalo por descripción<br>
-            2. Elegí el cliente (solo aparecen los que pidieron ese artículo en la semana activa)<br>
-            3. Seleccioná el tipo: <strong>Devolución</strong>, <strong>Faltante</strong> o <strong>Cambio</strong><br>
-            4. Ajustá los bultos y unidades sueltas con los botones − y +<br>
-            5. Opcionalmente, escribí una observación (ej: "rotura de envase")<br>
-            6. Tocá <strong>+ Agregar novedad</strong></p>
-            <p><strong>Importante:</strong> el artículo debe seleccionarse antes que el cliente. Esto asegura que solo podés elegir clientes que realmente pidieron ese ítem en la semana seleccionada.</p>
-            <p><strong>Exportar:</strong> el botón <strong>↓ Exportar Excel</strong> descarga todas las novedades de la semana seleccionada para el mayorista activo, con precios y cantidades.</p>
+            1. Seleccioná la semana del reparto en el selector de arriba<br>
+            2. Escaneá el artículo o buscalo por descripción<br>
+            3. Elegí el cliente — solo aparecen los que pidieron ese artículo en la semana seleccionada<br>
+            4. Seleccioná el tipo: <strong>Devolución</strong>, <strong>Faltante</strong> o <strong>Cambio</strong> (obligatorio)<br>
+            5. Ingresá los bultos y unidades sueltas. Los botones − y + suman o restan de a uno; <strong>manteniéndolos apretados</strong> van al máximo o al mínimo automáticamente. La cantidad no puede superar lo que pidió el cliente<br>
+            6. Opcionalmente, escribí una observación (ej: "rotura de envase")<br>
+            7. Tocá <strong>+ Agregar novedad</strong></p>
+            <p><strong>Orden obligatorio:</strong> primero el artículo, luego el cliente. Los campos de cantidad quedan bloqueados hasta que se elige el cliente. El tipo de novedad tampoco tiene selección por defecto para evitar errores.</p>
+            <p><strong>Exportar:</strong> el botón <strong>↓ Exportar Excel</strong> (al final de la lista) descarga todas las novedades de la semana activa con precio unitario c/IVA y total por ítem.</p>
           </div>
         </div>
       </div>
@@ -216,8 +218,11 @@
 
         <!-- Scanner / búsqueda por código -->
         <input type="text" id="nov-barcode-input" class="hidden" autocomplete="off" inputmode="numeric" />
-        <button type="button" id="nov-scan-btn" class="btn-scan-full" style="margin-bottom:6px">Escanear</button>
-        <div class="descrip-search-wrap">
+        <div class="nov-scan-row">
+          <button type="button" id="nov-scan-btn" class="btn-scan-full">Escanear</button>
+          <button type="button" id="nov-manual-btn" class="btn-manual">✏️ Manual</button>
+        </div>
+        <div class="descrip-search-wrap" style="margin-top:6px">
           <input type="text" id="nov-descrip-input" placeholder="O buscá por descripción..." autocomplete="off" />
           <div id="nov-descrip-results" class="descrip-results hidden"></div>
         </div>
@@ -229,6 +234,9 @@
           <div class="scanner-guide-overlay">
             <div class="scanner-guide-rect"></div>
             <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
+          </div>
+          <div class="scanner-controls">
+            <button id="nov-torch-btn" class="btn-switch-camera hidden" onclick="toggleTorch('nov-scanner-video','nov-torch-btn')">🔦 Flash</button>
           </div>
         </div>
 
@@ -270,6 +278,9 @@
           </div>
         </div>
 
+        <!-- Máximo según pedido -->
+        <div id="nov-max-hint" class="nov-max-hint hidden"></div>
+
         <!-- Observaciones -->
         <textarea id="nov-observaciones" class="nov-obs-input" placeholder="Observaciones (opcional)..." rows="2"></textarea>
 
@@ -298,6 +309,33 @@
         <button id="nov-cliente-modal-close" class="modal-close">✕</button>
       </div>
       <div id="nov-cliente-list" class="nov-cliente-list"></div>
+    </div>
+  </div>
+
+  <!-- ── Modal: carga manual de artículo (novedades) ─────────────────────── -->
+  <div id="nov-manual-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <span>Artículo manual</span>
+        <button type="button" id="nov-manual-cancel" class="modal-close">✕</button>
+      </div>
+      <div style="padding:16px">
+        <label class="nov-manual-label">Cód. Artículo *</label>
+        <input type="text" id="nov-manual-codart" class="nov-manual-input" autocomplete="off" inputmode="numeric" placeholder="Ej: 12345" />
+        <label class="nov-manual-label">Descripción *</label>
+        <input type="text" id="nov-manual-descrip" class="nov-manual-input" autocomplete="off" placeholder="Ej: AGUA MINERAL 2L" />
+        <div class="nov-manual-row2">
+          <div class="nov-manual-col">
+            <label class="nov-manual-label">UxB *</label>
+            <input type="number" id="nov-manual-uxb" class="nov-manual-input" min="0" step="1" placeholder="0" />
+          </div>
+          <div class="nov-manual-col">
+            <label class="nov-manual-label">Precio unit. c/IVA</label>
+            <input type="number" id="nov-manual-precio" class="nov-manual-input" min="0" step="0.01" placeholder="0.00" />
+          </div>
+        </div>
+        <button type="button" id="nov-manual-confirm" class="btn-primary" style="width:100%;margin-top:16px">Usar este artículo</button>
+      </div>
     </div>
   </div>
 
@@ -529,12 +567,12 @@
           </div>
           <div id="sin-registrar-section"></div>
           <div class="table-wrap">
-            <table class="clientes-table">
+            <table class="clientes-table" id="clientes-table">
               <thead>
                 <tr>
-                  <th>Cód.</th>
-                  <th>Nombre</th>
-                  <th>Flete</th>
+                  <th data-sort="id_yaguar" data-label="Cód." style="cursor:pointer;user-select:none">Cód. ▲</th>
+                  <th data-sort="nombre" data-label="Nombre" style="cursor:pointer;user-select:none">Nombre</th>
+                  <th data-sort="flete" data-label="Flete" style="cursor:pointer;user-select:none">Flete</th>
                   <th></th>
                 </tr>
               </thead>
@@ -731,6 +769,9 @@
               <div class="scanner-guide-rect"></div>
               <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
             </div>
+            <div class="scanner-controls">
+              <button id="hist-torch-btn" class="btn-switch-camera hidden" onclick="toggleTorch('hist-scanner-video','hist-torch-btn')">🔦 Flash</button>
+            </div>
           </div>
           <div id="historial-resumen" class="historial-resumen"></div>
           <div id="historial-tabla-wrap"></div>
@@ -834,6 +875,7 @@
         <div class="form-group"><label>Contacto</label><input type="text" id="cf-contacto" /></div>
         <div class="form-group"><label>Vendedor *</label><input type="text" id="cf-vendedor" required /></div>
         <div id="cf-flete-wrap" class="form-group"><label>Flete</label><input type="number" id="cf-flete" step="0.001" min="0" placeholder="Ej: 0.08" /></div>
+        <div id="cf-cod-sis-wrap" class="form-group hidden"><label>COD SIS <span style="color:var(--muted);font-weight:normal">(opcional)</span></label><input type="text" id="cf-cod_sis" placeholder="Ej: 1876" autocomplete="off" /></div>
         <button type="submit" class="btn-primary">Guardar</button>
       </form>
     </div>
@@ -951,6 +993,10 @@
           <input type="checkbox" id="edit-novedades" style="width:16px;height:16px;cursor:pointer" />
           Acceso a novedades
         </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text)">
+          <input type="checkbox" id="edit-pick" style="width:16px;height:16px;cursor:pointer" />
+          Acceso a picking
+        </label>
         <div style="display:flex;gap:10px;margin-top:4px">
           <button type="button" class="btn-secondary" id="edit-user-cancel" style="flex:1">Cancelar</button>
           <button type="submit" class="btn-primary" style="flex:1">Guardar</button>
@@ -1020,6 +1066,7 @@
       <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
     </div>
     <div class="scanner-controls">
+      <button id="torch-btn" class="btn-switch-camera hidden" onclick="toggleTorch('scanner-video','torch-btn')">🔦 Flash</button>
       <button id="switch-camera-btn" class="btn-switch-camera hidden" onclick="switchCamera()">⟳ Cambiar cámara</button>
     </div>
     <div id="focus-indicator" class="focus-indicator hidden"></div>
@@ -1040,9 +1087,6 @@
               <tr>
                 <th>Usuario</th>
                 <th>Rol</th>
-                <th>Sobrantes</th>
-                <th>Novedades</th>
-                <th>Creado</th>
                 <th></th>
               </tr>
             </thead>
@@ -1098,7 +1142,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=41"></script>
-  <script src="js/app.js?v=41"></script>
+  <script src="js/api.js?v=54"></script>
+  <script src="js/app.js?v=54"></script>
 </body>
 </html>
