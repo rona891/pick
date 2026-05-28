@@ -20,10 +20,9 @@ class ZonaIn(BaseModel):
 def list_zonas():
     with get_db() as cur:
         cur.execute("""
-            SELECT z.id, z.nombre, z.reparto, COALESCE(r.orden, 99) AS orden
+            SELECT z.id, z.nombre, z.reparto
             FROM zonas z
-            LEFT JOIN repartos r ON z.reparto = r.nombre
-            ORDER BY orden ASC, z.nombre ASC
+            ORDER BY z.nombre ASC
         """)
         return [dict(r) for r in cur.fetchall()]
 

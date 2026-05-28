@@ -238,7 +238,7 @@ async def importar_semana(
                 SELECT nombre FROM semanas
                 WHERE mayorista = 'yaguar'
                 ORDER BY created_at DESC
-                LIMIT 10
+                LIMIT 12
             ),
             codigos_activos AS (
                 SELECT DISTINCT cliente FROM pick
@@ -255,6 +255,8 @@ async def importar_semana(
                 ELSE 'libre'
             END
             WHERE id_yaguar IS NOT NULL
+              AND es_factura_a = false
+              AND (estado IS NULL OR estado NOT IN ('no_apto', 'no_zona'))
               AND id_yaguar IN (SELECT cliente FROM codigos_con_historial)
         """)
 

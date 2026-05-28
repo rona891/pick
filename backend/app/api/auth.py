@@ -16,7 +16,7 @@ class RolUpdate(BaseModel):
 def login(request: LoginRequest):
     with get_db() as cur:
         cur.execute(
-            "SELECT id, username, password_hash, rol, acceso_sobrantes, acceso_novedades FROM users WHERE LOWER(username) = LOWER(%s)",
+            "SELECT id, username, password_hash, rol, acceso_sobrantes, acceso_novedades, acceso_pick FROM users WHERE LOWER(username) = LOWER(%s)",
             (request.username,),
         )
         user = cur.fetchone()
@@ -24,11 +24,13 @@ def login(request: LoginRequest):
     if not user or not verify_password(request.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
+    is_admin = user["rol"] in ("superadmin", "admin")
     return {
         "access_token": create_access_token(user["id"], user["username"]),
         "rol": user["rol"],
-        "acceso_sobrantes": user["rol"] == "superadmin" or bool(user["acceso_sobrantes"]),
-        "acceso_novedades": user["rol"] == "superadmin" or bool(user["acceso_novedades"]),
+        "acceso_sobrantes": is_admin or bool(user["acceso_sobrantes"]),
+        "acceso_novedades": is_admin or bool(user["acceso_novedades"]),
+        "acceso_pick": is_admin or bool(user["acceso_pick"]),
     }
 
 
@@ -42,13 +44,15 @@ def get_me(authorization: str = Header(...)):
     payload = verify_token(authorization)
     user_id = payload.get("sub")
     with get_db() as cur:
-        cur.execute("SELECT rol, acceso_sobrantes, acceso_novedades FROM users WHERE id = %s", (user_id,))
+        cur.execute("SELECT rol, acceso_sobrantes, acceso_novedades, acceso_pick FROM users WHERE id = %s", (user_id,))
         user = cur.fetchone()
     if not user:
         raise HTTPException(404, "Usuario no encontrado")
+    is_admin = user["rol"] in ("superadmin", "admin")
     return {
-        "acceso_sobrantes": user["rol"] == "superadmin" or bool(user["acceso_sobrantes"]),
-        "acceso_novedades": user["rol"] == "superadmin" or bool(user["acceso_novedades"]),
+        "acceso_sobrantes": is_admin or bool(user["acceso_sobrantes"]),
+        "acceso_novedades": is_admin or bool(user["acceso_novedades"]),
+        "acceso_pick": is_admin or bool(user["acceso_pick"]),
     }
 
 
@@ -95,7 +99,7 @@ def change_username(request: ChangeUsernameRequest, authorization: str = Header(
 def list_users():
     with get_db() as cur:
         cur.execute("""
-            SELECT id, username, rol, acceso_sobrantes, acceso_novedades, created_at FROM users
+            SELECT id, username, rol, acceso_sobrantes, acceso_novedades, acceso_pick, created_at FROM users
             ORDER BY CASE rol
                 WHEN 'superadmin' THEN 1
                 WHEN 'admin' THEN 2
@@ -115,7 +119,7 @@ def create_user(data: UserCreate):
         if cur.fetchone():
             raise HTTPException(status_code=400, detail="Usuario ya registrado")
         cur.execute(
-            "INSERT INTO users (username, password_hash, rol) VALUES (%s, %s, %s) RETURNING id, username, rol, acceso_sobrantes, acceso_novedades, created_at",
+            "INSERT INTO users (username, password_hash, rol) VALUES (%s, %s, %s) RETURNING id, username, rol, acceso_sobrantes, acceso_novedades, acceso_pick, created_at",
             (data.username, hash_password(data.password), data.rol),
         )
         return dict(cur.fetchone())
@@ -187,6 +191,8 @@ def update_user(id: int, data: UserUpdate, authorization: str = Header(...)):
         updates.append("acceso_sobrantes = %s"); values.append(data.acceso_sobrantes)
     if data.acceso_novedades is not None:
         updates.append("acceso_novedades = %s"); values.append(data.acceso_novedades)
+    if data.acceso_pick is not None:
+        updates.append("acceso_pick = %s"); values.append(data.acceso_pick)
     if not updates:
         raise HTTPException(400, "Nada que actualizar")
     with get_db() as cur:
@@ -196,7 +202,7 @@ def update_user(id: int, data: UserUpdate, authorization: str = Header(...)):
                 raise HTTPException(400, "Ese nombre de usuario ya está en uso")
         values.append(id)
         cur.execute(
-            f"UPDATE users SET {', '.join(updates)} WHERE id = %s RETURNING id, username, rol, acceso_sobrantes, acceso_novedades, created_at",
+            f"UPDATE users SET {', '.join(updates)} WHERE id = %s RETURNING id, username, rol, acceso_sobrantes, acceso_novedades, acceso_pick, created_at",
             values
         )
         return dict(cur.fetchone())

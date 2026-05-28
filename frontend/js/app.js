@@ -20,6 +20,7 @@ let clienteActual = '';        // nombre del cliente cuyo sheet está abierto
 
 // ── Estado: filtro de repartos en Clientes tab ─────────────────────────────
 let filtroRepartosClientes = new Set();  // repartos seleccionados como chips
+let _clienteEsFA = false;               // true cuando el nuevo cliente es Factura A
 
 // ── Estado: filtro de repartos en Pick tab ─────────────────────────────────
 let filtroRepartosPick = new Set();      // repartos seleccionados en Pick
@@ -27,14 +28,47 @@ let zonaRepartoMap = {};                 // { 'MERLO': 'Merlo', 'VILLA LARCA': '
 let _lastPickSearch = null;              // { code: string } para re-ejecutar al cambiar filtro
 let _highlightedCard = null;             // tarjeta resaltada actualmente en el sheet de cliente
 
+// ── Persistencia de vista y actividad ─────────────────────────────────────
+const INACTIVIDAD_MS = 10 * 60 * 1000; // 10 minutos
+
+function _saveView(view) {
+  localStorage.setItem('_last_view', view);
+}
+
+function _updateActivity() {
+  localStorage.setItem('_last_activity', Date.now().toString());
+}
+
+function _actividadReciente() {
+  const ts = parseInt(localStorage.getItem('_last_activity') || '0');
+  return Date.now() - ts < INACTIVIDAD_MS;
+}
+
+function _restoreView() {
+  const view = localStorage.getItem('_last_view') || 'pick';
+  switch (view) {
+    case 'sobrantes': showSobrantes(); break;
+    case 'novedades': showNovedades(); break;
+    case 'hub':       showHub(); break;
+    case 'clientes':  showApp('clientes'); break;
+    case 'admin':     showApp('admin'); break;
+    default:          showApp('pick'); break;
+  }
+}
+
+// Cualquier click o touch del usuario cuenta como actividad
+['click', 'touchstart'].forEach(evt =>
+  document.addEventListener(evt, _updateActivity, { passive: true })
+);
+
 // ── Init ───────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   aplicarModo();
   if (getToken()) {
-    if (mayoristaCaducado()) {
-      showMayoristaSelector();
+    if (mayoristaCaducado() || !_actividadReciente()) {
+      showHub();
     } else {
-      showApp();
+      _restoreView();
     }
   } else {
     showLogin();
@@ -66,6 +100,7 @@ function _hideAllViews() {
 function showNovedades() {
   stopNovScanner();
   _hideAllViews();
+  _saveView('novedades');
   const m = getMayorista();
   aplicarTema(m);
   document.getElementById('nov-view-badge').textContent = m.toUpperCase();
@@ -84,7 +119,9 @@ function showLogin() {
 function showHub() {
   stopSobScanner();
   _hideAllViews();
+  _saveView('hub');
   document.getElementById('hub-view').classList.remove('hidden');
+  document.getElementById('hub-picking-section').classList.remove('hidden');
   const tieneHerr = tieneSobrantes() || tieneNovedades();
   document.getElementById('hub-herramientas').classList.toggle('hidden', !tieneHerr);
   document.getElementById('hub-btn-sobrantes').classList.toggle('hidden', !tieneSobrantes());
@@ -99,6 +136,7 @@ function showHub() {
 
 function showSobrantes() {
   _hideAllViews();
+  _saveView('sobrantes');
   const m = getMayorista();
   aplicarTema(m);
   document.getElementById('sob-view-badge').textContent = m.toUpperCase();
@@ -123,6 +161,10 @@ function showApp(initialTab = 'pick') {
   adminBtn.classList.toggle('hidden', !esAdminOVendedor());
   if (esVendedor()) document.getElementById('nav-admin-label').textContent = 'Gestión';
   else document.getElementById('nav-admin-label').textContent = 'Panel';
+  const sinPick = !tienePick();
+  document.querySelector('.tab-btn[data-tab="pick"]').classList.toggle('hidden', sinPick);
+  document.querySelector('.tab-btn[data-tab="clientes"]').classList.toggle('hidden', sinPick);
+  if (sinPick && initialTab !== 'admin') initialTab = 'admin';
   document.getElementById('topbar-usuario').textContent = localStorage.getItem('username') || '';
   const m = getMayorista();
   aplicarTema(m);
@@ -133,7 +175,6 @@ function showApp(initialTab = 'pick') {
   if (initialTab === 'pick') loadChipsRepartoPick();
   prewarmCamera();
   renderHistorial();
-  setTimeout(() => document.getElementById('barcode-input').focus(), 200);
 }
 
 // ── Permisos en tiempo real ────────────────────────────────────────────────
@@ -143,12 +184,14 @@ async function checkPermissions() {
     const me = await api.getMe();
     const prevSob = localStorage.getItem('acceso_sobrantes');
     const prevNov = localStorage.getItem('acceso_novedades');
+    const prevPick = localStorage.getItem('acceso_pick');
     const newSob = me.acceso_sobrantes ? '1' : '0';
     const newNov = me.acceso_novedades ? '1' : '0';
+    const newPick = me.acceso_pick ? '1' : '0';
     localStorage.setItem('acceso_sobrantes', newSob);
     localStorage.setItem('acceso_novedades', newNov);
-    // Si cambiaron los permisos y el hub está visible, refrescar sus botones
-    if ((prevSob !== newSob || prevNov !== newNov)) {
+    localStorage.setItem('acceso_pick', newPick);
+    if (prevSob !== newSob || prevNov !== newNov || prevPick !== newPick) {
       const hubVisible = !document.getElementById('hub-view').classList.contains('hidden');
       if (hubVisible) showHub();
     }
@@ -196,6 +239,8 @@ document.querySelectorAll('.mayorista-card').forEach((btn) => {
       showSobrantes();
     } else if (destino === 'novedades') {
       showNovedades();
+    } else if (!tienePick()) {
+      showApp('admin');
     } else {
       showApp('pick');
     }
@@ -274,6 +319,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     setRol(res.rol);
     localStorage.setItem('acceso_sobrantes', res.acceso_sobrantes ? '1' : '0');
     localStorage.setItem('acceso_novedades', res.acceso_novedades ? '1' : '0');
+    localStorage.setItem('acceso_pick', res.acceso_pick ? '1' : '0');
     localStorage.setItem('username', username);
     if (mayoristaCaducado()) {
       showMayoristaSelector();
@@ -369,6 +415,7 @@ function switchTab(tab) {
   if (tab === 'clientes') { loadChipsReparto(); loadResumen(); }
   if (tab === 'admin') initAdmin();
   if (tab === 'sobrantes') initSobrantes();
+  _saveView(tab);
 }
 
 // ── Tab: Pick ──────────────────────────────────────────────────────────────
@@ -728,7 +775,6 @@ function openParcialModal(id, uni, uxb, bul, card, descrip, nombre, cantidadActu
   const primerInput = sinBultos
     ? document.getElementById('parcial-unidades')
     : document.getElementById('parcial-bultos');
-  setTimeout(() => primerInput.focus(), 100);
 }
 
 function _actualizarParcialPreview() {
@@ -898,6 +944,20 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.descrip-search-wrap')) hideDescripResults();
 });
 
+// Cerrar dropdowns al hacer click fuera
+document.addEventListener('click', (e) => {
+  [
+    ['filtro-estado-wrap',           'filtro-estado-dropdown'],
+    ['filtro-reparto-clientes-wrap', 'filtro-reparto-clientes'],
+    ['filtro-reparto-pick-wrap',     'filtro-reparto-pick'],
+  ].forEach(([wrapId, dropId]) => {
+    const wrap = document.getElementById(wrapId);
+    if (wrap && !wrap.contains(e.target)) {
+      document.getElementById(dropId)?.classList.add('hidden');
+    }
+  });
+});
+
 async function buscarPorDescrip(q) {
   try {
     const items = await api.buscarPorDescrip(q, semanaActual);
@@ -1008,6 +1068,7 @@ async function startScanner(deviceId = null) {
       if ((caps.focusMode || []).includes('continuous')) {
         track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
       }
+      applyTorchPreference(track, 'torch-btn');
     }
   }
 }
@@ -1035,6 +1096,35 @@ document.getElementById('scanner-video').addEventListener('click', async (e) => 
   } catch (_) {}
 });
 
+async function toggleTorch(videoId, btnId) {
+  const video = document.getElementById(videoId);
+  const btn = document.getElementById(btnId);
+  if (!video?.srcObject) return;
+  const track = video.srcObject.getVideoTracks()[0];
+  if (!track) return;
+  const on = btn.dataset.torchOn !== 'true';
+  try {
+    await track.applyConstraints({ advanced: [{ torch: on }] });
+    btn.dataset.torchOn = String(on);
+    btn.textContent = on ? '🔦 Flash ON' : '🔦 Flash';
+    btn.classList.toggle('torch-active', on);
+    localStorage.setItem('pick_torch', String(on));
+  } catch (_) {}
+}
+
+function applyTorchPreference(track, btnId) {
+  const caps = track.getCapabilities?.() || {};
+  const btn = document.getElementById(btnId);
+  const hasTorch = 'torch' in caps;
+  btn.classList.toggle('hidden', !hasTorch);
+  if (!hasTorch) return;
+  const on = localStorage.getItem('pick_torch') === 'true';
+  track.applyConstraints({ advanced: [{ torch: on }] }).catch(() => {});
+  btn.dataset.torchOn = String(on);
+  btn.textContent = on ? '🔦 Flash ON' : '🔦 Flash';
+  btn.classList.toggle('torch-active', on);
+}
+
 async function switchCamera() {
   if (cameras.length <= 1) return;
   currentCameraIndex = (currentCameraIndex + 1) % cameras.length;
@@ -1061,7 +1151,10 @@ function stopScanner() {
   scanBtnStop.textContent = 'Escanear';
   scanBtnStop.classList.remove('scanner-active-label');
   document.getElementById('switch-camera-btn').classList.add('hidden');
-
+  const torchBtn = document.getElementById('torch-btn');
+  torchBtn.classList.add('hidden');
+  torchBtn.dataset.torchOn = 'false';
+  torchBtn.classList.remove('torch-active');
 }
 
 // ── Zona→Reparto map (compartido entre Pick y Clientes) ────────────────────
@@ -1227,10 +1320,20 @@ async function loadResumen() {
   }
 }
 
-document.querySelectorAll('.filter-btn[data-filter]').forEach((btn) => {
+const _ESTADO_LABELS = { todos: 'Todos', completo: 'Completo', incompleto: 'Incompleto', pendiente: 'Pendiente' };
+
+document.getElementById('btn-toggle-filtro-estado').addEventListener('click', () => {
+  document.getElementById('filtro-estado-dropdown').classList.toggle('hidden');
+});
+
+document.querySelectorAll('#filtro-estado-dropdown .chip-reparto[data-filter]').forEach((btn) => {
   btn.addEventListener('click', () => {
     filtroActivo = btn.dataset.filter;
-    document.querySelectorAll('.filter-btn[data-filter]').forEach((b) => b.classList.toggle('active', b.dataset.filter === filtroActivo));
+    document.querySelectorAll('#filtro-estado-dropdown .chip-reparto[data-filter]').forEach((b) =>
+      b.classList.toggle('active', b.dataset.filter === filtroActivo));
+    document.getElementById('btn-toggle-filtro-estado').textContent =
+      `Estado: ${_ESTADO_LABELS[filtroActivo] ?? filtroActivo} ▾`;
+    document.getElementById('filtro-estado-dropdown').classList.add('hidden');
     renderResumen();
   });
 });
@@ -1513,11 +1616,10 @@ function registrarClientePendiente(codigo, nombreObs) {
 }
 
 document.getElementById('btn-nuevo-cliente').addEventListener('click', () => {
-  if (getMayorista() === 'yaguar') {
-    document.getElementById('tipo-cliente-modal').classList.remove('hidden');
-  } else {
-    openClienteForm(null);
-  }
+  const mayorista = getMayorista();
+  document.getElementById('tipo-cliente-title').textContent =
+    `Nuevo cliente ${mayorista === 'diarco' ? 'DIARCO' : 'Yaguar'}`;
+  document.getElementById('tipo-cliente-modal').classList.remove('hidden');
 });
 
 document.getElementById('tipo-cliente-close').addEventListener('click', () => {
@@ -1527,7 +1629,10 @@ document.getElementById('tipo-cliente-close').addEventListener('click', () => {
 document.getElementById('btn-tipo-cf').addEventListener('click', async () => {
   document.getElementById('tipo-cliente-modal').classList.add('hidden');
   try {
-    const res = await api.getCodigoLibreYaguar();
+    const res = getMayorista() === 'diarco'
+      ? await api.getCodigoLibreDiarco()
+      : await api.getCodigoLibreYaguar();
+    _clienteEsFA = false;
     openClienteForm(null, res.codigo, null, true); // true = es CF, mostrar botón no_zona
   } catch {
     showToast('No hay códigos libres disponibles', 'error');
@@ -1536,6 +1641,7 @@ document.getElementById('btn-tipo-cf').addEventListener('click', async () => {
 
 document.getElementById('btn-tipo-fa').addEventListener('click', () => {
   document.getElementById('tipo-cliente-modal').classList.add('hidden');
+  _clienteEsFA = true;
   openClienteForm(null, null, null, false); // false = Factura A, código editable
 });
 
@@ -1550,43 +1656,90 @@ document.addEventListener('click', (e) => {
 });
 
 // ── Admin búsqueda de clientes ─────────────────────────────────────────────
-document.getElementById('admin-clientes-search').addEventListener('input', (e) => {
-  const q = e.target.value.toLowerCase();
-  document.querySelectorAll('#clientes-tbody tr').forEach((row) => {
-    row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
-  });
+document.getElementById('admin-clientes-search').addEventListener('input', () => {
+  renderClientes();
 });
 
+let _clientesData = [];
+let _clientesSortCol = 'nombre';
+let _clientesSortDir = 1;  // 1 = asc, -1 = desc
+
 async function loadClientes() {
-  const m = getMayorista();
   document.getElementById('btn-exportar-clientes').classList.remove('hidden');
   const tbody = document.getElementById('clientes-tbody');
-  tbody.innerHTML = `<tr><td colspan="4" class="loading">Cargando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="5" class="loading">Cargando...</td></tr>`;
   try {
-    const clientes = await api.getClientes();
-    tbody.innerHTML = clientes.map((c) => {
-      const flete = c.flete != null ? (Math.round(c.flete * 10000) / 100) + '%' : '—';
-      return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})">
-        <td class="td-full td-cod">${c.id_yaguar ?? '—'}</td>
-        <td class="td-full">${c.nombre ?? ''}</td>
-        <td>${flete}</td>
-        <td onclick="event.stopPropagation()"><div class="td-actions">
-          <button class="btn-edit" onclick="openClienteForm(${c.id})">Editar</button>
-          <button class="btn-del" onclick="deleteCliente(${c.id})">Eliminar</button>
-        </div></td>
-      </tr>`;
-    }).join('');
-    const q = document.getElementById('admin-clientes-search').value.toLowerCase();
-    if (q) {
-      document.querySelectorAll('#clientes-tbody tr').forEach((row) => {
-        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
-      });
-    }
+    _clientesData = await api.getClientes();
+    renderClientes();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" class="error-msg">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="error-msg">${err.message}</td></tr>`;
   }
   loadSinRegistrar();
 }
+
+function renderClientes() {
+  const tbody = document.getElementById('clientes-tbody');
+  const q = document.getElementById('admin-clientes-search').value.toLowerCase();
+
+  let data = [..._clientesData];
+
+  // Ordenar
+  data.sort((a, b) => {
+    let va = a[_clientesSortCol], vb = b[_clientesSortCol];
+    if (_clientesSortCol === 'flete') {
+      va = parseFloat(va) || 0;
+      vb = parseFloat(vb) || 0;
+    } else if (_clientesSortCol === 'es_factura_a') {
+      va = va ? 1 : 0;
+      vb = vb ? 1 : 0;
+    } else {
+      va = (va || '').toString().toLowerCase();
+      vb = (vb || '').toString().toLowerCase();
+    }
+    if (va < vb) return -_clientesSortDir;
+    if (va > vb) return  _clientesSortDir;
+    return 0;
+  });
+
+  // Actualizar indicadores en headers
+  document.querySelectorAll('#clientes-table th[data-sort]').forEach((th) => {
+    const col = th.dataset.sort;
+    const arrow = col === _clientesSortCol ? (_clientesSortDir === 1 ? ' ▲' : ' ▼') : '';
+    th.textContent = th.dataset.label + arrow;
+  });
+
+  tbody.innerHTML = data.map((c) => {
+    const flete = c.flete != null ? (Math.round(c.flete * 10000) / 100) + '%' : '—';
+    const tipoCell = c.es_factura_a
+      ? '<span class="badge-fa">A</span>'
+      : '<span class="badge-cf">CF</span>';
+    const hidden = q && !(`${c.id_yaguar} ${c.nombre} ${flete}`).toLowerCase().includes(q) ? 'style="display:none"' : '';
+    return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})" ${hidden}>
+      <td class="td-full td-cod">${c.id_yaguar ?? '—'}</td>
+      <td style="text-align:center;width:52px">${tipoCell}</td>
+      <td class="td-full">${c.nombre ?? ''}</td>
+      <td>${flete}</td>
+      <td onclick="event.stopPropagation()"><div class="td-actions">
+        <button class="btn-edit" onclick="openClienteForm(${c.id})">Editar</button>
+        <button class="btn-del" onclick="deleteCliente(${c.id})">Eliminar</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+// Click en cabecera de tabla → ordenar
+document.addEventListener('click', (e) => {
+  const th = e.target.closest('#clientes-table th[data-sort]');
+  if (!th) return;
+  const col = th.dataset.sort;
+  if (_clientesSortCol === col) {
+    _clientesSortDir *= -1;
+  } else {
+    _clientesSortCol = col;
+    _clientesSortDir = 1;
+  }
+  renderClientes();
+});
 
 document.getElementById('btn-exportar-clientes').addEventListener('click', () => {
   window.location.href = `/api/${getMayorista()}/export/clientes`;
@@ -1602,35 +1755,60 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null,
   // Mostrar campo ID para ambos mayoristas con label correspondiente
   document.getElementById('cf-id-yaguar-wrap').style.display = '';
   document.getElementById('cf-id-label').textContent = esYaguar ? 'Código Yaguar' : 'Código DIARCO';
-  document.getElementById('cf-flete-wrap').style.display = esYaguar ? '' : 'none';
+  document.getElementById('cf-flete-wrap').style.display = '';
+  document.getElementById('cf-cod-sis-wrap').classList.toggle('hidden', !esYaguar);
+  document.getElementById('cf-cod_sis').value = '';
 
-  // Yaguar CF: readonly (código del pool). Yaguar FA y Diarco: editable.
-  const esReadonly = esYaguar && (esCF === true || (esCF === null && !!codigoPreverificado && !id));
+  // CF: readonly (código del pool). FA y código manual: editable.
+  const esReadonly = (esCF === true || (esCF === null && !!codigoPreverificado && !id));
   idInput.readOnly = esReadonly;
   idInput.value = '';
-  idInput.placeholder = esYaguar && !esReadonly ? 'Ingresá el código Yaguar' : (esYaguar ? '' : 'Ingresá el código DIARCO');
+  idInput.placeholder = !esReadonly ? `Ingresá el código ${esYaguar ? 'Yaguar' : 'DIARCO'}` : '';
 
-  // Botón "No existe en mi zona": solo para Yaguar CF nuevos
+  // Botón "No existe en mi zona": para CF nuevos de cualquier mayorista
   const btnNoZona = document.getElementById('btn-no-en-zona');
-  btnNoZona.classList.toggle('hidden', !(esYaguar && esCF === true && !id));
+  btnNoZona.classList.toggle('hidden', !(esCF === true && !id));
 
-  const fields = ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'];
+  const fields = ['nombre', 'localidad', 'direccion', 'telefono', 'contacto'];
   fields.forEach((f) => { document.getElementById(`cf-${f}`).value = ''; });
+  document.getElementById('cf-vendedor').value = '';
+  document.getElementById('cf-vendedor').disabled = false;
   document.getElementById('cf-flete').value = '';
+  document.getElementById('cf-cuit_deposito').value = '';
   if (nombrePre) document.getElementById('cf-nombre').value = nombrePre;
 
-  const zonas = await api.getZonas().catch(() => []);
+  const [zonas, vendedores] = await Promise.all([
+    api.getZonas().catch(() => []),
+    api.getVendedoresYaguar().catch(() => []),
+  ]);
+
   const sel = document.getElementById('cf-localidad');
   sel.innerHTML = '<option value="">— Seleccioná una zona —</option>' +
     zonas.map((z) => `<option value="${z.nombre}">${z.nombre}</option>`).join('');
+
+  const selVend = document.getElementById('cf-vendedor');
+  selVend.innerHTML = '<option value="">— Seleccioná un vendedor —</option>' +
+    vendedores.map((v) => `<option value="${v}">${v}</option>`).join('');
 
   if (id) {
     api.getClientes().then((list) => {
       const c = list.find((x) => x.id === id);
       if (c) {
-        fields.forEach((f) => { document.getElementById(`cf-${f}`).value = c[f] ?? ''; });
+        ['nombre', 'localidad', 'direccion', 'telefono', 'contacto'].forEach((f) => {
+          document.getElementById(`cf-${f}`).value = c[f] ?? '';
+        });
         idInput.value = c.id_yaguar ?? '';
-        document.getElementById('cf-flete').value = c.flete ?? '';
+        document.getElementById('cf-flete').value = c.flete != null ? Math.round(c.flete * 10000) / 100 : '';
+        document.getElementById('cf-cod_sis').value = c.cod_sis ?? '';
+        document.getElementById('cf-cuit_deposito').value = c.cuit_deposito ?? '';
+        // Vendor: add to list if value isn't already an option (legacy/imported data)
+        const vv = c.vendedor ?? '';
+        if (vv && !selVend.querySelector(`option[value="${vv.replace(/"/g, '\\"')}"]`)) {
+          const opt = document.createElement('option');
+          opt.value = vv; opt.textContent = vv;
+          selVend.appendChild(opt);
+        }
+        selVend.value = vv;
       }
     });
   } else if (codigoPreverificado) {
@@ -1639,6 +1817,14 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null,
     if (nombrePre) idInput.readOnly = true;
   }
 
+  // Vendedores editando: solo pueden tocar nombre, zona, dirección, teléfono, contacto
+  const soloLectura = id && esVendedor();
+  idInput.readOnly = idInput.readOnly || soloLectura;
+  selVend.disabled = soloLectura;  // select no soporta readOnly; disabled pero JS aún lee .value
+  document.getElementById('cf-flete-wrap').style.display   = soloLectura ? 'none' : '';
+  document.getElementById('cf-cod-sis-wrap').classList.toggle('hidden', !esYaguar || soloLectura);
+  document.getElementById('cf-cuit-wrap').style.display    = soloLectura ? 'none' : '';
+
   document.getElementById('cliente-modal').classList.remove('hidden');
 }
 
@@ -1646,11 +1832,22 @@ document.getElementById('modal-close').addEventListener('click', () => {
   document.getElementById('cliente-modal').classList.add('hidden');
 });
 
+document.getElementById('cf-id_yaguar').addEventListener('input', (e) => {
+  e.target.value = e.target.value.replace(/\D/g, '');
+});
+
 document.getElementById('btn-no-en-zona').addEventListener('click', async () => {
   const codigo = document.getElementById('cf-id_yaguar').value;
   if (!codigo) return;
+  const ok = await confirmar(
+    `¿Confirmar que el código ${codigo} no existe en tu zona? Se descartará y se asignará el siguiente disponible.`,
+    'Sí, descartar'
+  );
+  if (!ok) return;
   try {
-    const res = await api.marcarNoZona(codigo);
+    const res = getMayorista() === 'diarco'
+      ? await api.marcarNoZonaDiarco(codigo)
+      : await api.marcarNoZona(codigo);
     showToast(`Código ${codigo} marcado como no disponible`, 'info');
     if (res.nuevo_codigo) {
       document.getElementById('cf-id_yaguar').value = res.nuevo_codigo;
@@ -1671,7 +1868,10 @@ document.getElementById('cliente-form').addEventListener('submit', async (e) => 
   });
   data.id_yaguar = document.getElementById('cf-id_yaguar').value.trim() || null;
   const fleteVal = document.getElementById('cf-flete').value.trim();
-  data.flete = fleteVal !== '' ? parseFloat(fleteVal) : null;
+  data.flete = fleteVal !== '' ? parseFloat(fleteVal) / 100 : null;
+  data.cod_sis = document.getElementById('cf-cod_sis').value.trim() || null;
+  data.cuit_deposito = document.getElementById('cf-cuit_deposito').value.trim() || null;
+  if (!editingClienteId) data.es_factura_a = _clienteEsFA;
 
   if (!data.localidad) { showToast('Seleccioná una zona', 'error'); return; }
   if (!data.vendedor) { showToast('Ingresá el vendedor', 'error'); return; }
@@ -1798,10 +1998,10 @@ async function loadSemanasAdmin() {
   document.getElementById('semanas-desc').innerHTML = m === 'diarco'
     ? `<p>Una <strong>semana</strong> es una sesión de picking: representa todos los pedidos de un rango de fechas que hay que separar en el depósito. Al importar, la app genera automáticamente una tarjeta por cada artículo de cada cliente dentro de ese rango.</p>
        <p>Las semanas aparecen en el selector de la pantalla de pick para que los operarios elijan sobre cuál trabajar. Podés marcar semanas viejas como <strong>Ocultas</strong> para que no aparezcan en ese selector — los datos se conservan para análisis futuro.</p>
-       <p>El botón <strong>↓ Excel</strong> en cada semana cargada exporta el detalle de picks y cantidades entregadas de esa semana.</p>`
+       <p>El botón <strong>↓ Pick</strong> exporta el detalle de picks y cantidades entregadas. El botón <strong>↓ Mod</strong> (solo Yaguar) exporta la planilla de liquidación con totales por cliente, comisión EBD, SALDO y secciones de comprobantes/devoluciones.</p>`
     : `<p>Una <strong>semana</strong> es una sesión de picking: representa todos los pedidos de un rango de fechas que hay que separar en el depósito. Al importar, la app genera automáticamente una tarjeta por cada artículo de cada cliente dentro de ese rango.</p>
        <p>Las semanas aparecen en el selector de la pantalla de pick para que los operarios elijan sobre cuál trabajar. Podés marcar semanas viejas como <strong>Ocultas</strong> para que no aparezcan en ese selector — los datos se conservan para análisis futuro.</p>
-       <p>El botón <strong>↓ Excel</strong> en cada semana cargada exporta el detalle de picks y cantidades entregadas de esa semana.</p>`;
+       <p>El botón <strong>↓ Pick</strong> exporta el detalle de picks y cantidades entregadas. El botón <strong>↓ Mod</strong> (solo Yaguar) exporta la planilla de liquidación con totales por cliente, comisión EBD, SALDO y secciones de comprobantes/devoluciones.</p>`;
   document.getElementById('import-yaguar').classList.toggle('hidden', m === 'diarco');
   document.getElementById('import-diarco').classList.toggle('hidden', m !== 'diarco');
 
@@ -1821,7 +2021,8 @@ async function loadSemanasAdmin() {
                   title="${visible ? 'Ocultar de operarios' : 'Mostrar a operarios'}">
             ${visible ? 'Visible' : 'Oculta'}
           </button>
-          <a class="btn-export" href="${api.exportPicksUrl(s.nombre)}" download>↓ Excel</a>
+          <a class="btn-export" href="${api.exportPicksUrl(s.nombre)}" download>↓ Pick</a>
+          ${m === 'yaguar' ? `<a class="btn-export btn-export-mod" href="${api.exportModUrl(s.nombre)}" download>↓ Mod</a>` : ''}
           <button class="btn-del" onclick="deleteSemana(${s.id}, '${s.nombre.replace(/'/g, "\\'")}')">Eliminar</button>
         </div>
       `;
@@ -1864,48 +2065,36 @@ const ROL_LABELS = { superadmin: 'Superadmin', admin: 'Admin', vendedor: 'Vended
 async function loadUsers() {
   const tbody = document.getElementById('users-tbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="5" class="loading">Cargando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="3" class="loading">Cargando...</td></tr>';
   try {
     const users = await api.getUsers();
     tbody.innerHTML = users.map((u) => {
       const esSuperadmin = u.rol === 'superadmin';
       const rolLabel = `<span style="color:${ROL_COLORS[u.rol] || 'var(--muted)'}">${ROL_LABELS[u.rol] || u.rol}</span>`;
-      const sobLabel = esSuperadmin
-        ? '<span style="color:var(--accent);font-size:11px">Siempre</span>'
-        : `<span style="color:${u.acceso_sobrantes ? 'var(--green)' : 'var(--muted)'}">${u.acceso_sobrantes ? 'Sí' : 'No'}</span>`;
-      const novLabel = esSuperadmin
-        ? '<span style="color:var(--accent);font-size:11px">Siempre</span>'
-        : `<span style="color:${u.acceso_novedades ? 'var(--green)' : 'var(--muted)'}">${u.acceso_novedades ? 'Sí' : 'No'}</span>`;
-      const actions = esSuperadmin ? '<span style="color:var(--muted)">—</span>' : `
-        <button class="btn-edit" onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades})">Editar</button>
-        <button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
-      const clickAttr = esSuperadmin ? '' : `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades})" style="cursor:pointer"`;
+      const deleteBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
+      const clickAttr = esSuperadmin ? '' : `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"`;
       return `
         <tr ${clickAttr}>
           <td>${u.username}</td>
           <td>${rolLabel}</td>
-          <td>${sobLabel}</td>
-          <td>${novLabel}</td>
-          <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('es') : '—'}</td>
-          <td class="td-actions" onclick="event.stopPropagation()">${actions}</td>
+          <td onclick="event.stopPropagation()"><div class="td-actions">${deleteBtn}</div></td>
         </tr>`;
     }).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" class="error-msg">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
   }
 }
 
 // ── Modal editar usuario ───────────────────────────────────────────────────
-function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades) {
+function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades, accesosPick) {
   document.getElementById('edit-user-id').value = id;
   document.getElementById('edit-username').value = username;
   document.getElementById('edit-rol').value = rol;
   document.getElementById('edit-sobrantes').checked = !!accesoSobrantes;
   document.getElementById('edit-novedades').checked = !!accesoNovedades;
-  // Cualquier admin puede cambiar rol
+  document.getElementById('edit-pick').checked = accesosPick === undefined ? true : !!accesosPick;
   document.getElementById('edit-rol-group').classList.remove('hidden');
   document.getElementById('edit-user-modal').classList.remove('hidden');
-  setTimeout(() => document.getElementById('edit-username').focus(), 50);
 }
 
 function closeEditUser() {
@@ -1922,6 +2111,7 @@ document.getElementById('edit-user-form').addEventListener('submit', async (e) =
     username: document.getElementById('edit-username').value.trim(),
     acceso_sobrantes: document.getElementById('edit-sobrantes').checked,
     acceso_novedades: document.getElementById('edit-novedades').checked,
+    acceso_pick: document.getElementById('edit-pick').checked,
   };
   data.rol = document.getElementById('edit-rol').value;
   try {
@@ -2280,13 +2470,34 @@ async function loadZonas() {
   }
 }
 
-function editZona(id, nombre, reparto) {
-  document.getElementById('nz-nombre').value = nombre;
-  document.getElementById('nz-reparto').value = reparto;
-  const btn = document.querySelector('#nueva-zona-form button[type="submit"]');
-  btn.textContent = 'Guardar cambios';
-  btn.dataset.editId = id;
+let _editZonaId = null;
+
+async function editZona(id, nombre, reparto) {
+  _editZonaId = id;
+  document.getElementById('ez-nombre').value = nombre;
+  // Poblar el select con los repartos actuales y seleccionar el correcto
+  await populateRepartosSelect('ez-reparto', reparto);
+  document.getElementById('edit-zona-modal').classList.remove('hidden');
 }
+
+document.getElementById('edit-zona-close').addEventListener('click', () => {
+  document.getElementById('edit-zona-modal').classList.add('hidden');
+});
+
+document.getElementById('edit-zona-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!_editZonaId) return;
+  const nombre = document.getElementById('ez-nombre').value.trim();
+  const reparto = document.getElementById('ez-reparto').value;
+  try {
+    await api.updateZona(_editZonaId, nombre, reparto);
+    showToast('Zona actualizada', 'success');
+    document.getElementById('edit-zona-modal').classList.add('hidden');
+    loadZonas();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
 
 async function deleteZona(id, nombre) {
   const ok = await confirmar(`¿Eliminar la zona "${nombre}"?`);
@@ -2304,19 +2515,9 @@ document.getElementById('nueva-zona-form').addEventListener('submit', async (e) 
   e.preventDefault();
   const nombre = document.getElementById('nz-nombre').value.trim();
   const reparto = document.getElementById('nz-reparto').value;
-  const btn = e.target.querySelector('button[type="submit"]');
-  const editId = btn.dataset.editId;
-
   try {
-    if (editId) {
-      await api.updateZona(parseInt(editId), nombre, reparto);
-      showToast('Zona actualizada', 'success');
-      delete btn.dataset.editId;
-      btn.textContent = 'Agregar zona';
-    } else {
-      await api.createZona(nombre, reparto);
-      showToast(`Zona ${nombre} creada`, 'success');
-    }
+    await api.createZona(nombre, reparto);
+    showToast(`Zona ${nombre} creada`, 'success');
     document.getElementById('nz-nombre').value = '';
     document.getElementById('nz-reparto').value = '';
     loadZonas();
@@ -2485,22 +2686,28 @@ async function sobBuscar(codBar) {
   const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
   if (!lista) { showToast('Creá una lista primero', 'error'); return; }
 
-  let cod_art = null, descrip = null, mayorista = 'yaguar', precio_unit = null, uxb = 0;
+  let cod_art = null, descrip = null, mayorista = getMayorista(), precio_unit = null, uxb = 0;
+  let encontradoEnPicks = false;
   try {
     const lookup = await api.sobLookup(codBar.trim());
-    cod_art = lookup.cod_art;
-    descrip = lookup.descrip;
-    mayorista = lookup.mayorista || 'yaguar';
-    precio_unit = lookup.precio_unit ?? null;
-    uxb = lookup.uxb || 0;
-  } catch { /* no pasa nada, igual agregamos con solo el barcode */ }
+    if (lookup.found) {
+      cod_art = lookup.cod_art;
+      descrip = lookup.descrip;
+      // Siempre usar el mayorista activo — el lookup puede encontrar el artículo
+      // en el otro mayorista y asignaría el mayorista incorrecto
+      precio_unit = lookup.precio_unit ?? null;
+      uxb = lookup.uxb || 0;
+      encontradoEnPicks = true;
+    }
+    // Si no está en picks se agrega igual con solo el código de barras
+  } catch { /* continúa con solo el barcode */ }
 
   try {
     const res = await api.sobAddItem(lista, { cod_bar: codBar.trim(), cod_art, descrip, mayorista, precio_unit, uxb });
     if (res.action === 'existing') {
-      // Resaltar el existente
       _sobItems = await api.sobGetItems(lista);
       renderSobItems(_sobItems);
+      showToast('Ya estaba en la lista — resaltado', 'info');
       setTimeout(() => {
         const el = document.querySelector(`.sob-item[data-id="${res.id}"]`);
         if (el) { el.classList.add('highlight'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
@@ -2510,7 +2717,7 @@ async function sobBuscar(codBar) {
       _sobItems = await api.sobGetItems(lista);
       await loadSobListas();
       renderSobItems(_sobItems);
-      // Scroll al nuevo (primer elemento)
+      showToast(encontradoEnPicks ? 'Artículo agregado' : 'Artículo agregado (sin descripción — no está en picks)', 'success');
       setTimeout(() => document.querySelector('.sob-item')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     }
   } catch (err) { showToast(err.message, 'error'); }
@@ -2593,7 +2800,6 @@ document.getElementById('sob-nueva-btn').addEventListener('click', () => {
   const input = document.getElementById('sob-nueva-input');
   input.value = `Sobrantes ${hoy}`;
   document.getElementById('sob-nueva-modal').classList.remove('hidden');
-  setTimeout(() => { input.focus(); input.select(); }, 50);
 });
 
 document.getElementById('sob-nueva-confirm').addEventListener('click', async () => {
@@ -2620,7 +2826,7 @@ document.getElementById('sob-lista-select').addEventListener('change', loadSobIt
 document.getElementById('sob-del-lista-btn').addEventListener('click', async () => {
   const lista = document.getElementById('sob-lista-select').value;
   if (!lista) return;
-  if (!confirm(`¿Eliminar la lista "${lista}"? Esta acción no se puede deshacer.`)) return;
+  if (!await confirmar(`¿Eliminar la lista "${lista}"? Esta acción no se puede deshacer.`, 'Sí, eliminar')) return;
   try {
     await api.sobDeleteLista(lista);
     _sobListaActual = null;
@@ -2660,6 +2866,14 @@ async function startSobScanner(deviceId = null) {
   const devices = await navigator.mediaDevices.enumerateDevices();
   _sobCameras = devices.filter(d => d.kind === 'videoinput');
   document.getElementById('sob-switch-camera-btn').classList.toggle('hidden', _sobCameras.length <= 1);
+  const sobVideo = document.getElementById('sob-scanner-video');
+  if (sobVideo.srcObject) {
+    const track = sobVideo.srcObject.getVideoTracks()[0];
+    if (track) {
+      const caps = track.getCapabilities?.() || {};
+      applyTorchPreference(track, 'sob-torch-btn');
+    }
+  }
 }
 
 function stopSobScanner() {
@@ -2672,6 +2886,10 @@ function stopSobScanner() {
   document.getElementById('sob-scanner-container').classList.add('hidden');
   document.getElementById('sob-scan-btn').textContent = 'Escanear';
   document.getElementById('sob-switch-camera-btn').classList.add('hidden');
+  const sobTorchBtn = document.getElementById('sob-torch-btn');
+  sobTorchBtn.classList.add('hidden');
+  sobTorchBtn.dataset.torchOn = 'false';
+  sobTorchBtn.classList.remove('torch-active');
 }
 
 function switchSobCamera() {
@@ -2698,6 +2916,14 @@ async function startHistScanner(deviceId = null) {
       if (input) { input.value = code; renderHistorial(); }
     }
   });
+  const histVideo = document.getElementById('hist-scanner-video');
+  if (histVideo.srcObject) {
+    const track = histVideo.srcObject.getVideoTracks()[0];
+    if (track) {
+      const caps = track.getCapabilities?.() || {};
+      applyTorchPreference(track, 'hist-torch-btn');
+    }
+  }
 }
 
 function stopHistScanner() {
@@ -2710,6 +2936,10 @@ function stopHistScanner() {
   container.classList.remove('scanner-open');
   container.classList.add('hidden');
   document.getElementById('hist-scan-btn').textContent = 'Escanear';
+  const histTorchBtn = document.getElementById('hist-torch-btn');
+  histTorchBtn.classList.add('hidden');
+  histTorchBtn.dataset.torchOn = 'false';
+  histTorchBtn.classList.remove('torch-active');
 }
 
 // ── Historial ─────────────────────────────────────────────────────────────
@@ -2950,9 +3180,10 @@ let _novBultos = 0;
 let _novUnidades = 0;
 let _novScannerActive = false;
 let _novCodeReader = null;
-let _novClientes = [];           // todos los clientes del sistema
-let _novClientesFiltrados = [];  // clientes que pidieron el ítem seleccionado
+let _novClientes = [];
+let _novClientesFiltrados = [];
 let _novDescripTimer = null;
+let _novMaxUni = null;  // máximo de unidades según lo pedido por el cliente
 
 async function initNovedades() {
   const sel = document.getElementById('nov-semana-select');
@@ -3084,15 +3315,15 @@ document.addEventListener('click', (e) => {
 async function _setNovItem(item) {
   _novItem = item;
   _novClientesFiltrados = [];
+  _novMaxUni = null;
   document.getElementById('nov-barcode-input').value = '';
   document.getElementById('nov-item-cod').textContent = item.cod_art || item.cod_bar || '';
   document.getElementById('nov-item-descrip').textContent = item.descrip || '';
   document.getElementById('nov-item-selected').classList.remove('hidden');
-  // Habilitar botón de cliente ahora que hay ítem seleccionado
   const clienteBtn = document.getElementById('nov-cliente-btn');
   clienteBtn.disabled = false;
   clienteBtn.textContent = 'Elegir cliente...';
-  // Cargar clientes que pidieron este ítem en la semana activa
+  // Cargar picks de este ítem para filtrar clientes y conocer cantidades
   try {
     let picks = [];
     if (item.cod_art) picks = await api.getByCodArt(item.cod_art, _novSemana).catch(() => []);
@@ -3100,10 +3331,12 @@ async function _setNovItem(item) {
     const seen = new Set();
     _novClientesFiltrados = picks
       .filter(p => p.nombre && !seen.has(p.nombre) && seen.add(p.nombre))
-      .map(p => ({ nombre: p.nombre, id_yaguar: p.cliente }));
+      .map(p => ({ nombre: p.nombre, id_yaguar: p.cliente, uni: p.uni, bul: p.bul, uxb: p.uxb }));
   } catch {
     _novClientesFiltrados = _novClientes;
   }
+  // Si ya hay cliente seleccionado, actualizar el máximo
+  if (_novCliente) _novActualizarMax();
 }
 document.getElementById('nov-item-clear').addEventListener('click', () => {
   _novItem = null;
@@ -3117,6 +3350,39 @@ document.getElementById('nov-item-clear').addEventListener('click', () => {
   _novCliente = null;
   document.getElementById('nov-cliente-selected').classList.add('hidden');
   document.getElementById('nov-cliente-btn').classList.remove('hidden');
+});
+
+// ── Carga manual ─────────────────────────────────────────────────────────────
+
+function _openNovManualModal() {
+  document.getElementById('nov-manual-codart').value = '';
+  document.getElementById('nov-manual-descrip').value = '';
+  document.getElementById('nov-manual-uxb').value = '';
+  document.getElementById('nov-manual-precio').value = '';
+  document.getElementById('nov-manual-modal').classList.remove('hidden');
+}
+
+function _closeNovManualModal() {
+  document.getElementById('nov-manual-modal').classList.add('hidden');
+}
+
+document.getElementById('nov-manual-btn').addEventListener('click', _openNovManualModal);
+document.getElementById('nov-manual-cancel').addEventListener('click', _closeNovManualModal);
+document.getElementById('nov-manual-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) _closeNovManualModal();
+});
+
+document.getElementById('nov-manual-confirm').addEventListener('click', async () => {
+  const codArt = document.getElementById('nov-manual-codart').value.trim().toUpperCase();
+  if (!codArt) { showToast('El código de artículo es obligatorio', 'error'); return; }
+  const descrip = document.getElementById('nov-manual-descrip').value.trim();
+  if (!descrip) { showToast('La descripción es obligatoria', 'error'); return; }
+  const uxb = parseInt(document.getElementById('nov-manual-uxb').value);
+  if (!uxb || uxb <= 0) { showToast('El UxB es obligatorio', 'error'); return; }
+  const precio = parseFloat(document.getElementById('nov-manual-precio').value) || null;
+  const item = { cod_art: codArt, cod_bar: null, descrip: descrip || null, uxb, precio_manual: precio, manual: true };
+  _closeNovManualModal();
+  await _setNovItem(item);
 });
 
 // ── Scanner ──────────────────────────────────────────────────────────────────
@@ -3137,6 +3403,14 @@ async function startNovScanner(deviceId = null) {
   await _novCodeReader.decodeFromVideoDevice(targetId, 'nov-scanner-video', async (result) => {
     if (result) { stopNovScanner(); await novBuscarPorCodigo(result.getText()); }
   });
+  const novVideo = document.getElementById('nov-scanner-video');
+  if (novVideo.srcObject) {
+    const track = novVideo.srcObject.getVideoTracks()[0];
+    if (track) {
+      const caps = track.getCapabilities?.() || {};
+      applyTorchPreference(track, 'nov-torch-btn');
+    }
+  }
 }
 
 function stopNovScanner() {
@@ -3148,6 +3422,10 @@ function stopNovScanner() {
   document.getElementById('nov-scanner-container').classList.remove('scanner-open');
   document.getElementById('nov-scanner-container').classList.add('hidden');
   document.getElementById('nov-scan-btn').textContent = '📷';
+  const novTorchBtn = document.getElementById('nov-torch-btn');
+  novTorchBtn.classList.add('hidden');
+  novTorchBtn.dataset.torchOn = 'false';
+  novTorchBtn.classList.remove('torch-active');
 }
 
 // ── Slide de cliente ─────────────────────────────────────────────────────────
@@ -3167,7 +3445,6 @@ function openNovClienteSlide() {
   document.getElementById('nov-cliente-search').value = '';
   renderNovClienteList('');
   document.getElementById('nov-cliente-modal').classList.remove('hidden');
-  setTimeout(() => document.getElementById('nov-cliente-search').focus(), 100);
 }
 
 function renderNovClienteList(q) {
@@ -3194,18 +3471,53 @@ function renderNovClienteList(q) {
   });
 }
 
+function _novSetSteppers(enabled) {
+  document.querySelectorAll('.nov-step-btn').forEach(btn => { btn.disabled = !enabled; });
+}
+
 function _setNovCliente(codigo, nombre) {
   _novCliente = { codigo, nombre };
   document.getElementById('nov-cliente-cod').textContent = codigo;
   document.getElementById('nov-cliente-nombre').textContent = nombre;
   document.getElementById('nov-cliente-selected').classList.remove('hidden');
   document.getElementById('nov-cliente-btn').classList.add('hidden');
+  _novSetSteppers(true);
+  _novActualizarMax();
 }
 document.getElementById('nov-cliente-clear').addEventListener('click', () => {
   _novCliente = null;
+  _novMaxUni = null;
+  _novBultos = 0;
+  _novUnidades = 0;
+  document.getElementById('nov-val-bultos').textContent = '0';
+  document.getElementById('nov-val-unidades').textContent = '0';
   document.getElementById('nov-cliente-selected').classList.add('hidden');
   document.getElementById('nov-cliente-btn').classList.remove('hidden');
+  document.getElementById('nov-max-hint').classList.add('hidden');
+  _novSetSteppers(false);
 });
+
+function _novActualizarMax() {
+  const hint = document.getElementById('nov-max-hint');
+  if (!_novItem || !_novCliente) { _novMaxUni = null; hint.classList.add('hidden'); return; }
+  if (_novItem.manual) { _novMaxUni = null; hint.classList.add('hidden'); return; }
+  // Buscar en los clientes filtrados (ya tienen los datos del pick)
+  const entrada = _novClientesFiltrados.find(c => c.id_yaguar === _novCliente.codigo);
+  if (entrada && entrada.uni) {
+    _novMaxUni = entrada.uni;
+    const uxb = entrada.uxb || 0;
+    const bul = entrada.bul || 0;
+    const uniSueltas = _novMaxUni - bul * uxb;
+    const desc = uxb > 1
+      ? `Pedido: ${bul} bul × ${uxb} uni${uniSueltas > 0 ? ` + ${uniSueltas} uni` : ''} = ${_novMaxUni} uni total`
+      : `Pedido: ${_novMaxUni} uni`;
+    hint.textContent = `Máx → ${desc}`;
+    hint.classList.remove('hidden');
+  } else {
+    _novMaxUni = null;
+    hint.classList.add('hidden');
+  }
+}
 
 // ── Tipo ─────────────────────────────────────────────────────────────────────
 
@@ -3218,15 +3530,64 @@ document.querySelectorAll('.nov-tipo-btn').forEach(btn => {
 
 // ── Steppers ─────────────────────────────────────────────────────────────────
 
+let _novLongPressTimer = null;
+
+function _novApplyLongPress(btn) {
+  const field = btn.dataset.novField;
+  const isPlus = btn.classList.contains('btn-step-plus');
+  const uxb = _novItem?.uxb || 0;
+
+  if (isPlus && _novMaxUni !== null) {
+    // Llenar al máximo posible
+    if (field === 'bultos') {
+      _novBultos = uxb > 0 ? Math.floor(_novMaxUni / uxb) : 0;
+      _novUnidades = uxb > 0 ? _novMaxUni % uxb : _novMaxUni;
+      document.getElementById('nov-val-unidades').textContent = _novUnidades;
+    } else {
+      _novUnidades = Math.max(0, _novMaxUni - _novBultos * uxb);
+    }
+    document.getElementById('nov-val-bultos').textContent = _novBultos;
+    document.getElementById('nov-val-unidades').textContent = _novUnidades;
+  } else if (!isPlus) {
+    // Llevar a cero
+    if (field === 'bultos') { _novBultos = 0; document.getElementById('nov-val-bultos').textContent = '0'; }
+    else { _novUnidades = 0; document.getElementById('nov-val-unidades').textContent = '0'; }
+  }
+}
+
 document.querySelectorAll('.nov-step-btn').forEach(btn => {
+  // Long press (400ms)
+  const startLong = () => {
+    _novLongPressTimer = setTimeout(() => { _novLongPressTimer = null; _novApplyLongPress(btn); }, 400);
+  };
+  const cancelLong = () => { if (_novLongPressTimer) { clearTimeout(_novLongPressTimer); _novLongPressTimer = null; } };
+
+  btn.addEventListener('mousedown', startLong);
+  btn.addEventListener('touchstart', startLong, { passive: true });
+  btn.addEventListener('mouseup', cancelLong);
+  btn.addEventListener('mouseleave', cancelLong);
+  btn.addEventListener('touchend', cancelLong);
+  btn.addEventListener('touchcancel', cancelLong);
+
+  // Click normal (paso a paso)
   btn.addEventListener('click', () => {
+    if (_novLongPressTimer === null && document.getElementById('nov-val-bultos')) {
+      // Si el long press ya se ejecutó, el click es redundante — ignorar
+      // (el timer se pone en null cuando se dispara, así que no podemos distinguirlo del cancel)
+      // En su lugar simplemente aplicamos el delta normal; el cap lo controla
+    }
     const field = btn.dataset.novField;
     const delta = btn.classList.contains('btn-step-plus') ? 1 : -1;
+    const uxb = _novItem?.uxb || 0;
     if (field === 'bultos') {
-      _novBultos = Math.max(0, _novBultos + delta);
+      const nuevo = Math.max(0, _novBultos + delta);
+      if (_novMaxUni !== null && nuevo * uxb + _novUnidades > _novMaxUni) return;
+      _novBultos = nuevo;
       document.getElementById('nov-val-bultos').textContent = _novBultos;
     } else {
-      _novUnidades = Math.max(0, _novUnidades + delta);
+      const nuevo = Math.max(0, _novUnidades + delta);
+      if (_novMaxUni !== null && _novBultos * uxb + nuevo > _novMaxUni) return;
+      _novUnidades = nuevo;
       document.getElementById('nov-val-unidades').textContent = _novUnidades;
     }
   });
@@ -3239,6 +3600,12 @@ document.getElementById('nov-agregar-btn').addEventListener('click', async () =>
   if (!_novCliente) { showToast('Seleccioná un cliente primero', 'error'); return; }
   if (!_novTipo) { showToast('Seleccioná el tipo de novedad (Devolución, Faltante o Cambio)', 'error'); return; }
   if (_novBultos === 0 && _novUnidades === 0) { showToast('Ingresá al menos 1 unidad o bulto', 'error'); return; }
+  const uxbVal = _novItem.uxb || 0;
+  const totalNov = _novBultos * uxbVal + _novUnidades;
+  if (_novMaxUni !== null && totalNov > _novMaxUni) {
+    showToast(`La cantidad supera lo pedido por el cliente (máx: ${_novMaxUni} uni)`, 'error');
+    return;
+  }
   try {
     await api.novAddItem({
       semana: _novSemana,
@@ -3252,6 +3619,7 @@ document.getElementById('nov-agregar-btn').addEventListener('click', async () =>
       unidades: _novUnidades,
       bultos: _novBultos,
       uxb: _novItem.uxb || 0,
+      precio: _novItem.precio_manual ?? null,
     });
     showToast('Novedad registrada', 'success');
     _resetNovForm();
@@ -3260,8 +3628,9 @@ document.getElementById('nov-agregar-btn').addEventListener('click', async () =>
 });
 
 function _resetNovForm() {
-  _novItem = null; _novCliente = null; _novTipo = 'devolucion'; _novBultos = 0; _novUnidades = 0;
-  ['nov-barcode-input','nov-descrip-input','nov-observaciones'].forEach(id => { document.getElementById(id).value = ''; });
+  _novItem = null; _novCliente = null; _novTipo = 'devolucion'; _novBultos = 0; _novUnidades = 0; _novMaxUni = null;
+  ['nov-barcode-input','nov-descrip-input','nov-observaciones','nov-manual-codart','nov-manual-descrip','nov-manual-uxb','nov-manual-precio'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  _closeNovManualModal();
   document.getElementById('nov-item-selected').classList.add('hidden');
   document.getElementById('nov-cliente-selected').classList.add('hidden');
   const clienteBtn = document.getElementById('nov-cliente-btn');
@@ -3270,6 +3639,8 @@ function _resetNovForm() {
   clienteBtn.textContent = 'Elegir cliente (primero seleccioná un artículo)';
   document.getElementById('nov-val-bultos').textContent = '0';
   document.getElementById('nov-val-unidades').textContent = '0';
+  document.getElementById('nov-max-hint').classList.add('hidden');
+  _novSetSteppers(false);
   _novTipo = '';
   document.querySelectorAll('.nov-tipo-btn').forEach(b => b.classList.remove('active'));
 }
