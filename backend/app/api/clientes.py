@@ -22,7 +22,10 @@ def _list(mayorista: str):
                 (mayorista,)
             )
         else:
-            cur.execute("SELECT * FROM clientes_yaguar WHERE mayorista = %s ORDER BY nombre", (mayorista,))
+            cur.execute(
+                "SELECT * FROM clientes_yaguar WHERE mayorista = %s AND estado = 'ocupado' ORDER BY nombre",
+                (mayorista,)
+            )
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -38,29 +41,35 @@ def _create(mayorista: str, data: ClienteCreate):
     data = _normalizar(data)
     try:
         with get_db() as cur:
-            estado = 'ocupado' if mayorista == 'yaguar' else None
             result = None
             if data.id_yaguar:
                 # Si ya existe un registro con ese código (libre), reutilizarlo
-                cur.execute("SELECT id FROM clientes_yaguar WHERE id_yaguar = %s", (data.id_yaguar,))
+                cur.execute(
+                    "SELECT id FROM clientes_yaguar WHERE id_yaguar = %s AND mayorista = %s",
+                    (data.id_yaguar, mayorista)
+                )
                 existing = cur.fetchone()
                 if existing:
                     cur.execute(
                         """UPDATE clientes_yaguar
                            SET nombre=%s, localidad=%s, direccion=%s, telefono=%s,
-                               contacto=%s, vendedor=%s, mayorista=%s, flete=%s, estado=%s
+                               contacto=%s, vendedor=%s, mayorista=%s, flete=%s, estado='ocupado',
+                               cod_sis=%s, cuit_deposito=%s, es_factura_a=%s
                            WHERE id=%s RETURNING *""",
                         (data.nombre, data.localidad, data.direccion, data.telefono,
-                         data.contacto, data.vendedor, mayorista, data.flete, estado, existing['id']),
+                         data.contacto, data.vendedor, mayorista, data.flete,
+                         data.cod_sis, data.cuit_deposito, data.es_factura_a, existing['id']),
                     )
                     result = dict(cur.fetchone())
             if result is None:
                 cur.execute(
                     """INSERT INTO clientes_yaguar
-                       (nombre, localidad, direccion, telefono, contacto, vendedor, mayorista, id_yaguar, flete, estado)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                       (nombre, localidad, direccion, telefono, contacto, vendedor, mayorista,
+                        id_yaguar, flete, estado, cod_sis, cuit_deposito, es_factura_a)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'ocupado', %s, %s, %s) RETURNING *""",
                     (data.nombre, data.localidad, data.direccion, data.telefono,
-                     data.contacto, data.vendedor, mayorista, data.id_yaguar, data.flete, estado),
+                     data.contacto, data.vendedor, mayorista, data.id_yaguar, data.flete,
+                     data.cod_sis, data.cuit_deposito, data.es_factura_a),
                 )
                 result = dict(cur.fetchone())
             # Actualizar picks que usaban el código como nombre placeholder
@@ -73,7 +82,7 @@ def _create(mayorista: str, data: ClienteCreate):
                 )
             return result
     except psycopg2.errors.UniqueViolation:
-        raise HTTPException(status_code=409, detail=f"Ya existe un cliente con el código Yaguar '{data.id_yaguar}'")
+        raise HTTPException(status_code=409, detail=f"Ya existe un cliente con el código '{data.id_yaguar}'")
 
 
 def _update(id: int, data: ClienteCreate, mayorista: str = 'yaguar'):
@@ -83,10 +92,11 @@ def _update(id: int, data: ClienteCreate, mayorista: str = 'yaguar'):
             cur.execute(
                 """UPDATE clientes_yaguar
                    SET nombre=%s, localidad=%s, direccion=%s, telefono=%s, contacto=%s,
-                       vendedor=%s, id_yaguar=%s, flete=%s
+                       vendedor=%s, id_yaguar=%s, flete=%s, cod_sis=%s, cuit_deposito=%s
                    WHERE id=%s RETURNING *""",
                 (data.nombre, data.localidad, data.direccion, data.telefono,
-                 data.contacto, data.vendedor, data.id_yaguar, data.flete, id),
+                 data.contacto, data.vendedor, data.id_yaguar, data.flete,
+                 data.cod_sis, data.cuit_deposito, id),
             )
             row = cur.fetchone()
             if not row:
@@ -101,7 +111,7 @@ def _update(id: int, data: ClienteCreate, mayorista: str = 'yaguar'):
                 )
             return result
     except psycopg2.errors.UniqueViolation:
-        raise HTTPException(status_code=409, detail=f"Ya existe un cliente con el código Yaguar '{data.id_yaguar}'")
+        raise HTTPException(status_code=409, detail=f"Ya existe un cliente con el código '{data.id_yaguar}'")
 
 
 def _delete(id: int):
@@ -226,6 +236,47 @@ def yaguar_delete(id: int): return _delete(id)
 
 
 # ── Rutas Diarco ──────────────────────────────────────────────────────────
+
+@router_diarco.get("/codigo-libre")
+def diarco_codigo_libre():
+    with get_db() as cur:
+        cur.execute("""
+            SELECT id_yaguar FROM clientes_yaguar
+            WHERE mayorista = 'diarco' AND estado = 'libre' AND es_factura_a = false
+              AND id_yaguar IS NOT NULL
+            ORDER BY id_yaguar
+            LIMIT 1
+        """)
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="No hay códigos libres disponibles")
+    return {"codigo": row["id_yaguar"]}
+
+
+@router_diarco.put("/marcar-no-zona")
+def diarco_marcar_no_zona(payload: MarcarNoAptoIn):
+    with get_db() as cur:
+        cur.execute(
+            """UPDATE clientes_yaguar SET estado = 'no_zona', nombre = NULL,
+               localidad = NULL, direccion = NULL, telefono = NULL,
+               contacto = NULL, vendedor = NULL, flete = NULL
+               WHERE id_yaguar = %s AND mayorista = 'diarco'""",
+            (payload.codigo,)
+        )
+        if cur.rowcount == 0:
+            cur.execute(
+                "INSERT INTO clientes_yaguar (id_yaguar, mayorista, estado) VALUES (%s, 'diarco', 'no_zona')",
+                (payload.codigo,)
+            )
+        cur.execute(
+            """SELECT id_yaguar FROM clientes_yaguar
+               WHERE mayorista = 'diarco' AND estado = 'libre' AND es_factura_a = false
+               AND id_yaguar IS NOT NULL
+               ORDER BY id_yaguar LIMIT 1"""
+        )
+        row = cur.fetchone()
+    return {"nuevo_codigo": row["id_yaguar"] if row else None}
+
 
 @router_diarco.get("/", response_model=List[Cliente])
 def diarco_list(): return _list("diarco")

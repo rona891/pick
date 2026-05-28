@@ -1,6 +1,7 @@
 import io
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
+from openpyxl.utils import get_column_letter
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -25,6 +26,7 @@ class NovedadIn(BaseModel):
     unidades: int = 0
     bultos: int = 0
     uxb: int = 0
+    precio: Optional[float] = None
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -54,10 +56,10 @@ def _add(mayorista: str, data: NovedadIn):
         cur.execute("""
             INSERT INTO novedades
                 (mayorista, semana, cod_bar, cod_art, descrip, cliente, cliente_nombre,
-                 tipo, observaciones, unidades, bultos, uxb)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 tipo, observaciones, unidades, bultos, uxb, precio)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id, cod_bar, cod_art, descrip, cliente, cliente_nombre,
-                      tipo, observaciones, unidades, bultos, uxb, created_at
+                      tipo, observaciones, unidades, bultos, uxb, precio, created_at
         """, (
             mayorista, data.semana,
             (data.cod_bar or "").strip() or None,
@@ -70,6 +72,7 @@ def _add(mayorista: str, data: NovedadIn):
             max(0, data.unidades),
             max(0, data.bultos),
             max(0, data.uxb),
+            data.precio if data.precio and data.precio > 0 else None,
         ))
         return dict(cur.fetchone())
 
@@ -123,7 +126,7 @@ def _export(mayorista: str, semana: str):
         cur.execute("""
             SELECT n.semana, n.tipo, n.cliente_nombre, n.cliente, n.cod_art, n.descrip,
                    n.bultos, COALESCE(n.uxb, ap.uxb, 0) AS uxb, n.unidades, n.observaciones,
-                   ap.precio_con_iva AS precio_unit
+                   COALESCE(n.precio, ap.precio_con_iva) AS precio_unit
             FROM novedades n
             LEFT JOIN articulos_precios ap ON ap.cod_art = n.cod_art AND ap.mayorista = n.mayorista
             WHERE n.mayorista = %s AND n.semana = %s
@@ -131,64 +134,54 @@ def _export(mayorista: str, semana: str):
         """, (mayorista, semana))
         rows = [dict(r) for r in cur.fetchall()]
 
+    from app.api.excel_theme import (
+        hdr_cell, data_cell, make_table, set_col_widths, build_filename, stream_wb, MONEY, ROW_ALT, WHITE
+    )
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Novedades"
 
-    hfill = PatternFill("solid", fgColor="E0FF4F")
-    hfont = Font(bold=True, color="141414")
-    headers = ["Semana", "Tipo", "Cliente", "Cód. Cliente", "Cód. Artículo",
-               "Descripción", "Bultos", "UxB", "Unidades sueltas",
-               "Unidades totales", "Precio unit. c/IVA", "Total c/IVA", "Observaciones"]
-    for c, h in enumerate(headers, 1):
-        cell = ws.cell(1, c, h)
-        cell.fill = hfill; cell.font = hfont
-        cell.alignment = Alignment(horizontal="center")
+    hdrs = [
+        ("Semana",             18), ("Tipo",          14), ("Cliente",        28),
+        ("Cód. Cliente",       14), ("Cód. Artículo", 14), ("Descripción",    40),
+        ("Bultos",             10), ("UxB",            8), ("Unidades sueltas",14),
+        ("Unidades totales",   14), ("Precio unit. c/IVA",18), ("Total c/IVA",16),
+        ("Observaciones",      30),
+    ]
+    for ci, (label, width) in enumerate(hdrs, 1):
+        ws.cell(row=1, column=ci, value=label)
+        ws.column_dimensions[get_column_letter(ci)].width = width
+    ws.row_dimensions[1].height = 28
 
-    alt = PatternFill("solid", fgColor="FFFDE7")
     tipo_labels = {"devolucion": "Devolución", "faltante": "Faltante", "cambio": "Cambio"}
-    for i, r in enumerate(rows, 2):
-        uxb = r["uxb"] or 0
+    for ri, r in enumerate(rows, 2):
+        uxb       = r["uxb"] or 0
         uni_total = (r["bultos"] or 0) * uxb + (r["unidades"] or 0)
-        precio = round(float(r["precio_unit"]), 2) if r["precio_unit"] is not None else ""
-        total = round(float(r["precio_unit"]) * uni_total, 2) if r["precio_unit"] is not None else ""
-        vals = [
-            r["semana"], tipo_labels.get(r["tipo"], r["tipo"]),
-            r["cliente_nombre"], r["cliente"], r["cod_art"], r["descrip"],
-            r["bultos"], uxb if uxb else "", r["unidades"], uni_total,
-            precio, total, r["observaciones"] or "",
-        ]
-        for c, v in enumerate(vals, 1):
-            cell = ws.cell(i, c, v)
-            cell.font = Font(color="141414")
-            cell.alignment = Alignment(horizontal="center" if c > 6 else "left")
-            if i % 2 == 0:
-                cell.fill = alt
-            if c in (11, 12) and isinstance(v, (int, float)):
-                cell.number_format = '"$"#,##0.00'
+        precio    = round(float(r["precio_unit"]), 2) if r["precio_unit"] is not None else ""
+        total     = round(float(r["precio_unit"]) * uni_total, 2) if r["precio_unit"] is not None else ""
+        tipo_str  = tipo_labels.get(r["tipo"], r["tipo"])
 
-    ws.column_dimensions["A"].width = 18
-    ws.column_dimensions["B"].width = 14
-    ws.column_dimensions["C"].width = 28
-    ws.column_dimensions["D"].width = 14
-    ws.column_dimensions["E"].width = 14
-    ws.column_dimensions["F"].width = 40
-    for col in "GHIJ":
-        ws.column_dimensions[col].width = 14
-    ws.column_dimensions["K"].width = 18
-    ws.column_dimensions["L"].width = 16
-    ws.column_dimensions["M"].width = 30
+        data_cell(ws, ri, 1,  r["semana"],              align="left")
+        data_cell(ws, ri, 2,  tipo_str,                 align="center", bold=True)
+        data_cell(ws, ri, 3,  r["cliente_nombre"],      align="left")
+        data_cell(ws, ri, 4,  r["cliente"],             align="center")
+        data_cell(ws, ri, 5,  r["cod_art"],             align="center")
+        data_cell(ws, ri, 6,  r["descrip"],             align="left")
+        data_cell(ws, ri, 7,  r["bultos"],              align="center")
+        _f = openpyxl.styles.PatternFill("solid", fgColor=ROW_ALT if ri % 2 == 0 else WHITE)
+        for ci in range(1, 14):
+            ws.cell(row=ri, column=ci).fill = _f
+        data_cell(ws, ri, 8,  uxb if uxb else "",       align="center")
+        data_cell(ws, ri, 9,  r["unidades"],            align="center")
+        data_cell(ws, ri, 10, uni_total,                align="center")
+        data_cell(ws, ri, 11, precio, align="right", fmt=MONEY if isinstance(precio, float) else None)
+        data_cell(ws, ri, 12, total,  align="right", fmt=MONEY if isinstance(total, float) else None)
+        data_cell(ws, ri, 13, r["observaciones"] or "", align="left")
+
+    ws.auto_filter.ref = f"A1:M{len(rows)+1}" if rows else None
     ws.freeze_panes = "A2"
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    fname = f"Novedades {semana} {mayorista}.xlsx"
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={fname}"}
-    )
+    fname = build_filename("Novedades", f"{semana} {mayorista.capitalize()}")
+    return stream_wb(wb, fname)
 
 
 # ── Rutas Yaguar ───────────────────────────────────────────────────────────────

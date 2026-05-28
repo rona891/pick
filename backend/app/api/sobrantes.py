@@ -1,6 +1,7 @@
 import io
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
+from openpyxl.utils import get_column_letter
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -131,6 +132,9 @@ def _search_descrip(q: str, mayorista: str):
 
 
 def _export(lista: str, mayorista: str):
+    from app.api.excel_theme import (
+        hdr_cell, data_cell, make_table, set_col_widths, build_filename, stream_wb, ROW_ALT, WHITE
+    )
     with get_db() as cur:
         cur.execute(
             "SELECT cod_bar, cod_art, descrip, unidades, bultos FROM sobrantes WHERE lista=%s AND mayorista=%s ORDER BY created_at DESC",
@@ -142,38 +146,28 @@ def _export(lista: str, mayorista: str):
     ws = wb.active
     ws.title = "Sobrantes"
 
-    hfill = PatternFill("solid", fgColor="E0FF4F")
-    hfont = Font(bold=True, color="141414")
-    headers = ["Cód. de Barra", "Cód. Artículo", "Descripción", "Unidades", "Bultos"]
-    for c, h in enumerate(headers, 1):
-        cell = ws.cell(1, c, h)
-        cell.fill = hfill
-        cell.font = hfont
-        cell.alignment = Alignment(horizontal="center")
+    hdrs = [("Cód. de Barra",18),("Cód. Artículo",14),("Descripción",42),("Unidades",12),("Bultos",12)]
+    for ci, (label, width) in enumerate(hdrs, 1):
+        ws.cell(row=1, column=ci, value=label)
+        ws.column_dimensions[get_column_letter(ci)].width = width
+    ws.row_dimensions[1].height = 28
 
-    alt = PatternFill("solid", fgColor="FFFDE7")
-    for i, r in enumerate(rows, 2):
-        vals = [r["cod_bar"], r["cod_art"], r["descrip"], r["unidades"], r["bultos"]]
-        for c, v in enumerate(vals, 1):
-            cell = ws.cell(i, c, v)
-            cell.font = Font(color="141414")
-            cell.alignment = Alignment(horizontal="center" if c > 3 else "left")
-            if i % 2 == 0:
-                cell.fill = alt
+    _ov = openpyxl.styles.PatternFill("solid", fgColor=WHITE)
+    _ev = openpyxl.styles.PatternFill("solid", fgColor=ROW_ALT)
+    for ri, r in enumerate(rows, 2):
+        _f = _ev if ri % 2 == 0 else _ov
+        for ci, (val, al) in enumerate([
+            (r["cod_bar"],"center"),(r["cod_art"],"center"),
+            (r["descrip"],"left"),(r["unidades"],"center"),(r["bultos"],"center"),
+        ], 1):
+            cell = ws.cell(row=ri, column=ci, value=val)
+            cell.fill = _f
+            cell.alignment = openpyxl.styles.Alignment(horizontal=al, vertical="center")
 
-    ws.column_dimensions["A"].width = 18
-    ws.column_dimensions["B"].width = 14
-    ws.column_dimensions["C"].width = 42
-    ws.column_dimensions["D"].width = 12
-    ws.column_dimensions["E"].width = 12
+    ws.auto_filter.ref = f"A1:E{len(rows)+1}" if rows else None
     ws.freeze_panes = "A2"
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    fname = f"sobrantes_{lista.replace(' ', '_')}_{mayorista}.xlsx"
-    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                             headers={"Content-Disposition": f"attachment; filename={fname}"})
+    fname = build_filename("Sobrantes", lista)
+    return stream_wb(wb, fname)
 
 
 # ── Yaguar routes ──────────────────────────────────────────────────────────────
@@ -319,13 +313,13 @@ def _add_item_shared(lista: str, data: ItemIn):
     with get_db() as cur:
         if cod_bar:
             cur.execute(
-                "SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista FROM sobrantes WHERE lista=%s AND cod_bar=%s",
-                (lista, cod_bar)
+                "SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista FROM sobrantes WHERE lista=%s AND mayorista=%s AND cod_bar=%s",
+                (lista, mayorista, cod_bar)
             )
         else:
             cur.execute(
-                "SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista FROM sobrantes WHERE lista=%s AND cod_art=%s",
-                (lista, cod_art)
+                "SELECT id, cod_bar, cod_art, descrip, unidades, bultos, mayorista FROM sobrantes WHERE lista=%s AND mayorista=%s AND cod_art=%s",
+                (lista, mayorista, cod_art)
             )
         existing = cur.fetchone()
         if existing:
@@ -370,55 +364,53 @@ def _export_shared(lista: str):
         """, (lista,))
         rows = [dict(r) for r in cur.fetchall()]
 
+    from app.api.excel_theme import (
+        hdr_cell, data_cell, make_table, set_col_widths, build_filename, stream_wb, MONEY, ROW_ALT, WHITE
+    )
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Sobrantes"
 
-    hfill = PatternFill("solid", fgColor="E0FF4F")
-    hfont = Font(bold=True, color="141414")
-    headers = ["Mayorista", "Cód. Artículo", "Descripción",
-               "Unid.", "Bultos", "UxB", "Unid. Totales", "Precio unit. c/IVA", "Total c/IVA"]
-    for c, h in enumerate(headers, 1):
-        cell = ws.cell(1, c, h)
-        cell.fill = hfill; cell.font = hfont
-        cell.alignment = Alignment(horizontal="center")
+    hdrs = [
+        ("Mayorista",          12), ("Cód. Artículo", 14), ("Descripción",       44),
+        ("Unid.",               8), ("Bultos",          8), ("UxB",                7),
+        ("Unid. Totales",      14), ("Precio unit. c/IVA", 18), ("Total c/IVA",   16),
+    ]
+    for ci, (label, width) in enumerate(hdrs, 1):
+        ws.cell(row=1, column=ci, value=label)
+        ws.column_dimensions[get_column_letter(ci)].width = width
+    ws.row_dimensions[1].height = 28
 
-    alt = PatternFill("solid", fgColor="FFFDE7")
-    for i, r in enumerate(rows, 2):
-        precio = round(float(r["precio_unit"]), 2) if r["precio_unit"] is not None else ""
-        uxb = r["uxb"] or 0
+    for ri, r in enumerate(rows, 2):
+        precio      = round(float(r["precio_unit"]), 2) if r["precio_unit"] is not None else ""
+        uxb         = r["uxb"] or 0
         unid_totales = r["unidades"] + (uxb * r["bultos"]) if uxb else r["unidades"]
-        total = round(float(r["precio_unit"]) * unid_totales, 2) if r["precio_unit"] is not None else ""
-        vals = [r["mayorista"], r["cod_art"], r["descrip"],
-                r["unidades"], r["bultos"], uxb or "", unid_totales, precio, total]
-        for c, v in enumerate(vals, 1):
-            cell = ws.cell(i, c, v)
-            cell.font = Font(color="141414")
-            cell.alignment = Alignment(horizontal="center" if c > 3 else "left")
-            if i % 2 == 0:
-                cell.fill = alt
-            if c in (8, 9) and isinstance(v, (int, float)):
-                cell.number_format = '"$"#,##0.00'
+        total        = round(float(r["precio_unit"]) * unid_totales, 2) if r["precio_unit"] is not None else ""
 
-    ws.column_dimensions["A"].width = 12
-    ws.column_dimensions["B"].width = 14
-    ws.column_dimensions["C"].width = 44
-    ws.column_dimensions["D"].width = 8
-    ws.column_dimensions["E"].width = 8
-    ws.column_dimensions["F"].width = 7
-    ws.column_dimensions["G"].width = 14
-    ws.column_dimensions["H"].width = 18
-    ws.column_dimensions["I"].width = 16
+        data_cell(ws, ri, 1, r["mayorista"].upper() if r["mayorista"] else "", align="center")
+        data_cell(ws, ri, 2, r["cod_art"],    align="center")
+        data_cell(ws, ri, 3, r["descrip"],    align="left")
+        _f = openpyxl.styles.PatternFill("solid", fgColor=ROW_ALT if ri % 2 == 0 else WHITE)
+        for ci, (val, al, fmt) in enumerate([
+            (r["mayorista"].upper() if r["mayorista"] else "", "center", None),
+            (r["cod_art"],    "center", None),
+            (r["descrip"],    "left",   None),
+            (r["unidades"],   "center", None),
+            (r["bultos"],     "center", None),
+            (uxb or "",       "center", None),
+            (unid_totales,    "center", None),
+            (precio, "right", MONEY if isinstance(precio, float) else None),
+            (total,  "right", MONEY if isinstance(total, float) else None),
+        ], 1):
+            cell = ws.cell(row=ri, column=ci, value=val)
+            cell.fill = _f
+            cell.alignment = openpyxl.styles.Alignment(horizontal=al, vertical="center")
+            if fmt: cell.number_format = fmt
+
+    ws.auto_filter.ref = f"A1:I{len(rows)+1}" if rows else None
     ws.freeze_panes = "A2"
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    fname = f"Sobrantes {lista}.xlsx"
-    return StreamingResponse(
-        buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={fname}"}
-    )
+    fname = build_filename("Sobrantes", lista)
+    return stream_wb(wb, fname)
 
 
 # ── Shared routes ──────────────────────────────────────────────────────────────
