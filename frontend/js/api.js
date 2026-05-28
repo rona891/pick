@@ -183,8 +183,10 @@ const api = {
   getVendedoresYaguar: () => request('GET', `/api/${getMayorista()}/clientes/vendedores`),
   getSinRegistrar: () => request('GET', `/api/${getMayorista()}/clientes/sin-registrar`),
   getCodigoLibreYaguar: () => request('GET', '/api/yaguar/clientes/codigo-libre'),
+  getCodigoLibreDiarco: () => request('GET', '/api/diarco/clientes/codigo-libre'),
   marcarNoApto: (codigo) => request('PUT', '/api/yaguar/clientes/marcar-no-apto', { codigo }),
   marcarNoZona: (codigo) => request('PUT', '/api/yaguar/clientes/marcar-no-zona', { codigo }),
+  marcarNoZonaDiarco: (codigo) => request('PUT', '/api/diarco/clientes/marcar-no-zona', { codigo }),
 
   // Admin
   verifyAdmin: (password) => request('POST', '/api/admin/verify', { password }),

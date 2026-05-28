@@ -480,6 +480,36 @@ async def importar_semana_diarco(
                 """, (cod_art, round(precio_unit, 4), uxb_art))
                 seen_arts.add(cod_art)
 
+    # Actualizar estado ocupado/libre para clientes CF (no FA) con historial
+    with get_db() as cur:
+        cur.execute("""
+            WITH ultimas_semanas AS (
+                SELECT nombre FROM semanas
+                WHERE mayorista = 'diarco'
+                ORDER BY created_at DESC
+                LIMIT 12
+            ),
+            codigos_activos AS (
+                SELECT DISTINCT cliente FROM pick
+                WHERE semana IN (SELECT nombre FROM ultimas_semanas)
+                  AND mayorista = 'diarco' AND cliente IS NOT NULL
+            ),
+            codigos_con_historial AS (
+                SELECT DISTINCT cliente FROM pick
+                WHERE mayorista = 'diarco' AND cliente IS NOT NULL
+            )
+            UPDATE clientes_yaguar
+            SET estado = CASE
+                WHEN id_yaguar IN (SELECT cliente FROM codigos_activos) THEN 'ocupado'
+                ELSE 'libre'
+            END
+            WHERE mayorista = 'diarco'
+              AND id_yaguar IS NOT NULL
+              AND es_factura_a = false
+              AND (estado IS NULL OR estado NOT IN ('no_apto', 'no_zona'))
+              AND id_yaguar IN (SELECT cliente FROM codigos_con_historial)
+        """)
+
     clientes_sin_datos = [{"id": cod, "nombre": obs} for cod, obs in sin_datos.items()]
 
     return {

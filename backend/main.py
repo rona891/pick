@@ -207,35 +207,42 @@ async def lifespan(app: FastAPI):
                 created_at timestamptz DEFAULT now()
             )
         """)
-        # Estado de códigos Yaguar (ocupado/libre/no_apto según últimas 10 semanas)
+        # Estado de códigos Yaguar/Diarco (ocupado/libre/no_apto según últimas 12 semanas)
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS estado VARCHAR")
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS flete NUMERIC")
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS cod_sis VARCHAR")
+        cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS cuit_deposito VARCHAR")
+        cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS es_factura_a BOOLEAN NOT NULL DEFAULT false")
         # Marcar códigos conocidos como no aptos para factura B
         cur.execute("""
             UPDATE clientes_yaguar SET estado = 'no_apto'
             WHERE mayorista = 'yaguar'
               AND nombre IN ('NO ASIGNAR ES MONOTRIBUBTO', 'NO SE UTILIZA', 'NO ASIGNAR ES MONOTRIBUTO')
         """)
-        # Unique constraint en id_yaguar — primero eliminar duplicados (queda el de mayor id)
+        # Unique constraint en (id_yaguar, mayorista) — primero eliminar duplicados
         cur.execute("""
             DELETE FROM clientes_yaguar
             WHERE id_yaguar IS NOT NULL
               AND id NOT IN (
                 SELECT MAX(id) FROM clientes_yaguar
                 WHERE id_yaguar IS NOT NULL
-                GROUP BY id_yaguar
+                GROUP BY id_yaguar, mayorista
               )
         """)
         cur.execute("""
             DO $$
             BEGIN
+                -- Migrar constraint global a scoped por mayorista
+                IF EXISTS (
+                    SELECT 1 FROM pg_constraint WHERE conname = 'clientes_yaguar_id_yaguar_key'
+                ) THEN
+                    ALTER TABLE clientes_yaguar DROP CONSTRAINT clientes_yaguar_id_yaguar_key;
+                END IF;
                 IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint
-                    WHERE conname = 'clientes_yaguar_id_yaguar_key'
+                    SELECT 1 FROM pg_constraint WHERE conname = 'clientes_yaguar_id_yaguar_mayorista_key'
                 ) THEN
                     ALTER TABLE clientes_yaguar
-                    ADD CONSTRAINT clientes_yaguar_id_yaguar_key UNIQUE (id_yaguar);
+                    ADD CONSTRAINT clientes_yaguar_id_yaguar_mayorista_key UNIQUE (id_yaguar, mayorista);
                 END IF;
             END $$;
         """)

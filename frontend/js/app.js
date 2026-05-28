@@ -20,6 +20,7 @@ let clienteActual = '';        // nombre del cliente cuyo sheet está abierto
 
 // ── Estado: filtro de repartos en Clientes tab ─────────────────────────────
 let filtroRepartosClientes = new Set();  // repartos seleccionados como chips
+let _clienteEsFA = false;               // true cuando el nuevo cliente es Factura A
 
 // ── Estado: filtro de repartos en Pick tab ─────────────────────────────────
 let filtroRepartosPick = new Set();      // repartos seleccionados en Pick
@@ -120,7 +121,7 @@ function showHub() {
   _hideAllViews();
   _saveView('hub');
   document.getElementById('hub-view').classList.remove('hidden');
-  document.getElementById('hub-picking-section').classList.toggle('hidden', !tienePick());
+  document.getElementById('hub-picking-section').classList.remove('hidden');
   const tieneHerr = tieneSobrantes() || tieneNovedades();
   document.getElementById('hub-herramientas').classList.toggle('hidden', !tieneHerr);
   document.getElementById('hub-btn-sobrantes').classList.toggle('hidden', !tieneSobrantes());
@@ -943,6 +944,20 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.descrip-search-wrap')) hideDescripResults();
 });
 
+// Cerrar dropdowns al hacer click fuera
+document.addEventListener('click', (e) => {
+  [
+    ['filtro-estado-wrap',           'filtro-estado-dropdown'],
+    ['filtro-reparto-clientes-wrap', 'filtro-reparto-clientes'],
+    ['filtro-reparto-pick-wrap',     'filtro-reparto-pick'],
+  ].forEach(([wrapId, dropId]) => {
+    const wrap = document.getElementById(wrapId);
+    if (wrap && !wrap.contains(e.target)) {
+      document.getElementById(dropId)?.classList.add('hidden');
+    }
+  });
+});
+
 async function buscarPorDescrip(q) {
   try {
     const items = await api.buscarPorDescrip(q, semanaActual);
@@ -1305,10 +1320,20 @@ async function loadResumen() {
   }
 }
 
-document.querySelectorAll('.filter-btn[data-filter]').forEach((btn) => {
+const _ESTADO_LABELS = { todos: 'Todos', completo: 'Completo', incompleto: 'Incompleto', pendiente: 'Pendiente' };
+
+document.getElementById('btn-toggle-filtro-estado').addEventListener('click', () => {
+  document.getElementById('filtro-estado-dropdown').classList.toggle('hidden');
+});
+
+document.querySelectorAll('#filtro-estado-dropdown .chip-reparto[data-filter]').forEach((btn) => {
   btn.addEventListener('click', () => {
     filtroActivo = btn.dataset.filter;
-    document.querySelectorAll('.filter-btn[data-filter]').forEach((b) => b.classList.toggle('active', b.dataset.filter === filtroActivo));
+    document.querySelectorAll('#filtro-estado-dropdown .chip-reparto[data-filter]').forEach((b) =>
+      b.classList.toggle('active', b.dataset.filter === filtroActivo));
+    document.getElementById('btn-toggle-filtro-estado').textContent =
+      `Estado: ${_ESTADO_LABELS[filtroActivo] ?? filtroActivo} ▾`;
+    document.getElementById('filtro-estado-dropdown').classList.add('hidden');
     renderResumen();
   });
 });
@@ -1591,11 +1616,10 @@ function registrarClientePendiente(codigo, nombreObs) {
 }
 
 document.getElementById('btn-nuevo-cliente').addEventListener('click', () => {
-  if (getMayorista() === 'yaguar') {
-    document.getElementById('tipo-cliente-modal').classList.remove('hidden');
-  } else {
-    openClienteForm(null);
-  }
+  const mayorista = getMayorista();
+  document.getElementById('tipo-cliente-title').textContent =
+    `Nuevo cliente ${mayorista === 'diarco' ? 'DIARCO' : 'Yaguar'}`;
+  document.getElementById('tipo-cliente-modal').classList.remove('hidden');
 });
 
 document.getElementById('tipo-cliente-close').addEventListener('click', () => {
@@ -1605,7 +1629,10 @@ document.getElementById('tipo-cliente-close').addEventListener('click', () => {
 document.getElementById('btn-tipo-cf').addEventListener('click', async () => {
   document.getElementById('tipo-cliente-modal').classList.add('hidden');
   try {
-    const res = await api.getCodigoLibreYaguar();
+    const res = getMayorista() === 'diarco'
+      ? await api.getCodigoLibreDiarco()
+      : await api.getCodigoLibreYaguar();
+    _clienteEsFA = false;
     openClienteForm(null, res.codigo, null, true); // true = es CF, mostrar botón no_zona
   } catch {
     showToast('No hay códigos libres disponibles', 'error');
@@ -1614,6 +1641,7 @@ document.getElementById('btn-tipo-cf').addEventListener('click', async () => {
 
 document.getElementById('btn-tipo-fa').addEventListener('click', () => {
   document.getElementById('tipo-cliente-modal').classList.add('hidden');
+  _clienteEsFA = true;
   openClienteForm(null, null, null, false); // false = Factura A, código editable
 });
 
@@ -1639,12 +1667,12 @@ let _clientesSortDir = 1;  // 1 = asc, -1 = desc
 async function loadClientes() {
   document.getElementById('btn-exportar-clientes').classList.remove('hidden');
   const tbody = document.getElementById('clientes-tbody');
-  tbody.innerHTML = `<tr><td colspan="4" class="loading">Cargando...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="5" class="loading">Cargando...</td></tr>`;
   try {
     _clientesData = await api.getClientes();
     renderClientes();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" class="error-msg">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="error-msg">${err.message}</td></tr>`;
   }
   loadSinRegistrar();
 }
@@ -1661,6 +1689,9 @@ function renderClientes() {
     if (_clientesSortCol === 'flete') {
       va = parseFloat(va) || 0;
       vb = parseFloat(vb) || 0;
+    } else if (_clientesSortCol === 'es_factura_a') {
+      va = va ? 1 : 0;
+      vb = vb ? 1 : 0;
     } else {
       va = (va || '').toString().toLowerCase();
       vb = (vb || '').toString().toLowerCase();
@@ -1679,9 +1710,13 @@ function renderClientes() {
 
   tbody.innerHTML = data.map((c) => {
     const flete = c.flete != null ? (Math.round(c.flete * 10000) / 100) + '%' : '—';
+    const tipoCell = c.es_factura_a
+      ? '<span class="badge-fa">A</span>'
+      : '<span class="badge-cf">CF</span>';
     const hidden = q && !(`${c.id_yaguar} ${c.nombre} ${flete}`).toLowerCase().includes(q) ? 'style="display:none"' : '';
     return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})" ${hidden}>
       <td class="td-full td-cod">${c.id_yaguar ?? '—'}</td>
+      <td style="text-align:center;width:52px">${tipoCell}</td>
       <td class="td-full">${c.nombre ?? ''}</td>
       <td>${flete}</td>
       <td onclick="event.stopPropagation()"><div class="td-actions">
@@ -1720,38 +1755,60 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null,
   // Mostrar campo ID para ambos mayoristas con label correspondiente
   document.getElementById('cf-id-yaguar-wrap').style.display = '';
   document.getElementById('cf-id-label').textContent = esYaguar ? 'Código Yaguar' : 'Código DIARCO';
-  document.getElementById('cf-flete-wrap').style.display = esYaguar ? '' : 'none';
+  document.getElementById('cf-flete-wrap').style.display = '';
   document.getElementById('cf-cod-sis-wrap').classList.toggle('hidden', !esYaguar);
   document.getElementById('cf-cod_sis').value = '';
 
-  // Yaguar CF: readonly (código del pool). Yaguar FA y Diarco: editable.
-  const esReadonly = esYaguar && (esCF === true || (esCF === null && !!codigoPreverificado && !id));
+  // CF: readonly (código del pool). FA y código manual: editable.
+  const esReadonly = (esCF === true || (esCF === null && !!codigoPreverificado && !id));
   idInput.readOnly = esReadonly;
   idInput.value = '';
-  idInput.placeholder = esYaguar && !esReadonly ? 'Ingresá el código Yaguar' : (esYaguar ? '' : 'Ingresá el código DIARCO');
+  idInput.placeholder = !esReadonly ? `Ingresá el código ${esYaguar ? 'Yaguar' : 'DIARCO'}` : '';
 
-  // Botón "No existe en mi zona": solo para Yaguar CF nuevos
+  // Botón "No existe en mi zona": para CF nuevos de cualquier mayorista
   const btnNoZona = document.getElementById('btn-no-en-zona');
-  btnNoZona.classList.toggle('hidden', !(esYaguar && esCF === true && !id));
+  btnNoZona.classList.toggle('hidden', !(esCF === true && !id));
 
-  const fields = ['nombre', 'localidad', 'direccion', 'telefono', 'contacto', 'vendedor'];
+  const fields = ['nombre', 'localidad', 'direccion', 'telefono', 'contacto'];
   fields.forEach((f) => { document.getElementById(`cf-${f}`).value = ''; });
+  document.getElementById('cf-vendedor').value = '';
+  document.getElementById('cf-vendedor').disabled = false;
   document.getElementById('cf-flete').value = '';
+  document.getElementById('cf-cuit_deposito').value = '';
   if (nombrePre) document.getElementById('cf-nombre').value = nombrePre;
 
-  const zonas = await api.getZonas().catch(() => []);
+  const [zonas, vendedores] = await Promise.all([
+    api.getZonas().catch(() => []),
+    api.getVendedoresYaguar().catch(() => []),
+  ]);
+
   const sel = document.getElementById('cf-localidad');
   sel.innerHTML = '<option value="">— Seleccioná una zona —</option>' +
     zonas.map((z) => `<option value="${z.nombre}">${z.nombre}</option>`).join('');
+
+  const selVend = document.getElementById('cf-vendedor');
+  selVend.innerHTML = '<option value="">— Seleccioná un vendedor —</option>' +
+    vendedores.map((v) => `<option value="${v}">${v}</option>`).join('');
 
   if (id) {
     api.getClientes().then((list) => {
       const c = list.find((x) => x.id === id);
       if (c) {
-        fields.forEach((f) => { document.getElementById(`cf-${f}`).value = c[f] ?? ''; });
+        ['nombre', 'localidad', 'direccion', 'telefono', 'contacto'].forEach((f) => {
+          document.getElementById(`cf-${f}`).value = c[f] ?? '';
+        });
         idInput.value = c.id_yaguar ?? '';
-        document.getElementById('cf-flete').value = c.flete ?? '';
+        document.getElementById('cf-flete').value = c.flete != null ? Math.round(c.flete * 10000) / 100 : '';
         document.getElementById('cf-cod_sis').value = c.cod_sis ?? '';
+        document.getElementById('cf-cuit_deposito').value = c.cuit_deposito ?? '';
+        // Vendor: add to list if value isn't already an option (legacy/imported data)
+        const vv = c.vendedor ?? '';
+        if (vv && !selVend.querySelector(`option[value="${vv.replace(/"/g, '\\"')}"]`)) {
+          const opt = document.createElement('option');
+          opt.value = vv; opt.textContent = vv;
+          selVend.appendChild(opt);
+        }
+        selVend.value = vv;
       }
     });
   } else if (codigoPreverificado) {
@@ -1760,6 +1817,14 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null,
     if (nombrePre) idInput.readOnly = true;
   }
 
+  // Vendedores editando: solo pueden tocar nombre, zona, dirección, teléfono, contacto
+  const soloLectura = id && esVendedor();
+  idInput.readOnly = idInput.readOnly || soloLectura;
+  selVend.disabled = soloLectura;  // select no soporta readOnly; disabled pero JS aún lee .value
+  document.getElementById('cf-flete-wrap').style.display   = soloLectura ? 'none' : '';
+  document.getElementById('cf-cod-sis-wrap').classList.toggle('hidden', !esYaguar || soloLectura);
+  document.getElementById('cf-cuit-wrap').style.display    = soloLectura ? 'none' : '';
+
   document.getElementById('cliente-modal').classList.remove('hidden');
 }
 
@@ -1767,11 +1832,22 @@ document.getElementById('modal-close').addEventListener('click', () => {
   document.getElementById('cliente-modal').classList.add('hidden');
 });
 
+document.getElementById('cf-id_yaguar').addEventListener('input', (e) => {
+  e.target.value = e.target.value.replace(/\D/g, '');
+});
+
 document.getElementById('btn-no-en-zona').addEventListener('click', async () => {
   const codigo = document.getElementById('cf-id_yaguar').value;
   if (!codigo) return;
+  const ok = await confirmar(
+    `¿Confirmar que el código ${codigo} no existe en tu zona? Se descartará y se asignará el siguiente disponible.`,
+    'Sí, descartar'
+  );
+  if (!ok) return;
   try {
-    const res = await api.marcarNoZona(codigo);
+    const res = getMayorista() === 'diarco'
+      ? await api.marcarNoZonaDiarco(codigo)
+      : await api.marcarNoZona(codigo);
     showToast(`Código ${codigo} marcado como no disponible`, 'info');
     if (res.nuevo_codigo) {
       document.getElementById('cf-id_yaguar').value = res.nuevo_codigo;
@@ -1792,8 +1868,10 @@ document.getElementById('cliente-form').addEventListener('submit', async (e) => 
   });
   data.id_yaguar = document.getElementById('cf-id_yaguar').value.trim() || null;
   const fleteVal = document.getElementById('cf-flete').value.trim();
-  data.flete = fleteVal !== '' ? parseFloat(fleteVal) : null;
+  data.flete = fleteVal !== '' ? parseFloat(fleteVal) / 100 : null;
   data.cod_sis = document.getElementById('cf-cod_sis').value.trim() || null;
+  data.cuit_deposito = document.getElementById('cf-cuit_deposito').value.trim() || null;
+  if (!editingClienteId) data.es_factura_a = _clienteEsFA;
 
   if (!data.localidad) { showToast('Seleccioná una zona', 'error'); return; }
   if (!data.vendedor) { showToast('Ingresá el vendedor', 'error'); return; }
@@ -1993,13 +2071,13 @@ async function loadUsers() {
     tbody.innerHTML = users.map((u) => {
       const esSuperadmin = u.rol === 'superadmin';
       const rolLabel = `<span style="color:${ROL_COLORS[u.rol] || 'var(--muted)'}">${ROL_LABELS[u.rol] || u.rol}</span>`;
-      const deleteBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="event.stopPropagation();deleteUser(${u.id})">✕</button>`;
+      const deleteBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
       const clickAttr = esSuperadmin ? '' : `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"`;
       return `
         <tr ${clickAttr}>
           <td>${u.username}</td>
           <td>${rolLabel}</td>
-          <td class="td-actions">${deleteBtn}</td>
+          <td onclick="event.stopPropagation()"><div class="td-actions">${deleteBtn}</div></td>
         </tr>`;
     }).join('');
   } catch (err) {
@@ -2392,13 +2470,34 @@ async function loadZonas() {
   }
 }
 
-function editZona(id, nombre, reparto) {
-  document.getElementById('nz-nombre').value = nombre;
-  document.getElementById('nz-reparto').value = reparto;
-  const btn = document.querySelector('#nueva-zona-form button[type="submit"]');
-  btn.textContent = 'Guardar cambios';
-  btn.dataset.editId = id;
+let _editZonaId = null;
+
+async function editZona(id, nombre, reparto) {
+  _editZonaId = id;
+  document.getElementById('ez-nombre').value = nombre;
+  // Poblar el select con los repartos actuales y seleccionar el correcto
+  await populateRepartosSelect('ez-reparto', reparto);
+  document.getElementById('edit-zona-modal').classList.remove('hidden');
 }
+
+document.getElementById('edit-zona-close').addEventListener('click', () => {
+  document.getElementById('edit-zona-modal').classList.add('hidden');
+});
+
+document.getElementById('edit-zona-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!_editZonaId) return;
+  const nombre = document.getElementById('ez-nombre').value.trim();
+  const reparto = document.getElementById('ez-reparto').value;
+  try {
+    await api.updateZona(_editZonaId, nombre, reparto);
+    showToast('Zona actualizada', 'success');
+    document.getElementById('edit-zona-modal').classList.add('hidden');
+    loadZonas();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
 
 async function deleteZona(id, nombre) {
   const ok = await confirmar(`¿Eliminar la zona "${nombre}"?`);
@@ -2416,19 +2515,9 @@ document.getElementById('nueva-zona-form').addEventListener('submit', async (e) 
   e.preventDefault();
   const nombre = document.getElementById('nz-nombre').value.trim();
   const reparto = document.getElementById('nz-reparto').value;
-  const btn = e.target.querySelector('button[type="submit"]');
-  const editId = btn.dataset.editId;
-
   try {
-    if (editId) {
-      await api.updateZona(parseInt(editId), nombre, reparto);
-      showToast('Zona actualizada', 'success');
-      delete btn.dataset.editId;
-      btn.textContent = 'Agregar zona';
-    } else {
-      await api.createZona(nombre, reparto);
-      showToast(`Zona ${nombre} creada`, 'success');
-    }
+    await api.createZona(nombre, reparto);
+    showToast(`Zona ${nombre} creada`, 'success');
     document.getElementById('nz-nombre').value = '';
     document.getElementById('nz-reparto').value = '';
     loadZonas();

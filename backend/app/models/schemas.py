@@ -63,6 +63,8 @@ class Cliente(BaseModel):
     id_yaguar: Optional[str] = None
     flete: Optional[float] = None
     cod_sis: Optional[str] = None
+    cuit_deposito: Optional[str] = None
+    es_factura_a: bool = False
 
 
 class ClienteCreate(BaseModel):
@@ -76,6 +78,8 @@ class ClienteCreate(BaseModel):
     id_yaguar: Optional[str] = None
     flete: Optional[float] = None
     cod_sis: Optional[str] = None
+    cuit_deposito: Optional[str] = None
+    es_factura_a: bool = False
 
 
 class MarcarNoAptoIn(BaseModel):
