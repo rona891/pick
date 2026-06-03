@@ -2400,6 +2400,26 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   }
   /* ── Hub: full-width en desktop ────────────────────────────────────── */
   .hub { max-width: 100%; }
+  .hub-topbar {
+    max-width: 100%;
+    align-self: stretch;
+    padding: 14px 40px;
+  }
+
+  /* ── Mayorista cards: horizontal y logos más grandes en desktop ─────── */
+  .mayorista-cards {
+    flex-direction: row;
+    gap: 24px;
+  }
+  .mayorista-card {
+    flex: 1;
+    min-height: 200px;
+    padding: 40px;
+  }
+  .mayorista-logo {
+    max-width: 360px;
+    max-height: 160px;
+  }
 
   /* ── Bottom nav: se vuelve una barra horizontal estática en desktop ─── */
   .bottom-nav {
@@ -2410,6 +2430,8 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
     max-width: 100%;
     margin: 0;
     padding-bottom: 0;
+    padding-left: 40px;
+    padding-right: 40px;
   }
   .bottom-nav .tab-btn {
     flex-direction: row;
