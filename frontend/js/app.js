@@ -1678,6 +1678,35 @@ let _clientesData = [];
 let _clientesSortCol = 'nombre';
 let _clientesSortDir = 1;  // 1 = asc, -1 = desc
 
+function _norm(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, '');
+}
+
+function _lev(a, b) {
+  const m = a.length, n = b.length;
+  const d = Array.from({length: m + 1}, (_, i) =>
+    Array.from({length: n + 1}, (_, j) => i === 0 ? j : j === 0 ? i : 0));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      d[i][j] = a[i-1] === b[j-1] ? d[i-1][j-1] : 1 + Math.min(d[i-1][j], d[i][j-1], d[i-1][j-1]);
+  return d[m][n];
+}
+
+function _clienteMatch(query, campo) {
+  const q = _norm(query);
+  const t = _norm(campo);
+  if (!q) return true;
+  if (t.includes(q)) return true;
+  if (q.length < 4) return false;
+  const maxErr = Math.max(1, Math.floor(q.length / 4));
+  for (let i = 0; i <= t.length - q.length; i++) {
+    if (_lev(q, t.slice(i, i + q.length)) <= maxErr) return true;
+  }
+  return false;
+}
+
 async function loadClientes() {
   document.getElementById('btn-exportar-clientes').classList.remove('hidden');
   const tbody = document.getElementById('clientes-tbody');
@@ -1727,7 +1756,7 @@ function renderClientes() {
     const tipoCell = c.es_factura_a
       ? '<span class="badge-fa">A</span>'
       : '<span class="badge-cf">CF</span>';
-    const hidden = q && !(`${c.id_yaguar} ${c.nombre} ${flete}`).toLowerCase().includes(q) ? 'style="display:none"' : '';
+    const hidden = q && !_clienteMatch(q, c.nombre) && !_clienteMatch(q, c.id_yaguar ?? '') ? 'style="display:none"' : '';
     return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})" ${hidden}>
       <td class="td-full td-cod">${c.id_yaguar ?? '—'}</td>
       <td style="text-align:center;width:52px">${tipoCell}</td>
