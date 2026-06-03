@@ -110,8 +110,7 @@ function showNovedades() {
   _saveView('novedades');
   const m = getMayorista();
   aplicarTema(m);
-  document.getElementById('nov-view-badge').textContent = m.toUpperCase();
-  document.getElementById('nov-view-badge').className = `sob-view-badge sob-view-badge-${m}`;
+  document.getElementById('nov-logo').src = m === 'diarco' ? 'diarco.png' : 'yaguar.png';
   document.getElementById('nov-usuario').textContent = localStorage.getItem('username') || '';
   document.getElementById('novedades-view').classList.remove('hidden');
   initNovedades();
@@ -146,8 +145,7 @@ function showSobrantes() {
   _saveView('sobrantes');
   const m = getMayorista();
   aplicarTema(m);
-  document.getElementById('sob-view-badge').textContent = m.toUpperCase();
-  document.getElementById('sob-view-badge').className = `sob-view-badge sob-view-badge-${m}`;
+  document.getElementById('sob-logo').src = m === 'diarco' ? 'diarco.png' : 'yaguar.png';
   document.getElementById('sob-usuario').textContent = localStorage.getItem('username') || '';
   document.getElementById('sobrantes-view').classList.remove('hidden');
   initSobrantes();
@@ -221,11 +219,13 @@ function esLightMode() {
 function aplicarModo() {
   const light = esLightMode();
   document.body.classList.toggle('light-mode', light);
-  const btn = document.getElementById('btn-theme');
-  if (btn) btn.textContent = light ? '🌙' : '☀';
+  document.querySelectorAll('.btn-theme').forEach(btn => {
+    btn.textContent = light ? '🌙' : '☀';
+  });
 }
 
-document.getElementById('btn-theme').addEventListener('click', () => {
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.btn-theme')) return;
   localStorage.setItem('lightMode', esLightMode() ? '0' : '1');
   aplicarModo();
 });
@@ -267,6 +267,7 @@ document.getElementById('hub-btn-sobrantes').addEventListener('click', () => {
   sel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });
 
+document.getElementById('app-back-btn').addEventListener('click', () => showHub());
 document.getElementById('sob-back-btn').addEventListener('click', volverAlHub);
 
 document.getElementById('hub-btn-novedades').addEventListener('click', () => {
@@ -2397,8 +2398,6 @@ document.getElementById('username-form').addEventListener('submit', async (e) =>
   const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (!MOBILE) return;
 
-  const btn = document.getElementById('btn-fullscreen');
-
   function enterFullscreen() {
     const el = document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
@@ -2414,16 +2413,20 @@ document.getElementById('username-form').addEventListener('submit', async (e) =>
     return !!(document.fullscreenElement || document.webkitFullscreenElement);
   }
 
-  function updateBtn() {
-    if (!btn) return;
-    btn.textContent = isFullscreen() ? '⊡' : '⛶';
-    btn.title = isFullscreen() ? 'Salir de pantalla completa' : 'Pantalla completa';
+  function updateBtns() {
+    const icon = isFullscreen() ? '⊡' : '⛶';
+    const title = isFullscreen() ? 'Salir de pantalla completa' : 'Pantalla completa';
+    document.querySelectorAll('.btn-fullscreen-mobile').forEach(b => {
+      b.textContent = icon;
+      b.title = title;
+    });
   }
 
-  document.addEventListener('fullscreenchange', updateBtn);
-  document.addEventListener('webkitfullscreenchange', updateBtn);
+  document.addEventListener('fullscreenchange', updateBtns);
+  document.addEventListener('webkitfullscreenchange', updateBtns);
 
-  if (btn) btn.addEventListener('click', () => {
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.btn-fullscreen-mobile')) return;
     if (isFullscreen()) exitFullscreen(); else enterFullscreen();
   });
 

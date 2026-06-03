@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=58" />
+  <link rel="stylesheet" href="css/styles.css?v=59" />
 </head>
 <body>
 
@@ -109,8 +109,12 @@
 
     <div class="sob-view-header">
       <button id="sob-back-btn" class="sob-back-btn">← Volver</button>
-      <span id="sob-usuario" class="topbar-usuario sob-header-usuario"></span>
-      <span id="sob-view-badge" class="sob-view-badge"></span>
+      <div class="topbar-center">
+        <button class="btn-logout btn-fullscreen-mobile" title="Pantalla completa">⛶</button>
+        <span id="sob-usuario" class="topbar-usuario"></span>
+        <button class="btn-logout btn-theme" title="Cambiar modo"></button>
+      </div>
+      <img id="sob-logo" src="" alt="Mayorista" class="topbar-logo" />
     </div>
 
     <div class="sob-view-body">
@@ -186,8 +190,12 @@
 
     <div class="sob-view-header">
       <button id="nov-back-btn" class="sob-back-btn">← Volver</button>
-      <span id="nov-usuario" class="topbar-usuario sob-header-usuario"></span>
-      <span id="nov-view-badge" class="sob-view-badge"></span>
+      <div class="topbar-center">
+        <button class="btn-logout btn-fullscreen-mobile" title="Pantalla completa">⛶</button>
+        <span id="nov-usuario" class="topbar-usuario"></span>
+        <button class="btn-logout btn-theme" title="Cambiar modo"></button>
+      </div>
+      <img id="nov-logo" src="" alt="Mayorista" class="topbar-logo" />
     </div>
 
     <div class="nov-view-body">
@@ -368,14 +376,13 @@
   <div id="app-view" class="hidden">
 
     <div class="topbar">
-      <img id="topbar-logo" src="" alt="Mayorista" class="topbar-logo" onclick="cambiarMayorista()" title="Cambiar mayorista" />
-      <div id="topbar-usuario" class="topbar-usuario"></div>
-      <div class="topbar-actions">
+      <button id="app-back-btn" class="sob-back-btn">← Volver</button>
+      <div class="topbar-center">
         <button id="btn-fullscreen" class="btn-logout btn-fullscreen-mobile" title="Pantalla completa">⛶</button>
+        <div id="topbar-usuario" class="topbar-usuario"></div>
         <button id="btn-theme" class="btn-logout btn-theme" title="Cambiar modo"></button>
-        <button id="change-pw-btn" class="btn-logout">Cuenta</button>
-        <button id="logout-btn" class="btn-logout">Salir</button>
       </div>
+      <img id="topbar-logo" src="" alt="Mayorista" class="topbar-logo" />
     </div>
 
     <!-- Selector de semana -->
@@ -1176,7 +1183,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=58"></script>
-  <script src="js/app.js?v=58"></script>
+  <script src="js/api.js?v=59"></script>
+  <script src="js/app.js?v=59"></script>
 </body>
 </html>
