@@ -2576,7 +2576,7 @@ document.getElementById('nueva-zona-form').addEventListener('submit', async (e) 
 });
 
 // ── Modal de confirmación ──────────────────────────────────────────────────
-function confirmar(msg, btnLabel = 'Sí, confirmar') {
+function confirmar(msg, btnLabel = 'Sí, confirmar', mostrarCancelar = true) {
   return new Promise((resolve) => {
     const overlay = document.getElementById('confirm-modal');
     document.getElementById('confirm-msg').textContent = msg;
@@ -2584,8 +2584,10 @@ function confirmar(msg, btnLabel = 'Sí, confirmar') {
     const ok = document.getElementById('confirm-ok');
     ok.textContent = btnLabel;
     const cancel = document.getElementById('confirm-cancel');
+    cancel.style.display = mostrarCancelar ? '' : 'none';
     function cleanup(result) {
       overlay.classList.add('hidden');
+      cancel.style.display = '';
       ok.removeEventListener('click', onOk);
       cancel.removeEventListener('click', onCancel);
       resolve(result);
@@ -3396,7 +3398,7 @@ async function novBuscarPorCodigo(cod) {
     } else {
       await confirmar(
         `Este artículo no está en el pick de la semana "${_novSemana || 'actual'}". Para registrar una novedad usá el botón ✏️ Manual.`,
-        'Entendido'
+        'Entendido', false
       );
     }
   } catch { showToast('Error en la búsqueda', 'error'); }
