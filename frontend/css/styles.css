@@ -2403,7 +2403,7 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   .hub-topbar {
     max-width: 100%;
     align-self: stretch;
-    padding: 14px 40px;
+    padding: 14px 0;
   }
 
   /* ── Mayorista cards: horizontal y logos más grandes en desktop ─────── */
