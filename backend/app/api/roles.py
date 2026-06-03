@@ -48,8 +48,41 @@ def _require_perm(authorization: str, perm: str):
 @router.get("/")
 def list_roles():
     with get_db() as cur:
-        cur.execute(f"SELECT nombre, es_protegido, {', '.join(ALL_PERMS)}, created_at FROM roles ORDER BY nombre")
+        cur.execute(f"""
+            SELECT nombre, es_protegido, orden, {', '.join(ALL_PERMS)}, created_at
+            FROM roles
+            ORDER BY
+                CASE WHEN nombre = 'superadmin' THEN 0 ELSE 1 END,
+                orden ASC,
+                nombre ASC
+        """)
         return [dict(r) for r in cur.fetchall()]
+
+
+@router.post("/{nombre}/subir")
+def subir_rol(nombre: str, authorization: str = Header(...)):
+    _require_perm(authorization, "perm_admin_roles")
+    with get_db() as cur:
+        cur.execute("SELECT nombre, orden, es_protegido FROM roles WHERE nombre = %s", (nombre,))
+        rol = cur.fetchone()
+        if not rol:
+            raise HTTPException(404, "Rol no encontrado")
+        if rol["es_protegido"]:
+            raise HTTPException(403, "No se puede mover el rol superadmin")
+        # Encontrar el rol inmediatamente anterior (orden menor, no superadmin)
+        cur.execute("""
+            SELECT nombre, orden FROM roles
+            WHERE orden < %s AND nombre != 'superadmin'
+            ORDER BY orden DESC, nombre DESC
+            LIMIT 1
+        """, (rol["orden"],))
+        anterior = cur.fetchone()
+        if not anterior:
+            return {"ok": True, "moved": False}  # ya está arriba del todo
+        # Intercambiar órdenes
+        cur.execute("UPDATE roles SET orden = %s WHERE nombre = %s", (anterior["orden"], nombre))
+        cur.execute("UPDATE roles SET orden = %s WHERE nombre = %s", (rol["orden"], anterior["nombre"]))
+    return {"ok": True, "moved": True}
 
 
 @router.post("/", status_code=201)

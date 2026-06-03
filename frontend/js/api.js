@@ -207,6 +207,7 @@ const api = {
   createRol: (data) => request('POST', '/api/roles/', data),
   updateRol: (nombre, data) => request('PUT', `/api/roles/${encodeURIComponent(nombre)}`, data),
   deleteRol: (nombre) => request('DELETE', `/api/roles/${encodeURIComponent(nombre)}`),
+  subirRol: (nombre) => request('POST', `/api/roles/${encodeURIComponent(nombre)}/subir`),
 
   // Artículos catálogo
   getArticulos: (q, limit = 300) => {

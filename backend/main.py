@@ -256,6 +256,7 @@ async def lifespan(app: FastAPI):
             CREATE TABLE IF NOT EXISTS roles (
                 nombre            VARCHAR PRIMARY KEY,
                 es_protegido      BOOLEAN NOT NULL DEFAULT false,
+                orden             INTEGER NOT NULL DEFAULT 100,
                 perm_pick         BOOLEAN NOT NULL DEFAULT false,
                 perm_sobrantes    BOOLEAN NOT NULL DEFAULT false,
                 perm_novedades    BOOLEAN NOT NULL DEFAULT false,
@@ -282,6 +283,18 @@ async def lifespan(app: FastAPI):
                 ('operario',   false, true, false,false,true, true, false,false,false,false,false,false,false),
                 ('vendedor',   false, true, false,false,true, true, true, false,false,false,true, false,false)
             ON CONFLICT (nombre) DO NOTHING
+        """)
+        # Migración: agregar columna orden si no existe, y asignar valores iniciales
+        cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS orden INTEGER NOT NULL DEFAULT 100")
+        cur.execute("""
+            UPDATE roles SET orden = CASE nombre
+                WHEN 'superadmin' THEN 0
+                WHEN 'admin'      THEN 1
+                WHEN 'operario'   THEN 2
+                WHEN 'vendedor'   THEN 3
+                ELSE 100
+            END
+            WHERE orden = 100 OR orden IS NULL
         """)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS articulos_catalogo (

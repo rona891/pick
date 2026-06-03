@@ -2131,8 +2131,12 @@ function renderUsers() {
   if (!tbody) return;
   const q = (document.getElementById('users-search')?.value || '').toLowerCase();
 
-  // superadmin siempre arriba, el resto se ordena normalmente
-  const _rolWeight = (r) => ({ superadmin: 0, admin: 1 }[r] ?? 2);
+  // Usar el orden definido en la tabla de roles (si está cargado)
+  const _rolWeight = (r) => {
+    if (r === 'superadmin') return -1;
+    const found = _rolesData.find(x => x.nombre === r);
+    return found ? (found.orden ?? 100) : 100;
+  };
   const superadmins = _usersData.filter(u => u.rol === 'superadmin');
   const resto = _usersData.filter(u => u.rol !== 'superadmin');
   const data = [...superadmins, ...resto.sort((a, b) => {
@@ -4280,8 +4284,11 @@ function renderRoles() {
 
   const cardsHtml = rolesOrdenados.map(r => {
     const protegido = r.es_protegido ? ' <span style="font-size:11px">🔒</span>' : '';
+    const esFirst = rolesOrdenados.indexOf(r) === 1; // posición 0 = superadmin (protegido)
+    const btnSubir = (!r.es_protegido && !esFirst)
+      ? `<button class="btn-edit" onclick="_subirRol('${esc(r.nombre)}')" title="Subir un lugar">↑</button>` : '';
     const acciones = r.es_protegido ? '' :
-      `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>
+      `${btnSubir}<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>
        <button class="btn-del" onclick="_deleteRol('${esc(r.nombre)}')">Eliminar</button>`;
     const groupsHtml = groups.map(g => {
       const active = g.perms.filter(pk => r[pk]).map(pk => tag(permLabel[pk]));
@@ -4349,6 +4356,13 @@ document.getElementById('rol-form')?.addEventListener('submit', async e => {
     await _recargarSelectsRoles();
   } catch (err) { showToast(err.message, 'error'); }
 });
+
+async function _subirRol(nombre) {
+  try {
+    await api.subirRol(nombre);
+    await loadRoles();
+  } catch (err) { showToast(err.message, 'error'); }
+}
 
 async function _deleteRol(nombre) {
   if (!await confirmar(`¿Eliminar el rol "${nombre}"? Esta acción no se puede deshacer.`, 'Sí, eliminar')) return;
