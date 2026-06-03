@@ -155,6 +155,11 @@ body {
   padding: 5px 10px;
   cursor: pointer;
   transition: color .15s, border-color .15s;
+  line-height: 1;
+  height: 28px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
 }
 .hub-topbar-btn:hover { color: var(--text); border-color: var(--accent); }
 
