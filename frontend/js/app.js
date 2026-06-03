@@ -2639,16 +2639,16 @@ function renderSobItems(items) {
       </div>
       <div class="sob-steppers">
         <div class="sob-stepper">
-          <span class="sob-stepper-label">UNI</span>
-          <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="unidades">−</button>
-          <span class="sob-stepper-val" data-id="${item.id}" data-field="unidades">${item.unidades}</span>
-          <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="unidades">+</button>
-        </div>
-        <div class="sob-stepper">
           <span class="sob-stepper-label">BUL</span>
           <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="bultos">−</button>
           <span class="sob-stepper-val" data-id="${item.id}" data-field="bultos">${item.bultos}</span>
           <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="bultos">+</button>
+        </div>
+        <div class="sob-stepper">
+          <span class="sob-stepper-label">UNI</span>
+          <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="unidades">−</button>
+          <span class="sob-stepper-val" data-id="${item.id}" data-field="unidades">${item.unidades}</span>
+          <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="unidades">+</button>
         </div>
       </div>
     </div>
@@ -2674,6 +2674,7 @@ document.getElementById('sob-items').addEventListener('click', async (e) => {
   const removeBtn = e.target.closest('.sob-item-remove');
   if (removeBtn) {
     const id = parseInt(removeBtn.dataset.id);
+    if (!await confirmar('¿Quitar este artículo de la lista?', 'Sí, quitar')) return;
     try {
       await api.sobDeleteItem(_sobListaActual, id);
       _sobItems = _sobItems.filter(i => i.id !== id);
@@ -3276,6 +3277,7 @@ function renderNovedades(items) {
   }).join('');
   container.querySelectorAll('.nov-del-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
+      if (!await confirmar('¿Eliminar esta novedad?', 'Sí, eliminar')) return;
       try { await api.novDeleteItem(parseInt(btn.dataset.id)); await loadNovedades(); }
       catch (err) { showToast(err.message, 'error'); }
     });
