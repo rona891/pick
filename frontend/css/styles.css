@@ -246,9 +246,8 @@ body {
 .hub-sub-selector {
   margin-top: 8px;
   padding: 16px;
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
+  background: none;
+  border: none;
   display: flex;
   flex-direction: column;
   align-items: center;
