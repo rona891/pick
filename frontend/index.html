@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=64" />
+  <link rel="stylesheet" href="css/styles.css?v=65" />
 </head>
 <body>
 
@@ -566,6 +566,7 @@
           <button class="admin-tab-btn" data-admin-tab="zonas">Zonas</button>
           <button class="admin-tab-btn" data-admin-tab="reparto">Reparto</button>
           <button class="admin-tab-btn" data-admin-tab="historial">Auditoría</button>
+          <button class="admin-tab-btn" data-admin-tab="articulos">Artículos</button>
         </div>
 
         <div class="admin-main">
@@ -804,6 +805,22 @@
           </div>
           <div id="historial-resumen" class="historial-resumen"></div>
           <div id="historial-tabla-wrap"></div>
+        </div>
+
+        <!-- Sub-panel: Artículos -->
+        <div class="admin-tab-panel hidden" data-admin-panel="articulos">
+          <div class="admin-header">
+            <input type="text" id="admin-articulos-search" class="clientes-search-input"
+                   placeholder="Buscar por código, descripción, barcode o fabricante..." autocomplete="off" style="flex:1;margin-right:8px" />
+            <button id="btn-exportar-articulos" class="btn-secondary hidden" style="margin-right:8px">↓ Exportar Excel</button>
+          </div>
+          <div id="articulos-count" class="muted-text" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
+          <div class="table-wrap">
+            <table class="clientes-table" id="articulos-table">
+              <thead id="articulos-thead"></thead>
+              <tbody id="articulos-tbody"></tbody>
+            </table>
+          </div>
         </div>
 
         <!-- Sub-panel: Reparto -->
@@ -1195,7 +1212,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=64"></script>
-  <script src="js/app.js?v=64"></script>
+  <script src="js/api.js?v=65"></script>
+  <script src="js/app.js?v=65"></script>
 </body>
 </html>

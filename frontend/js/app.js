@@ -91,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (target === 'zonas') loadZonas();
       if (target === 'reparto') loadAsignaciones();
       if (target === 'historial') loadHistorial();
+      if (target === 'articulos') loadArticulos();
     });
   });
 });
@@ -3739,3 +3740,93 @@ function _resetNovForm() {
 }
 
 document.getElementById('nov-back-btn').addEventListener('click', () => { stopNovScanner(); showHub(); });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ARTÍCULOS CATÁLOGO
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _articulosTimer = null;
+let _articulosCargados = false;
+
+const COLS_ARTICULOS_YAGUAR = [
+  { label: 'Código',      field: 'cod_art' },
+  { label: 'Barcode',     field: 'cod_bar' },
+  { label: 'Descripción', field: 'descrip' },
+  { label: 'Fabricante',  field: 'fabricante' },
+  { label: 'UxB',         field: 'uxb' },
+  { label: 'Precio c/IVA',field: 'precio_con_iva' },
+  { label: '% IVA',       field: 'porc_iva' },
+  { label: 'Costo',       field: 'precio_costo' },
+  { label: 'Subcategoría',field: 'subcategoria' },
+  { label: 'Stock',       field: 'stock' },
+];
+
+const COLS_ARTICULOS_DIARCO = [
+  { label: 'Código',       field: 'cod_art' },
+  { label: 'Barcode',      field: 'cod_bar' },
+  { label: 'Descripción',  field: 'descrip' },
+  { label: 'UxB',          field: 'uxb' },
+  { label: 'Precio c/IVA', field: 'precio_con_iva' },
+  { label: 'Costo',        field: 'precio_costo' },
+  { label: 'P. Mayorista', field: 'precio_mayorista' },
+  { label: 'Familia',      field: 'familia' },
+  { label: 'Subcategoría', field: 'subcategoria' },
+  { label: 'Stock',        field: 'stock' },
+];
+
+async function loadArticulos(q) {
+  const tbody = document.getElementById('articulos-tbody');
+  const thead = document.getElementById('articulos-thead');
+  const count = document.getElementById('articulos-count');
+  const exportBtn = document.getElementById('btn-exportar-articulos');
+
+  tbody.innerHTML = '<tr><td colspan="10" class="loading">Cargando...</td></tr>';
+
+  const cols = getMayorista() === 'yaguar' ? COLS_ARTICULOS_YAGUAR : COLS_ARTICULOS_DIARCO;
+
+  // Renderizar encabezados (solo la primera vez o si cambió mayorista)
+  thead.innerHTML = `<tr>${cols.map(c => `<th>${c.label}</th>`).join('')}</tr>`;
+
+  try {
+    const items = await api.getArticulos(q || '', 500);
+
+    if (!items.length) {
+      tbody.innerHTML = `<tr><td colspan="${cols.length}" class="muted-text" style="text-align:center;padding:16px">${q ? 'Sin resultados para "' + q + '"' : 'Sin artículos cargados. Importá una semana primero.'}</td></tr>`;
+      count.textContent = '';
+      exportBtn.classList.add('hidden');
+      return;
+    }
+
+    const fmt = (v) => v != null ? Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+    const MONEY_FIELDS = new Set(['precio_con_iva', 'precio_costo', 'precio_mayorista']);
+    const NUM_FIELDS = new Set(['uxb', 'stock', 'porc_iva']);
+
+    tbody.innerHTML = items.map(item => `
+      <tr>
+        ${cols.map(c => {
+          const v = item[c.field];
+          if (v == null || v === '') return `<td class="muted-text">—</td>`;
+          if (MONEY_FIELDS.has(c.field)) return `<td style="text-align:right">$${fmt(v)}</td>`;
+          if (NUM_FIELDS.has(c.field)) return `<td style="text-align:center">${fmt(v)}</td>`;
+          return `<td>${v}</td>`;
+        }).join('')}
+      </tr>
+    `).join('');
+
+    count.textContent = `${items.length} artículo${items.length !== 1 ? 's' : ''}${q ? ` para "${q}"` : ''}`;
+    exportBtn.classList.remove('hidden');
+    _articulosCargados = true;
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="${cols.length}" class="error-msg">${err.message}</td></tr>`;
+    exportBtn.classList.add('hidden');
+  }
+}
+
+document.getElementById('admin-articulos-search').addEventListener('input', (e) => {
+  clearTimeout(_articulosTimer);
+  _articulosTimer = setTimeout(() => loadArticulos(e.target.value.trim()), 300);
+});
+
+document.getElementById('btn-exportar-articulos')?.addEventListener('click', () => {
+  window.location.href = api.exportArticulosUrl();
+});

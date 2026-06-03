@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import picks, auth, health, clientes, admin, zonas, export
+from app.api import picks, auth, health, clientes, admin, zonas, export, articulos
 from app.api.yaguar import semanas as yaguar_semanas
 from app.api.diarco import semanas as diarco_semanas
 from app.api.sobrantes import router_yaguar as sob_yaguar, router_diarco as sob_diarco, router_shared as sob_shared
@@ -245,6 +245,38 @@ async def lifespan(app: FastAPI):
             )
         """)
         cur.execute("""
+            CREATE TABLE IF NOT EXISTS articulos_catalogo (
+                cod_art           VARCHAR NOT NULL,
+                mayorista         VARCHAR NOT NULL,
+                descrip           VARCHAR,
+                cod_bar           VARCHAR,
+                cod_bar_bulto     VARCHAR,
+                uxb               INTEGER DEFAULT 0,
+                precio_con_iva    NUMERIC,
+                precio_costo      NUMERIC,
+                precio_mayorista  NUMERIC,
+                porc_iva          NUMERIC,
+                impuestos_monto   NUMERIC,
+                impuestos_porc    NUMERIC,
+                descuento_default NUMERIC,
+                fabricante        VARCHAR,
+                unidad_medida     VARCHAR,
+                tipo_unidad       VARCHAR,
+                familia           VARCHAR,
+                subcategoria      VARCHAR,
+                tipo_estado       VARCHAR,
+                estado            SMALLINT,
+                stock             NUMERIC,
+                observaciones     VARCHAR,
+                folder            VARCHAR,
+                usrdef_0          NUMERIC,
+                usrdef_1          NUMERIC,
+                usrdef_6          NUMERIC,
+                updated_at        TIMESTAMPTZ DEFAULT NOW(),
+                PRIMARY KEY (cod_art, mayorista)
+            )
+        """)
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS pick_auditoria (
                 id bigserial PRIMARY KEY,
                 pick_id bigint NOT NULL,
@@ -336,3 +368,6 @@ app.include_router(nov_diarco, prefix="/api")
 # ── Asignaciones de reparto ────────────────────────────────────────────────────
 app.include_router(asig_yaguar, prefix="/api")
 app.include_router(asig_diarco, prefix="/api")
+# ── Artículos catálogo ─────────────────────────────────────────────────────────
+app.include_router(articulos.router_yaguar, prefix="/api")
+app.include_router(articulos.router_diarco, prefix="/api")

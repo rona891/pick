@@ -64,6 +64,21 @@ GROUP BY c.CLI_ID
 """
 
 
+CATALOGO_SQL = """
+    SELECT
+        a.ART_ID, a.ART_DESCR, a.ART_CODEBAR,
+        a.ART_UNI_BULTO, a.ART_PRECIO_DEFAULT, a.ART_PORC_IVA,
+        a.ART_IMPUESTOS_MONTO, a.ART_IMPUESTOS_PORC,
+        a.ART_USRDEF_2, a.ART_DESC_PORC_DEFAULT,
+        a.ART_FABRICANTE, a.ART_UM, a.ART_ESTADO,
+        a.ART_STOCK, a.ART_OBS,
+        a.ART_USRDEF_0, a.ART_USRDEF_1, a.ART_USRDEF_5, a.ART_USRDEF_6,
+        s.SRUB_DESC AS subcategoria
+    FROM articulos a
+    LEFT JOIN subrubros s ON a.ART_SRUB_ID = s.SRUB_ID
+"""
+
+
 def _query_db_file(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         f.write(db_bytes)
@@ -76,15 +91,19 @@ def _query_db_file(db_bytes: bytes, fecha_desde: str, fecha_hasta: str):
         picks = [dict(r) for r in cur.fetchall()]
         cur.execute(TOTALES_SQL, (fecha_desde, fecha_hasta))
         totales = {r["cliente_id"]: float(r["total_importe"] or 0) for r in cur.fetchall()}
-        # Códigos que Yaguar sabe que NO son consumidor final (RESP. INSC., MONOTRIBUTO, etc.)
         cur.execute("""
             SELECT SUBSTR(CLI_ID, -6) AS codigo
             FROM clientes
             WHERE CLI_COND_IVA NOT IN (2, 5)
         """)
         no_cf = {r["codigo"] for r in cur.fetchall()}
+        try:
+            cur.execute(CATALOGO_SQL)
+            catalogo = [dict(r) for r in cur.fetchall()]
+        except Exception:
+            catalogo = []
         conn.close()
-        return picks, totales, no_cf
+        return picks, totales, no_cf, catalogo
     finally:
         os.unlink(tmp_path)
 
@@ -130,13 +149,16 @@ async def importar_semana(
     all_rows: list = []
     totales_por_cliente: dict = {}
     codigos_no_cf: set = set()
+    all_catalogo: dict = {}  # cod_art → row (deduplicado entre archivos)
     for archivo in archivos:
         content = await archivo.read()
-        rows, totales, no_cf = _query_db_file(content, fecha_desde, fecha_hasta)
+        rows, totales, no_cf, catalogo = _query_db_file(content, fecha_desde, fecha_hasta)
         all_rows.extend(rows)
         for cid, monto in totales.items():
             totales_por_cliente[cid] = totales_por_cliente.get(cid, 0) + monto
         codigos_no_cf.update(no_cf)
+        for art in catalogo:
+            all_catalogo[str(art["ART_ID"])] = art
 
     if not all_rows:
         raise HTTPException(400, "No se encontraron picks en ese rango de fechas. Verificá las fechas.")
@@ -228,6 +250,62 @@ async def importar_semana(
                     SET precio_con_iva = EXCLUDED.precio_con_iva, uxb = EXCLUDED.uxb
                 """, (cod_art, precio_con_iva, uxb_art))
                 seen_arts.add(cod_art)
+
+    # Upsert catálogo de artículos
+    if all_catalogo:
+        with get_db() as cur:
+            for art in all_catalogo.values():
+                porc_iva = float(art["ART_PORC_IVA"] or 0)
+                precio_default = float(art["ART_PRECIO_DEFAULT"] or 0)
+                precio_con_iva = round(precio_default * (1 + porc_iva / 100), 4) if precio_default else None
+                cur.execute("""
+                    INSERT INTO articulos_catalogo
+                        (cod_art, mayorista, descrip, cod_bar, uxb, precio_con_iva, porc_iva,
+                         precio_costo, descuento_default, impuestos_monto, impuestos_porc,
+                         fabricante, unidad_medida, subcategoria, estado, stock,
+                         observaciones, folder, usrdef_0, usrdef_1, usrdef_6, updated_at)
+                    VALUES (%s,'yaguar',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                    ON CONFLICT (cod_art, mayorista) DO UPDATE SET
+                        descrip=EXCLUDED.descrip, cod_bar=EXCLUDED.cod_bar, uxb=EXCLUDED.uxb,
+                        precio_con_iva=EXCLUDED.precio_con_iva, porc_iva=EXCLUDED.porc_iva,
+                        precio_costo=EXCLUDED.precio_costo, descuento_default=EXCLUDED.descuento_default,
+                        impuestos_monto=EXCLUDED.impuestos_monto, impuestos_porc=EXCLUDED.impuestos_porc,
+                        fabricante=EXCLUDED.fabricante, unidad_medida=EXCLUDED.unidad_medida,
+                        subcategoria=EXCLUDED.subcategoria, estado=EXCLUDED.estado,
+                        stock=EXCLUDED.stock, observaciones=EXCLUDED.observaciones,
+                        folder=EXCLUDED.folder, usrdef_0=EXCLUDED.usrdef_0,
+                        usrdef_1=EXCLUDED.usrdef_1, usrdef_6=EXCLUDED.usrdef_6,
+                        updated_at=NOW()
+                    WHERE (
+                        articulos_catalogo.descrip IS DISTINCT FROM EXCLUDED.descrip OR
+                        articulos_catalogo.precio_con_iva IS DISTINCT FROM EXCLUDED.precio_con_iva OR
+                        articulos_catalogo.fabricante IS DISTINCT FROM EXCLUDED.fabricante OR
+                        articulos_catalogo.subcategoria IS DISTINCT FROM EXCLUDED.subcategoria OR
+                        articulos_catalogo.stock IS DISTINCT FROM EXCLUDED.stock OR
+                        articulos_catalogo.estado IS DISTINCT FROM EXCLUDED.estado
+                    )
+                """, (
+                    str(art["ART_ID"]),
+                    art["ART_DESCR"],
+                    art["ART_CODEBAR"],
+                    int(art["ART_UNI_BULTO"] or 0),
+                    precio_con_iva,
+                    porc_iva or None,
+                    float(art["ART_USRDEF_2"]) if art["ART_USRDEF_2"] else None,
+                    float(art["ART_DESC_PORC_DEFAULT"]) if art["ART_DESC_PORC_DEFAULT"] else None,
+                    float(art["ART_IMPUESTOS_MONTO"]) if art["ART_IMPUESTOS_MONTO"] else None,
+                    float(art["ART_IMPUESTOS_PORC"]) if art["ART_IMPUESTOS_PORC"] else None,
+                    art["ART_FABRICANTE"],
+                    art["ART_UM"],
+                    art["subcategoria"],
+                    int(art["ART_ESTADO"]) if art["ART_ESTADO"] is not None else None,
+                    float(art["ART_STOCK"]) if art["ART_STOCK"] else None,
+                    art["ART_OBS"],
+                    art["ART_USRDEF_5"],
+                    float(art["ART_USRDEF_0"]) if art["ART_USRDEF_0"] else None,
+                    float(art["ART_USRDEF_1"]) if art["ART_USRDEF_1"] else None,
+                    float(art["ART_USRDEF_6"]) if art["ART_USRDEF_6"] else None,
+                ))
 
     # Actualizar estado ocupado/libre.
     # Solo se tocan códigos que alguna vez aparecieron en picks

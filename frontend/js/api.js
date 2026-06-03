@@ -188,6 +188,14 @@ const api = {
   marcarNoZona: (codigo) => request('PUT', '/api/yaguar/clientes/marcar-no-zona', { codigo }),
   marcarNoZonaDiarco: (codigo) => request('PUT', '/api/diarco/clientes/marcar-no-zona', { codigo }),
 
+  // Artículos catálogo
+  getArticulos: (q, limit = 300) => {
+    const params = new URLSearchParams({ limit });
+    if (q) params.set('q', q);
+    return request('GET', `/api/${getMayorista()}/articulos/?${params}`);
+  },
+  exportArticulosUrl: () => `/api/${getMayorista()}/export/articulos`,
+
   // Admin
   verifyAdmin: (password) => request('POST', '/api/admin/verify', { password }),
 
