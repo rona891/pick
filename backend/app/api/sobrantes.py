@@ -125,8 +125,8 @@ def _lookup(cod_bar: str, mayorista: str):
 def _search_descrip(q: str, mayorista: str):
     with get_db() as cur:
         cur.execute(
-            "SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, uxb, precio_unit FROM pick WHERE descrip ILIKE %s AND mayorista=%s ORDER BY cod_art, descrip LIMIT 20",
-            (f"%{q}%", mayorista)
+            "SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, uxb, precio_unit FROM pick WHERE (descrip ILIKE %s OR cod_art ILIKE %s) AND mayorista=%s ORDER BY cod_art, descrip LIMIT 20",
+            (f"%{q}%", f"%{q}%", mayorista)
         )
         return [dict(r) for r in cur.fetchall()]
 
@@ -298,15 +298,15 @@ def _search_shared(q: str, mayorista: Optional[str] = None):
         if mayorista:
             cur.execute("""
                 SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista, uxb, precio_unit
-                FROM pick WHERE descrip ILIKE %s AND mayorista = %s
+                FROM pick WHERE (descrip ILIKE %s OR cod_art ILIKE %s) AND mayorista = %s
                 ORDER BY cod_art, descrip LIMIT 20
-            """, (f"%{q}%", mayorista))
+            """, (f"%{q}%", f"%{q}%", mayorista))
         else:
             cur.execute("""
                 SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista, uxb, precio_unit
-                FROM pick WHERE descrip ILIKE %s
+                FROM pick WHERE (descrip ILIKE %s OR cod_art ILIKE %s)
                 ORDER BY cod_art, descrip LIMIT 20
-            """, (f"%{q}%",))
+            """, (f"%{q}%", f"%{q}%"))
         return [dict(r) for r in cur.fetchall()]
 
 

@@ -110,9 +110,9 @@ def _search(mayorista: str, q: str, semana: Optional[str]):
         pattern = f"%{q}%"
         query = """
             SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, uxb
-            FROM pick WHERE descrip ILIKE %s AND mayorista=%s
+            FROM pick WHERE (descrip ILIKE %s OR cod_art ILIKE %s) AND mayorista=%s
         """
-        params = [pattern, mayorista]
+        params = [pattern, pattern, mayorista]
         if semana:
             query += " AND semana=%s"
             params.append(semana)
