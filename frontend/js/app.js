@@ -2119,6 +2119,10 @@ async function loadUsers() {
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="3" class="loading">Cargando...</td></tr>';
   try {
+    // Cargar roles si no están disponibles para que el orden por rol funcione
+    if (!_rolesData.length) {
+      _rolesData = await api.getRoles().catch(() => []);
+    }
     _usersData = await api.getUsers();
     renderUsers();
   } catch (err) {
@@ -4284,11 +4288,10 @@ function renderRoles() {
 
   const cardsHtml = rolesOrdenados.map(r => {
     const protegido = r.es_protegido ? ' <span style="font-size:11px">🔒</span>' : '';
-    const esFirst = rolesOrdenados.indexOf(r) === 1; // posición 0 = superadmin (protegido)
-    const btnSubir = (!r.es_protegido && !esFirst)
-      ? `<button class="btn-edit" onclick="_subirRol('${esc(r.nombre)}')" title="Subir un lugar">↑</button>` : '';
+    const handle = r.es_protegido ? '' :
+      `<span class="rol-drag-handle" title="Arrastrar para reordenar" style="cursor:grab;font-size:16px;color:var(--muted);margin-right:6px;user-select:none">⠿</span>`;
     const acciones = r.es_protegido ? '' :
-      `${btnSubir}<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>
+      `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>
        <button class="btn-del" onclick="_deleteRol('${esc(r.nombre)}')">Eliminar</button>`;
     const groupsHtml = groups.map(g => {
       const active = g.perms.filter(pk => r[pk]).map(pk => tag(permLabel[pk]));
@@ -4299,21 +4302,42 @@ function renderRoles() {
       </div>`;
     }).join('');
     const noPerms = groups.every(g => g.perms.every(pk => !r[pk]));
-    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px">
+    return `<div data-rol="${esc(r.nombre)}" data-protegido="${r.es_protegido}"
+               style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <strong style="font-size:14px">${esc(r.nombre)}${protegido}</strong>
+        <div style="display:flex;align-items:center">${handle}<strong style="font-size:14px">${esc(r.nombre)}${protegido}</strong></div>
         <div class="td-actions">${acciones}</div>
       </div>
       ${noPerms ? '<span style="font-size:12px;color:var(--muted)">Sin permisos asignados</span>' : groupsHtml}
     </div>`;
   }).join('');
 
-  panel.innerHTML = `
-    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
-      <button class="btn-search" onclick="_openRolModal(null)">+ Nuevo rol</button>
-    </div>
-    ${_rolesData.length ? cardsHtml : '<p class="muted-text" style="text-align:center;padding:20px">No hay roles cargados.</p>'}
-  `;
+  const cardsContainer = document.createElement('div');
+  cardsContainer.id = 'roles-cards-container';
+  cardsContainer.innerHTML = _rolesData.length ? cardsHtml : '<p class="muted-text" style="text-align:center;padding:20px">No hay roles cargados.</p>';
+
+  panel.innerHTML = `<div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+    <button class="btn-search" onclick="_openRolModal(null)">+ Nuevo rol</button>
+  </div>`;
+  panel.appendChild(cardsContainer);
+
+  // Drag-and-drop con Sortable.js
+  if (_rolesData.length && typeof Sortable !== 'undefined') {
+    Sortable.create(cardsContainer, {
+      animation: 150,
+      handle: '.rol-drag-handle',
+      filter: '[data-protegido="true"]',
+      onMove: (evt) => evt.related.dataset.protegido !== 'true',  // no mover encima de superadmin
+      onEnd: async () => {
+        const cards = cardsContainer.querySelectorAll('[data-rol]:not([data-protegido="true"])');
+        const nombres = Array.from(cards).map(c => c.dataset.rol);
+        try {
+          await api.setRolesOrden(nombres);
+          await loadRoles();
+        } catch (err) { showToast(err.message, 'error'); }
+      },
+    });
+  }
 }
 
 function _openRolModal(nombre) {
@@ -4356,13 +4380,6 @@ document.getElementById('rol-form')?.addEventListener('submit', async e => {
     await _recargarSelectsRoles();
   } catch (err) { showToast(err.message, 'error'); }
 });
-
-async function _subirRol(nombre) {
-  try {
-    await api.subirRol(nombre);
-    await loadRoles();
-  } catch (err) { showToast(err.message, 'error'); }
-}
 
 async function _deleteRol(nombre) {
   if (!await confirmar(`¿Eliminar el rol "${nombre}"? Esta acción no se puede deshacer.`, 'Sí, eliminar')) return;

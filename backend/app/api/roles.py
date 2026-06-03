@@ -59,30 +59,18 @@ def list_roles():
         return [dict(r) for r in cur.fetchall()]
 
 
-@router.post("/{nombre}/subir")
-def subir_rol(nombre: str, authorization: str = Header(...)):
+class OrdenIn(BaseModel):
+    nombres: list  # lista de nombres de roles en el orden deseado (sin superadmin)
+
+
+@router.put("/orden")
+def set_orden(data: OrdenIn, authorization: str = Header(...)):
     _require_perm(authorization, "perm_admin_roles")
     with get_db() as cur:
-        cur.execute("SELECT nombre, orden, es_protegido FROM roles WHERE nombre = %s", (nombre,))
-        rol = cur.fetchone()
-        if not rol:
-            raise HTTPException(404, "Rol no encontrado")
-        if rol["es_protegido"]:
-            raise HTTPException(403, "No se puede mover el rol superadmin")
-        # Encontrar el rol inmediatamente anterior (orden menor, no superadmin)
-        cur.execute("""
-            SELECT nombre, orden FROM roles
-            WHERE orden < %s AND nombre != 'superadmin'
-            ORDER BY orden DESC, nombre DESC
-            LIMIT 1
-        """, (rol["orden"],))
-        anterior = cur.fetchone()
-        if not anterior:
-            return {"ok": True, "moved": False}  # ya está arriba del todo
-        # Intercambiar órdenes
-        cur.execute("UPDATE roles SET orden = %s WHERE nombre = %s", (anterior["orden"], nombre))
-        cur.execute("UPDATE roles SET orden = %s WHERE nombre = %s", (rol["orden"], anterior["nombre"]))
-    return {"ok": True, "moved": True}
+        for i, nombre in enumerate(data.nombres, start=1):
+            cur.execute("UPDATE roles SET orden = %s WHERE nombre = %s AND nombre != 'superadmin'",
+                        (i, nombre))
+    return {"ok": True}
 
 
 @router.post("/", status_code=201)
