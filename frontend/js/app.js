@@ -263,9 +263,8 @@ function cambiarMayorista() {
 
 document.getElementById('hub-btn-sobrantes').addEventListener('click', () => {
   document.getElementById('hub-nov-selector').classList.add('hidden');
-  const sel = document.getElementById('hub-sob-selector');
-  sel.classList.remove('hidden');
-  sel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('hub-sob-selector').classList.remove('hidden');
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 });
 
 document.getElementById('app-back-btn').addEventListener('click', () => showHub());
@@ -273,9 +272,8 @@ document.getElementById('sob-back-btn').addEventListener('click', volverAlHub);
 
 document.getElementById('hub-btn-novedades').addEventListener('click', () => {
   document.getElementById('hub-sob-selector').classList.add('hidden');
-  const sel = document.getElementById('hub-nov-selector');
-  sel.classList.remove('hidden');
-  sel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document.getElementById('hub-nov-selector').classList.remove('hidden');
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 });
 document.getElementById('hub-nov-cancelar').addEventListener('click', () => {
   document.getElementById('hub-nov-selector').classList.add('hidden');
