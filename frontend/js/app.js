@@ -2103,28 +2103,85 @@ async function deleteSemana(id, nombre) {
 const ROL_COLORS = { superadmin: 'var(--accent)', admin: 'var(--green)', vendedor: '#7eb8ff', operario: 'var(--muted)' };
 const ROL_LABELS = { superadmin: 'Superadmin', admin: 'Admin', vendedor: 'Vendedor', operario: 'Operario' };
 
+let _usersData = [];
+let _usersSortCol = 'username';
+let _usersSortDir = 1;
+
 async function loadUsers() {
   const tbody = document.getElementById('users-tbody');
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="3" class="loading">Cargando...</td></tr>';
   try {
-    const users = await api.getUsers();
-    tbody.innerHTML = users.map((u) => {
-      const esSuperadmin = u.rol === 'superadmin';
-      const rolLabel = `<span style="color:${ROL_COLORS[u.rol] || 'var(--muted)'}">${ROL_LABELS[u.rol] || u.rol}</span>`;
-      const deleteBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
-      const clickAttr = esSuperadmin ? '' : `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"`;
-      return `
-        <tr ${clickAttr}>
-          <td>${u.username}</td>
-          <td>${rolLabel}</td>
-          <td onclick="event.stopPropagation()"><div class="td-actions">${deleteBtn}</div></td>
-        </tr>`;
-    }).join('');
+    _usersData = await api.getUsers();
+    renderUsers();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
   }
 }
+
+function renderUsers() {
+  const tbody = document.getElementById('users-tbody');
+  if (!tbody) return;
+  const q = (document.getElementById('users-search')?.value || '').toLowerCase();
+
+  // Ordenar
+  const data = [..._usersData].sort((a, b) => {
+    const va = (a[_usersSortCol] || '').toLowerCase();
+    const vb = (b[_usersSortCol] || '').toLowerCase();
+    if (va < vb) return -_usersSortDir;
+    if (va > vb) return  _usersSortDir;
+    return 0;
+  });
+
+  // Actualizar indicadores en headers
+  document.querySelectorAll('#users-table th[data-sort]').forEach(th => {
+    const col = th.dataset.sort;
+    const arrow = col === _usersSortCol ? (_usersSortDir === 1 ? ' ▲' : ' ▼') : '';
+    th.textContent = th.dataset.label + arrow;
+  });
+
+  tbody.innerHTML = data.map((u) => {
+    if (q && !u.username.toLowerCase().includes(q) && !(ROL_LABELS[u.rol] || u.rol).toLowerCase().includes(q)) {
+      return '';
+    }
+    const esSuperadmin = u.rol === 'superadmin';
+    const rolLabel = `<span style="color:${ROL_COLORS[u.rol] || 'var(--muted)'}">${ROL_LABELS[u.rol] || u.rol}</span>`;
+    const deleteBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
+    const clickAttr = esSuperadmin ? '' : `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"`;
+    return `<tr ${clickAttr}>
+      <td>${u.username}</td>
+      <td>${rolLabel}</td>
+      <td onclick="event.stopPropagation()"><div class="td-actions">${deleteBtn}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+// Click en header → ordenar
+document.addEventListener('click', (e) => {
+  const th = e.target.closest('#users-table th[data-sort]');
+  if (!th) return;
+  const col = th.dataset.sort;
+  if (_usersSortCol === col) _usersSortDir *= -1;
+  else { _usersSortCol = col; _usersSortDir = 1; }
+  renderUsers();
+});
+
+// Buscador
+document.getElementById('users-search')?.addEventListener('input', renderUsers);
+
+// Botón Nuevo usuario
+document.getElementById('btn-nuevo-usuario')?.addEventListener('click', () => {
+  document.getElementById('nuevo-usuario-form').reset();
+  _recargarSelectsRoles().then(() => {
+    document.getElementById('nuevo-usuario-modal').classList.remove('hidden');
+  });
+});
+document.getElementById('nuevo-usuario-modal-close')?.addEventListener('click', () => {
+  document.getElementById('nuevo-usuario-modal').classList.add('hidden');
+});
+document.getElementById('nuevo-usuario-modal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
 
 // ── Modal editar usuario ───────────────────────────────────────────────────
 function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades, accesosPick) {
@@ -2209,6 +2266,7 @@ document.getElementById('nuevo-usuario-form').addEventListener('submit', async (
     await api.createUser(username, password, rol);
     showToast(`Usuario ${username} creado`, 'success');
     document.getElementById('nuevo-usuario-form').reset();
+    document.getElementById('nuevo-usuario-modal')?.classList.add('hidden');
     loadUsers();
   } catch (err) {
     showToast(err.message, 'error');

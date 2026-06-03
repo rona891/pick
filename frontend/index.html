@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=95" />
+  <link rel="stylesheet" href="css/styles.css?v=96" />
 </head>
 <body>
 
@@ -1235,40 +1235,53 @@
         <button id="usuarios-modal-close" class="modal-close">✕</button>
       </div>
       <div class="usuarios-modal-body">
-        <div class="admin-section-title" style="margin-bottom:12px">Usuarios activos</div>
-        <div class="table-wrap" style="margin-bottom:20px">
-          <table class="clientes-table">
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <input type="text" id="users-search" class="clientes-search-input"
+                 placeholder="Buscar usuario o rol..." autocomplete="off" style="flex:1" />
+          <button id="btn-nuevo-usuario" class="btn-search">+ Nuevo</button>
+        </div>
+        <div class="table-wrap">
+          <table class="clientes-table" id="users-table">
             <thead>
               <tr>
-                <th>Usuario</th>
-                <th>Rol</th>
+                <th data-sort="username" data-label="Usuario" style="cursor:pointer;user-select:none">Usuario ▲</th>
+                <th data-sort="rol" data-label="Rol" style="cursor:pointer;user-select:none">Rol</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="users-tbody"></tbody>
           </table>
         </div>
-        <div class="admin-section-title" style="margin-bottom:10px">Nuevo usuario</div>
-        <form id="nuevo-usuario-form">
-          <div class="form-group">
-            <label>Usuario</label>
-            <input type="text" id="nu-email" required autocomplete="off" />
-          </div>
-          <div class="form-group">
-            <label>Contraseña</label>
-            <input type="password" id="nu-password" required minlength="6" />
-          </div>
-          <div class="form-group">
-            <label>Rol</label>
-            <select id="nu-rol">
-              <option value="operario">Operario</option>
-              <option value="vendedor">Vendedor</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <button type="submit" class="btn-primary">Crear usuario</button>
-        </form>
       </div>
+    </div>
+  </div>
+
+  <!-- Modal: crear nuevo usuario -->
+  <div id="nuevo-usuario-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width:360px">
+      <div class="modal-header">
+        <span>Nuevo usuario</span>
+        <button id="nuevo-usuario-modal-close" class="modal-close">✕</button>
+      </div>
+      <form id="nuevo-usuario-form" style="padding:16px">
+        <div class="form-group">
+          <label>Usuario</label>
+          <input type="text" id="nu-email" required autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="nu-password" required minlength="6" />
+        </div>
+        <div class="form-group">
+          <label>Rol</label>
+          <select id="nu-rol">
+            <option value="operario">Operario</option>
+            <option value="vendedor">Vendedor</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <button type="submit" class="btn-primary" style="width:100%;margin-top:8px">Crear usuario</button>
+      </form>
     </div>
   </div>
 
@@ -1320,7 +1333,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=95"></script>
-  <script src="js/app.js?v=95"></script>
+  <script src="js/api.js?v=96"></script>
+  <script src="js/app.js?v=96"></script>
 </body>
 </html>
