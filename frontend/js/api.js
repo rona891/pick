@@ -267,7 +267,7 @@ const api = {
   sobGetListas: () => request('GET', '/api/sobrantes/listas'),
   sobCrearLista: (nombre) => request('POST', '/api/sobrantes/listas', { nombre }),
   sobDeleteLista: (lista) => request('DELETE', `/api/sobrantes/listas/${encodeURIComponent(lista)}`),
-  sobLookup: (codBar) => request('GET', `/api/sobrantes/lookup/${encodeURIComponent(codBar)}`),
+  sobLookup: (codBar) => request('GET', `/api/${getMayorista()}/sobrantes/lookup/${encodeURIComponent(codBar)}`),
   sobSearch: (q) => request('GET', `/api/${getMayorista()}/sobrantes/search?q=${encodeURIComponent(q)}`),
   sobGetItems: (lista) => request('GET', `/api/sobrantes/${encodeURIComponent(lista)}?mayorista=${getMayorista()}`),
   sobAddItem: (lista, item) => request('POST', `/api/sobrantes/${encodeURIComponent(lista)}/item`, item),
