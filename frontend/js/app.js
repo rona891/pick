@@ -4369,7 +4369,7 @@ document.getElementById('rol-form')?.addEventListener('submit', async e => {
   _PERMS_UI.forEach(p => { data[p.key] = !!document.getElementById(`rolperm-${p.key}`)?.checked; });
   try {
     if (_editingRolNombre) {
-      await api.updateRol(_editingRolNombre, data);
+      await api.updateRolPerms(_editingRolNombre, data);
       showToast('Rol actualizado', 'success');
     } else {
       await api.createRol(data);

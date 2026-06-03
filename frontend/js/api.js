@@ -211,7 +211,7 @@ const api = {
   // Roles
   getRoles: () => request('GET', '/api/roles/'),
   createRol: (data) => request('POST', '/api/roles/', data),
-  updateRol: (nombre, data) => request('PUT', `/api/roles/${encodeURIComponent(nombre)}`, data),
+  updateRolPerms: (nombre, data) => request('PUT', `/api/roles/${encodeURIComponent(nombre)}`, data),
   deleteRol: (nombre) => request('DELETE', `/api/roles/${encodeURIComponent(nombre)}`),
   setRolesOrden: (nombres) => request('PUT', '/api/roles/orden', { nombres }),
 
