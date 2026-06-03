@@ -2819,6 +2819,9 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#nov-semana-wrap')) {
     document.getElementById('nov-semana-dropdown')?.classList.add('hidden');
   }
+  if (!e.target.closest('#hist-semana-wrap')) {
+    document.getElementById('hist-semana-dropdown')?.classList.add('hidden');
+  }
 });
 
 // Nueva lista — modal custom
@@ -2987,25 +2990,37 @@ function stopHistScanner() {
 // ── Historial ─────────────────────────────────────────────────────────────
 let _historialRows = [];
 
+let _histSemana = '';
+
 async function loadHistorial() {
   const resumenWrap = document.getElementById('historial-resumen');
   const tablaWrap = document.getElementById('historial-tabla-wrap');
-  const semSel = document.getElementById('hist-semana-sel');
+  const semBtn = document.getElementById('hist-semana-btn');
+  const semOptions = document.getElementById('hist-semana-options');
   const usuSel = document.getElementById('hist-filter-usuario');
 
   resumenWrap.innerHTML = '<p class="loading">Cargando...</p>';
   tablaWrap.innerHTML = '';
 
-  // Cargar semanas para el selector propio del historial
+  // Cargar semanas para el dropdown
   try {
     const semanas = await api.getSemanas();
-    semSel.innerHTML = semanas.length
-      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('')
-      : '<option value="">Sin semanas</option>';
-    // Preseleccionar la semana activa del pick tab si está disponible
-    if (semanaActual && semanas.find((s) => s.nombre === semanaActual)) semSel.value = semanaActual;
+    if (semanas.length) {
+      // Preseleccionar la semana activa del pick tab si está disponible
+      const pre = semanaActual && semanas.find((s) => s.nombre === semanaActual) ? semanaActual : semanas[0].nombre;
+      _histSemana = pre;
+      semBtn.textContent = `${_histSemana} ▾`;
+      semOptions.innerHTML = semanas.map((s) =>
+        `<button class="chip-reparto${s.nombre === _histSemana ? ' active' : ''}" data-semana="${s.nombre}">${s.nombre}</button>`
+      ).join('');
+    } else {
+      _histSemana = '';
+      semBtn.textContent = 'Sin semanas ▾';
+      semOptions.innerHTML = '';
+    }
   } catch (_) {
-    semSel.innerHTML = '<option value="">Error cargando semanas</option>';
+    _histSemana = '';
+    semBtn.textContent = 'Error ▾';
   }
 
   // Cargar todos los usuarios para el selector (una sola vez)
@@ -3019,14 +3034,29 @@ async function loadHistorial() {
     resumenWrap.innerHTML = '<p class="loading">Cargando...</p>';
     tablaWrap.innerHTML = '';
     try {
-      _historialRows = await api.getHistorial(semSel.value);
+      _historialRows = await api.getHistorial(_histSemana);
       renderHistorial();
     } catch (err) {
       resumenWrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
     }
   }
 
-  semSel.onchange = fetchYRender;
+  semOptions.addEventListener('click', (e) => {
+    const opt = e.target.closest('[data-semana]');
+    if (!opt) return;
+    _histSemana = opt.dataset.semana;
+    semBtn.textContent = `${_histSemana} ▾`;
+    document.getElementById('hist-semana-dropdown').classList.add('hidden');
+    semOptions.querySelectorAll('[data-semana]').forEach(b => b.classList.remove('active'));
+    opt.classList.add('active');
+    fetchYRender();
+  });
+
+  semBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('hist-semana-dropdown').classList.toggle('hidden');
+  });
+
   document.getElementById('hist-filter-producto').oninput = renderHistorial;
   usuSel.onchange = renderHistorial;
   document.getElementById('historial-solo-errores').onchange = renderHistorial;

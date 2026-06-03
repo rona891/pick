@@ -2624,6 +2624,10 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   background: color-mix(in srgb, var(--green) 15%, transparent);
   color: var(--green);
 }
+body.light-mode .historial-stat.ok {
+  background: #d1fae5;
+  color: #065f46;
+}
 
 .historial-stat.err {
   background: color-mix(in srgb, #e74c3c 12%, transparent);

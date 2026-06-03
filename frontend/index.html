@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=63" />
+  <link rel="stylesheet" href="css/styles.css?v=64" />
 </head>
 <body>
 
@@ -761,7 +761,12 @@
             <div class="auditoria-filter-row">
               <div class="auditoria-filter-field">
                 <label class="auditoria-filter-label">Semana</label>
-                <select id="hist-semana-sel" class="semana-select"></select>
+                <div id="hist-semana-wrap" class="filtro-dropdown-wrap" style="width:100%">
+                  <button id="hist-semana-btn" class="btn-filtro-toggle" style="width:100%;text-align:left">Sin semanas ▾</button>
+                  <div id="hist-semana-dropdown" class="filtro-reparto-dropdown hidden" style="width:100%;box-sizing:border-box;flex-direction:column">
+                    <div id="hist-semana-options" style="display:flex;flex-direction:column;gap:4px;width:100%"></div>
+                  </div>
+                </div>
               </div>
               <div class="auditoria-filter-field">
                 <label class="auditoria-filter-label">Usuario</label>
@@ -1190,7 +1195,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=63"></script>
-  <script src="js/app.js?v=63"></script>
+  <script src="js/api.js?v=64"></script>
+  <script src="js/app.js?v=64"></script>
 </body>
 </html>
