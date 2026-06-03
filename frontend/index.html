@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=75" />
+  <link rel="stylesheet" href="css/styles.css?v=76" />
 </head>
 <body>
 
@@ -926,6 +926,26 @@
     </div>
   </div>
 
+  <!-- ── Modal: artículo no encontrado (fallback manual) ──────────────────── -->
+  <div id="fallback-art-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header">
+        <span>Artículo no encontrado</span>
+        <button id="fallback-art-cancel" class="modal-close">✕</button>
+      </div>
+      <div style="padding:16px">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Este código no está en el catálogo. Podés ingresarlo manualmente.</p>
+        <label class="nov-manual-label">Código de barras</label>
+        <input type="text" id="fallback-art-codbar" class="nov-manual-input" readonly style="color:var(--muted)" />
+        <label class="nov-manual-label">Descripción *</label>
+        <input type="text" id="fallback-art-descrip" class="nov-manual-input" autocomplete="off" placeholder="Ej: AGUA MINERAL 2L" />
+        <label class="nov-manual-label">UxB *</label>
+        <input type="number" id="fallback-art-uxb" class="nov-manual-input" min="1" step="1" placeholder="1" />
+        <button id="fallback-art-confirm" class="btn-primary" style="width:100%;margin-top:16px">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Modal: detalle de artículo ───────────────────────────────────────── -->
   <div id="art-detalle-modal" class="modal-overlay hidden">
     <div class="modal" style="max-width:480px">
@@ -1221,7 +1241,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=75"></script>
-  <script src="js/app.js?v=75"></script>
+  <script src="js/api.js?v=76"></script>
+  <script src="js/app.js?v=76"></script>
 </body>
 </html>

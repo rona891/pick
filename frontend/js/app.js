@@ -2733,32 +2733,18 @@ document.getElementById('sob-items').addEventListener('click', async (e) => {
 });
 
 // Buscar / escanear
-async function sobBuscar(codBar) {
-  if (!codBar.trim()) return;
+async function _sobAgregarArticulo(codBar, codArt, descrip, precioUnit, uxb) {
   const lista = _sobListaActual;
   if (!lista) { showToast('Creá una lista primero', 'error'); return; }
-
-  let cod_art = null, descrip = null, mayorista = getMayorista(), precio_unit = null, uxb = 0;
-  let encontradoEnPicks = false;
   try {
-    const lookup = await api.sobLookup(codBar.trim());
-    if (lookup.found) {
-      cod_art = lookup.cod_art;
-      descrip = lookup.descrip;
-      // Siempre usar el mayorista activo — el lookup puede encontrar el artículo
-      // en el otro mayorista y asignaría el mayorista incorrecto
-      precio_unit = lookup.precio_unit ?? null;
-      uxb = lookup.uxb || 0;
-      encontradoEnPicks = true;
-    }
-    // Si no está en picks se agrega igual con solo el código de barras
-  } catch { /* continúa con solo el barcode */ }
-
-  try {
-    const res = await api.sobAddItem(lista, { cod_bar: codBar.trim(), cod_art, descrip, mayorista, precio_unit, uxb });
+    const res = await api.sobAddItem(lista, {
+      cod_bar: codBar || null, cod_art: codArt || null, descrip: descrip || null,
+      mayorista: getMayorista(), precio_unit: precioUnit || null, uxb: uxb || 0,
+    });
+    _sobItems = await api.sobGetItems(lista);
+    await loadSobListas();
+    renderSobItems(_sobItems);
     if (res.action === 'existing') {
-      _sobItems = await api.sobGetItems(lista);
-      renderSobItems(_sobItems);
       showToast('Ya estaba en la lista — resaltado', 'info');
       setTimeout(() => {
         const el = document.querySelector(`.sob-item[data-id="${res.id}"]`);
@@ -2766,14 +2752,42 @@ async function sobBuscar(codBar) {
         setTimeout(() => el?.classList.remove('highlight'), 1500);
       }, 50);
     } else {
-      _sobItems = await api.sobGetItems(lista);
-      await loadSobListas();
-      renderSobItems(_sobItems);
-      showToast(encontradoEnPicks ? 'Artículo agregado' : 'Artículo agregado (sin descripción — no está en picks)', 'success');
+      showToast('Artículo agregado', 'success');
       setTimeout(() => document.querySelector('.sob-item')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     }
   } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function sobBuscar(codBar) {
+  const bar = (codBar || '').trim();
+  if (!bar) return;
+  if (!_sobListaActual) { showToast('Creá una lista primero', 'error'); return; }
   document.getElementById('sob-barcode-input').value = '';
+
+  try {
+    const items = await api.getArticulos(bar, 10);
+    const exactos = items.filter(i => i.cod_bar === bar || i.cod_bar_bulto === bar);
+    const lista_ = exactos.length ? exactos : items;
+
+    if (lista_.length === 1) {
+      const a = lista_[0];
+      await _sobAgregarArticulo(bar, a.cod_art, a.descrip, a.precio_con_iva, a.uxb || 0);
+    } else if (lista_.length > 1) {
+      // Mostrar picker (reutiliza el panel de búsqueda de texto)
+      const results = document.getElementById('sob-descrip-results');
+      const fmt = (v) => v != null ? '$' + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+      results.innerHTML = lista_.map(i =>
+        `<div class="descrip-result-item" data-bar="${i.cod_bar || ''}" data-art="${i.cod_art || ''}" data-descrip="${(i.descrip || '').replace(/"/g, '&quot;')}" data-precio="${i.precio_con_iva ?? ''}" data-uxb="${i.uxb || 0}">
+           <span class="descrip-result-text">${i.descrip}</span>
+         </div>`
+      ).join('');
+      results.classList.remove('hidden');
+    } else {
+      _abrirFallbackModal(bar, async (art) => {
+        await _sobAgregarArticulo(art.cod_bar, art.cod_art, art.descrip, art.precio_unit, art.uxb);
+      });
+    }
+  } catch { showToast('Error al buscar el artículo', 'error'); }
 }
 
 document.getElementById('sob-barcode-input').addEventListener('keydown', (e) => {
@@ -2789,16 +2803,15 @@ document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
   if (q.length < 2) { results.classList.add('hidden'); return; }
   _sobDescripTimer = setTimeout(async () => {
     try {
-      const items = await api.sobSearch(q);
+      const items = await api.getArticulos(q, 50);
       if (!items.length) {
         results.innerHTML = '<div class="descrip-result-empty">Sin resultados</div>';
         results.classList.remove('hidden');
         return;
       }
       results.innerHTML = items.map(i =>
-        `<div class="descrip-result-item" data-bar="${i.cod_bar || ''}" data-art="${i.cod_art || ''}" data-descrip="${(i.descrip || '').replace(/"/g, '&quot;')}" data-mayorista="${i.mayorista || 'yaguar'}" data-precio="${i.precio_unit ?? ''}" data-uxb="${i.uxb || 0}">
+        `<div class="descrip-result-item" data-bar="${i.cod_bar || ''}" data-art="${i.cod_art || ''}" data-descrip="${(i.descrip || '').replace(/"/g, '&quot;')}" data-precio="${i.precio_con_iva ?? ''}" data-uxb="${i.uxb || 0}">
           <span class="descrip-result-text">${i.descrip}</span>
-          <span class="sob-mayorista-badge sob-mayorista-${i.mayorista || 'otro'}">${(i.mayorista || '?').toUpperCase()}</span>
         </div>`
       ).join('');
       results.classList.remove('hidden');
@@ -2813,30 +2826,13 @@ document.getElementById('sob-descrip-results').addEventListener('click', async (
   document.getElementById('sob-descrip-input').value = '';
   const lista = _sobListaActual;
   if (!lista) { showToast('Creá una lista primero', 'error'); return; }
-  try {
-    const res = await api.sobAddItem(lista, {
-      cod_bar: item.dataset.bar || null,
-      cod_art: item.dataset.art || null,
-      descrip: item.dataset.descrip || null,
-      mayorista: item.dataset.mayorista || 'yaguar',
-      precio_unit: item.dataset.precio ? parseFloat(item.dataset.precio) : null,
-      uxb: parseInt(item.dataset.uxb) || 0,
-    });
-    if (res.action === 'existing') {
-      _sobItems = await api.sobGetItems(lista);
-      renderSobItems(_sobItems);
-      setTimeout(() => {
-        const el = document.querySelector(`.sob-item[data-id="${res.id}"]`);
-        if (el) { el.classList.add('highlight'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-        setTimeout(() => el?.classList.remove('highlight'), 1500);
-      }, 50);
-    } else {
-      _sobItems = await api.sobGetItems(lista);
-      await loadSobListas();
-      renderSobItems(_sobItems);
-      setTimeout(() => document.querySelector('.sob-item')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-    }
-  } catch (err) { showToast(err.message, 'error'); }
+  await _sobAgregarArticulo(
+    item.dataset.bar || null,
+    item.dataset.art || null,
+    item.dataset.descrip || null,
+    item.dataset.precio ? parseFloat(item.dataset.precio) : null,
+    parseInt(item.dataset.uxb) || 0,
+  );
 });
 
 document.addEventListener('click', (e) => {
@@ -3393,10 +3389,19 @@ document.getElementById('nov-barcode-input').addEventListener('keydown', (e) => 
 async function novBuscarPorCodigo(cod) {
   if (!cod) return;
   try {
-    const res = await api.novLookup(cod, _novSemana);
-    if (res.found) _setNovItem({ cod_bar: cod, cod_art: res.cod_art, descrip: res.descrip, uxb: res.uxb || 0 });
-    else showToast('Producto no encontrado', 'error');
-  } catch { showToast('Error en la búsqueda', 'error'); }
+    const items = await api.getArticulos(cod, 10);
+    const exactos = items.filter(i => i.cod_bar === cod || i.cod_bar_bulto === cod);
+    const lista_ = exactos.length ? exactos : items;
+    if (lista_.length >= 1) {
+      const a = lista_[0];
+      await _setNovItem({ cod_bar: cod, cod_art: a.cod_art, descrip: a.descrip, uxb: a.uxb || 0, precio_manual: a.precio_con_iva || null, manual: true });
+      return;
+    }
+  } catch {}
+  // No encontrado en catálogo → fallback manual
+  _abrirFallbackModal(cod, async (art) => {
+    await _setNovItem({ cod_bar: art.cod_bar || cod, cod_art: art.cod_art, descrip: art.descrip, uxb: art.uxb, precio_manual: null, manual: true });
+  });
 }
 
 document.getElementById('nov-descrip-input').addEventListener('input', (e) => {
@@ -3473,6 +3478,40 @@ document.getElementById('nov-item-clear').addEventListener('click', () => {
   _novCliente = null;
   document.getElementById('nov-cliente-selected').classList.add('hidden');
   document.getElementById('nov-cliente-btn').classList.remove('hidden');
+});
+
+// ── Fallback: artículo no encontrado en catálogo ─────────────────────────────
+
+let _fallbackArtCallback = null;
+
+function _abrirFallbackModal(codBar, onConfirm) {
+  document.getElementById('fallback-art-codbar').value = codBar || '';
+  document.getElementById('fallback-art-descrip').value = '';
+  document.getElementById('fallback-art-uxb').value = '';
+  _fallbackArtCallback = onConfirm;
+  document.getElementById('fallback-art-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('fallback-art-descrip').focus(), 50);
+}
+
+function _cerrarFallbackModal() {
+  document.getElementById('fallback-art-modal').classList.add('hidden');
+  _fallbackArtCallback = null;
+}
+
+document.getElementById('fallback-art-cancel').addEventListener('click', _cerrarFallbackModal);
+document.getElementById('fallback-art-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) _cerrarFallbackModal();
+});
+
+document.getElementById('fallback-art-confirm').addEventListener('click', () => {
+  const descrip = document.getElementById('fallback-art-descrip').value.trim();
+  if (!descrip) { showToast('La descripción es obligatoria', 'error'); return; }
+  const uxb = parseInt(document.getElementById('fallback-art-uxb').value);
+  if (!uxb || uxb <= 0) { showToast('El UxB es obligatorio', 'error'); return; }
+  const codBar = document.getElementById('fallback-art-codbar').value || null;
+  const cb = _fallbackArtCallback;
+  _cerrarFallbackModal();
+  if (cb) cb({ cod_bar: codBar, cod_art: null, descrip, uxb, precio_unit: null });
 });
 
 // ── Buscar artículo por catálogo (reemplaza ingreso manual libre) ─────────────
