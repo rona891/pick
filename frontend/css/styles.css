@@ -3261,57 +3261,37 @@ body.light-mode #hub-view {
   padding: 24px 0;
 }
 
-/* ── Hub + sob/nov headers: azul frío para textos y botones ─────────────── */
+/* ── Hub topbar: azul frío fijo (no adapta al mayorista) ─────────────────── */
 
-/* Textos (títulos de sección y nombre de usuario) — azul claro en dark */
+/* Textos del hub — azul claro en dark, marrón cálido en light */
 #hub-view .hub-section-title,
-#hub-view .topbar-usuario,
-#sobrantes-view .sob-view-header .topbar-usuario,
-#novedades-view .sob-view-header .topbar-usuario {
+#hub-view .topbar-usuario {
   color: #8ec5e8;
 }
+body.light-mode #hub-view .hub-section-title,
+body.light-mode #hub-view .topbar-usuario {
+  color: #5c2e0e;
+}
 
-/* Botones (Usuarios/Cuenta/Salir/☀/⛶ y ← Volver) — azul medio en dark, distinto del texto */
-#hub-view .hub-topbar-btn,
-#sobrantes-view .sob-view-header .btn-logout,
-#novedades-view  .sob-view-header .btn-logout,
-#sobrantes-view .sob-view-header .sob-back-btn,
-#novedades-view  .sob-view-header .sob-back-btn {
+/* Botones del hub — azul medio en dark, naranja/siena en light */
+#hub-view .hub-topbar-btn {
   color: #4e8ab5;
   border-color: rgba(78, 138, 181, 0.45);
 }
-#hub-view .hub-topbar-btn:hover,
-#sobrantes-view .sob-view-header .btn-logout:hover,
-#novedades-view  .sob-view-header .btn-logout:hover,
-#sobrantes-view .sob-view-header .sob-back-btn:hover,
-#novedades-view  .sob-view-header .sob-back-btn:hover {
+#hub-view .hub-topbar-btn:hover {
   color: #8ec5e8;
   border-color: #8ec5e8;
 }
-
-/* Light mode: textos marrón oscuro, botones naranja/siena cálido */
-body.light-mode #hub-view .hub-section-title,
-body.light-mode #hub-view .topbar-usuario,
-body.light-mode #sobrantes-view .sob-view-header .topbar-usuario,
-body.light-mode #novedades-view  .sob-view-header .topbar-usuario {
-  color: #5c2e0e;
-}
-body.light-mode #hub-view .hub-topbar-btn,
-body.light-mode #sobrantes-view .sob-view-header .btn-logout,
-body.light-mode #novedades-view  .sob-view-header .btn-logout,
-body.light-mode #sobrantes-view .sob-view-header .sob-back-btn,
-body.light-mode #novedades-view  .sob-view-header .sob-back-btn {
+body.light-mode #hub-view .hub-topbar-btn {
   color: #b85020;
   border-color: rgba(184, 80, 32, 0.45);
 }
-body.light-mode #hub-view .hub-topbar-btn:hover,
-body.light-mode #sobrantes-view .sob-view-header .btn-logout:hover,
-body.light-mode #novedades-view  .sob-view-header .btn-logout:hover,
-body.light-mode #sobrantes-view .sob-view-header .sob-back-btn:hover,
-body.light-mode #novedades-view  .sob-view-header .sob-back-btn:hover {
+body.light-mode #hub-view .hub-topbar-btn:hover {
   color: #5c2e0e;
   border-color: #5c2e0e;
 }
+
+/* Sobrantes y Novedades: heredan el tema del mayorista activo (igual que el pick) */
 
 /* ── Sobrantes: botones de stepper más pequeños para que entren en la card ── */
 .sob-stepper .btn-step-minus,
