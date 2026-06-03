@@ -3747,6 +3747,8 @@ document.getElementById('nov-back-btn').addEventListener('click', () => { stopNo
 
 let _articulosTimer = null;
 let _articulosData = [];
+let _articulosSortCol = 'descrip';
+let _articulosSortDir = 1;
 
 const DETALLE_YAGUAR = [
   { label: 'Código',         field: 'cod_art' },
@@ -3814,6 +3816,50 @@ function _abrirDetalleArticulo(item) {
   modal.classList.remove('hidden');
 }
 
+const ART_HEADERS = [
+  { label: 'Código',       field: 'cod_art',       align: 'left'  },
+  { label: 'Descripción',  field: 'descrip',        align: 'left'  },
+  { label: 'UxB',          field: 'uxb',            align: 'center' },
+  { label: 'Precio c/IVA', field: 'precio_con_iva', align: 'right' },
+];
+
+function renderArticulos() {
+  const tbody = document.getElementById('articulos-tbody');
+  const thead = document.getElementById('articulos-thead');
+
+  // Headers con indicador de orden
+  thead.innerHTML = `<tr>${ART_HEADERS.map(h => {
+    const arrow = h.field === _articulosSortCol ? (_articulosSortDir === 1 ? ' ▲' : ' ▼') : '';
+    return `<th data-sort="${h.field}" data-label="${h.label}" style="cursor:pointer;user-select:none;text-align:${h.align}">${h.label}${arrow}</th>`;
+  }).join('')}</tr>`;
+
+  const fmt = (v) => v != null ? Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+
+  // Ordenar
+  const data = [..._articulosData].sort((a, b) => {
+    let va = a[_articulosSortCol], vb = b[_articulosSortCol];
+    if (_articulosSortCol === 'uxb' || _articulosSortCol === 'precio_con_iva') {
+      va = parseFloat(va) || 0;
+      vb = parseFloat(vb) || 0;
+    } else {
+      va = (va || '').toString().toLowerCase();
+      vb = (vb || '').toString().toLowerCase();
+    }
+    if (va < vb) return -_articulosSortDir;
+    if (va > vb) return  _articulosSortDir;
+    return 0;
+  });
+
+  tbody.innerHTML = data.map((item, idx) => `
+    <tr data-idx="${_articulosData.indexOf(item)}" style="cursor:pointer">
+      <td>${item.cod_art ?? '—'}</td>
+      <td>${item.descrip ?? '—'}</td>
+      <td style="text-align:center">${item.uxb ?? '—'}</td>
+      <td style="text-align:right">${item.precio_con_iva != null ? '$' + fmt(item.precio_con_iva) : '—'}</td>
+    </tr>
+  `).join('');
+}
+
 async function loadArticulos(q) {
   const tbody = document.getElementById('articulos-tbody');
   const thead = document.getElementById('articulos-thead');
@@ -3821,36 +3867,21 @@ async function loadArticulos(q) {
   const exportBtn = document.getElementById('btn-exportar-articulos');
 
   tbody.innerHTML = '<tr><td colspan="4" class="loading">Cargando...</td></tr>';
-
-  thead.innerHTML = `<tr>
-    <th>Código</th>
-    <th>Descripción</th>
-    <th style="text-align:center">UxB</th>
-    <th style="text-align:right">Precio c/IVA</th>
-  </tr>`;
+  thead.innerHTML = '';
 
   try {
     const items = await api.getArticulos(q || '', 500);
     _articulosData = items;
 
     if (!items.length) {
+      thead.innerHTML = '';
       tbody.innerHTML = `<tr><td colspan="4" class="muted-text" style="text-align:center;padding:16px">${q ? 'Sin resultados para "' + q + '"' : 'Sin artículos cargados. Importá una semana primero.'}</td></tr>`;
       count.textContent = '';
       exportBtn.classList.add('hidden');
       return;
     }
 
-    const fmt = (v) => v != null ? Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
-
-    tbody.innerHTML = items.map((item, idx) => `
-      <tr data-idx="${idx}" style="cursor:pointer">
-        <td>${item.cod_art ?? '—'}</td>
-        <td>${item.descrip ?? '—'}</td>
-        <td style="text-align:center">${item.uxb ?? '—'}</td>
-        <td style="text-align:right">${item.precio_con_iva != null ? '$' + fmt(item.precio_con_iva) : '—'}</td>
-      </tr>
-    `).join('');
-
+    renderArticulos();
     count.textContent = `${items.length} artículo${items.length !== 1 ? 's' : ''}${q ? ` para "${q}"` : ''}`;
     exportBtn.classList.remove('hidden');
   } catch (err) {
@@ -3872,6 +3903,20 @@ document.getElementById('art-detalle-close').addEventListener('click', () => {
 
 document.getElementById('art-detalle-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
+
+// Click en header → ordenar
+document.addEventListener('click', (e) => {
+  const th = e.target.closest('#articulos-table th[data-sort]');
+  if (!th) return;
+  const col = th.dataset.sort;
+  if (_articulosSortCol === col) {
+    _articulosSortDir *= -1;
+  } else {
+    _articulosSortCol = col;
+    _articulosSortDir = 1;
+  }
+  renderArticulos();
 });
 
 document.getElementById('admin-articulos-search').addEventListener('input', (e) => {
