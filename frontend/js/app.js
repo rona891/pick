@@ -3746,33 +3746,73 @@ document.getElementById('nov-back-btn').addEventListener('click', () => { stopNo
 // ══════════════════════════════════════════════════════════════════════════════
 
 let _articulosTimer = null;
-let _articulosCargados = false;
+let _articulosData = [];
 
-const COLS_ARTICULOS_YAGUAR = [
-  { label: 'Código',      field: 'cod_art' },
-  { label: 'Barcode',     field: 'cod_bar' },
-  { label: 'Descripción', field: 'descrip' },
-  { label: 'Fabricante',  field: 'fabricante' },
-  { label: 'UxB',         field: 'uxb' },
-  { label: 'Precio c/IVA',field: 'precio_con_iva' },
-  { label: '% IVA',       field: 'porc_iva' },
-  { label: 'Costo',       field: 'precio_costo' },
-  { label: 'Subcategoría',field: 'subcategoria' },
-  { label: 'Stock',       field: 'stock' },
+const DETALLE_YAGUAR = [
+  { label: 'Código',         field: 'cod_art' },
+  { label: 'Barcode',        field: 'cod_bar' },
+  { label: 'Fabricante',     field: 'fabricante' },
+  { label: 'Unidad medida',  field: 'unidad_medida' },
+  { label: '% IVA',          field: 'porc_iva',         money: false, num: true },
+  { label: 'Costo',          field: 'precio_costo',     money: true },
+  { label: '% Descuento',    field: 'descuento_default',money: false, num: true },
+  { label: 'Imp. Monto',     field: 'impuestos_monto',  money: true },
+  { label: 'Imp. %',         field: 'impuestos_porc',   money: false, num: true },
+  { label: 'Subcategoría',   field: 'subcategoria' },
+  { label: 'Stock',          field: 'stock',            money: false, num: true },
+  { label: 'Estado',         field: 'estado' },
+  { label: 'Observaciones',  field: 'observaciones' },
+  { label: 'Folder',         field: 'folder' },
+  { label: 'Usrdef 0',       field: 'usrdef_0',         money: false, num: true },
+  { label: 'Usrdef 1',       field: 'usrdef_1',         money: false, num: true },
+  { label: 'Usrdef 6',       field: 'usrdef_6',         money: false, num: true },
 ];
 
-const COLS_ARTICULOS_DIARCO = [
-  { label: 'Código',       field: 'cod_art' },
-  { label: 'Barcode',      field: 'cod_bar' },
-  { label: 'Descripción',  field: 'descrip' },
-  { label: 'UxB',          field: 'uxb' },
-  { label: 'Precio c/IVA', field: 'precio_con_iva' },
-  { label: 'Costo',        field: 'precio_costo' },
-  { label: 'P. Mayorista', field: 'precio_mayorista' },
-  { label: 'Familia',      field: 'familia' },
-  { label: 'Subcategoría', field: 'subcategoria' },
-  { label: 'Stock',        field: 'stock' },
+const DETALLE_DIARCO = [
+  { label: 'Código',         field: 'cod_art' },
+  { label: 'Barcode unidad', field: 'cod_bar' },
+  { label: 'Barcode bulto',  field: 'cod_bar_bulto' },
+  { label: 'Tipo unidad',    field: 'tipo_unidad' },
+  { label: 'Costo',          field: 'precio_costo',     money: true },
+  { label: 'P. Mayorista',   field: 'precio_mayorista', money: true },
+  { label: 'Familia',        field: 'familia' },
+  { label: 'Subcategoría',   field: 'subcategoria' },
+  { label: 'Estado cat.',    field: 'tipo_estado' },
+  { label: 'Stock',          field: 'stock',            money: false, num: true },
 ];
+
+function _abrirDetalleArticulo(item) {
+  const fmt = (v) => v != null ? Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
+  const modal = document.getElementById('art-detalle-modal');
+  document.getElementById('art-detalle-title').textContent = item.descrip || item.cod_art;
+  const body = document.getElementById('art-detalle-body');
+
+  // Siempre muestra precio y uxb al tope
+  const rows = [
+    { label: 'Precio c/IVA', val: item.precio_con_iva != null ? `$${fmt(item.precio_con_iva)}` : '—' },
+    { label: 'UxB',          val: item.uxb != null ? item.uxb : '—' },
+  ];
+
+  const detalle = getMayorista() === 'yaguar' ? DETALLE_YAGUAR : DETALLE_DIARCO;
+  for (const d of detalle) {
+    const v = item[d.field];
+    if (v == null || v === '') continue;
+    let display;
+    if (d.money) display = `$${fmt(v)}`;
+    else if (d.num) display = fmt(v);
+    else display = String(v);
+    rows.push({ label: d.label, val: display });
+  }
+
+  body.innerHTML = rows.map(r => `
+    <div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">${r.label}</div>
+      <div style="font-size:13px;font-weight:600">${r.val}</div>
+    </div>
+  `).join('');
+
+  modal.classList.remove('hidden');
+}
 
 async function loadArticulos(q) {
   const tbody = document.getElementById('articulos-tbody');
@@ -3780,47 +3820,59 @@ async function loadArticulos(q) {
   const count = document.getElementById('articulos-count');
   const exportBtn = document.getElementById('btn-exportar-articulos');
 
-  tbody.innerHTML = '<tr><td colspan="10" class="loading">Cargando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="4" class="loading">Cargando...</td></tr>';
 
-  const cols = getMayorista() === 'yaguar' ? COLS_ARTICULOS_YAGUAR : COLS_ARTICULOS_DIARCO;
-
-  // Renderizar encabezados (solo la primera vez o si cambió mayorista)
-  thead.innerHTML = `<tr>${cols.map(c => `<th>${c.label}</th>`).join('')}</tr>`;
+  thead.innerHTML = `<tr>
+    <th>Código</th>
+    <th>Descripción</th>
+    <th style="text-align:center">UxB</th>
+    <th style="text-align:right">Precio c/IVA</th>
+  </tr>`;
 
   try {
     const items = await api.getArticulos(q || '', 500);
+    _articulosData = items;
 
     if (!items.length) {
-      tbody.innerHTML = `<tr><td colspan="${cols.length}" class="muted-text" style="text-align:center;padding:16px">${q ? 'Sin resultados para "' + q + '"' : 'Sin artículos cargados. Importá una semana primero.'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" class="muted-text" style="text-align:center;padding:16px">${q ? 'Sin resultados para "' + q + '"' : 'Sin artículos cargados. Importá una semana primero.'}</td></tr>`;
       count.textContent = '';
       exportBtn.classList.add('hidden');
       return;
     }
 
     const fmt = (v) => v != null ? Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
-    const MONEY_FIELDS = new Set(['precio_con_iva', 'precio_costo', 'precio_mayorista']);
-    const NUM_FIELDS = new Set(['uxb', 'stock', 'porc_iva']);
 
-    tbody.innerHTML = items.map(item => `
-      <tr>
-        ${cols.map(c => {
-          const v = item[c.field];
-          if (v == null || v === '') return `<td class="muted-text">—</td>`;
-          if (MONEY_FIELDS.has(c.field)) return `<td style="text-align:right">$${fmt(v)}</td>`;
-          if (NUM_FIELDS.has(c.field)) return `<td style="text-align:center">${fmt(v)}</td>`;
-          return `<td>${v}</td>`;
-        }).join('')}
+    tbody.innerHTML = items.map((item, idx) => `
+      <tr data-idx="${idx}" style="cursor:pointer">
+        <td>${item.cod_art ?? '—'}</td>
+        <td>${item.descrip ?? '—'}</td>
+        <td style="text-align:center">${item.uxb ?? '—'}</td>
+        <td style="text-align:right">${item.precio_con_iva != null ? '$' + fmt(item.precio_con_iva) : '—'}</td>
       </tr>
     `).join('');
 
     count.textContent = `${items.length} artículo${items.length !== 1 ? 's' : ''}${q ? ` para "${q}"` : ''}`;
     exportBtn.classList.remove('hidden');
-    _articulosCargados = true;
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="${cols.length}" class="error-msg">${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="error-msg">${err.message}</td></tr>`;
     exportBtn.classList.add('hidden');
   }
 }
+
+document.getElementById('articulos-tbody').addEventListener('click', (e) => {
+  const row = e.target.closest('tr[data-idx]');
+  if (!row) return;
+  const item = _articulosData[parseInt(row.dataset.idx)];
+  if (item) _abrirDetalleArticulo(item);
+});
+
+document.getElementById('art-detalle-close').addEventListener('click', () => {
+  document.getElementById('art-detalle-modal').classList.add('hidden');
+});
+
+document.getElementById('art-detalle-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
 
 document.getElementById('admin-articulos-search').addEventListener('input', (e) => {
   clearTimeout(_articulosTimer);

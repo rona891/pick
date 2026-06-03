@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=65" />
+  <link rel="stylesheet" href="css/styles.css?v=66" />
 </head>
 <body>
 
@@ -928,6 +928,17 @@
     </div>
   </div>
 
+  <!-- ── Modal: detalle de artículo ───────────────────────────────────────── -->
+  <div id="art-detalle-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <span id="art-detalle-title" style="font-size:13px;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <button id="art-detalle-close" class="modal-close">✕</button>
+      </div>
+      <div id="art-detalle-body" style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px 16px"></div>
+    </div>
+  </div>
+
   <!-- ── Modal: clientes sin datos post-import ─────────────────────────────── -->
   <div id="clientes-faltantes-modal" class="modal-overlay hidden">
     <div class="modal cfm-modal">
@@ -1212,7 +1223,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=65"></script>
-  <script src="js/app.js?v=65"></script>
+  <script src="js/api.js?v=66"></script>
+  <script src="js/app.js?v=66"></script>
 </body>
 </html>
