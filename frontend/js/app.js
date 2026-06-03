@@ -3268,12 +3268,12 @@ async function loadAsignaciones() {
   wrap.innerHTML = '<p class="loading">Cargando...</p>';
   try {
     const [semanas, repartos, users] = await Promise.all([
-      api.getSemanas(),
+      api.getSemanasAll(),
       api.getRepartos(),
       api.getUsers(),
     ]);
     sel.innerHTML = semanas.length
-      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('')
+      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}${s._m ? ' (' + s._m + ')' : ''}</option>`).join('')
       : '<option value="">Sin semanas cargadas</option>';
     if (semanaActual && semanas.find((s) => s.nombre === semanaActual)) sel.value = semanaActual;
     await renderAsignaciones(repartos, users, sel.value);
@@ -3290,19 +3290,35 @@ async function renderAsignaciones(repartos, users, semana) {
   try {
     const asignaciones = await api.getAsignaciones(semana);
     const esc = (s) => (s || '').replace(/</g, '&lt;');
-    const userOptions = users.map((u) => `<option value="${u.id}">${esc(u.username)}</option>`).join('');
+
+    // Para cada reparto, qué usuarios ya están asignados
+    const asigPorReparto = {};
+    asignaciones.forEach(a => {
+      if (!asigPorReparto[a.reparto]) asigPorReparto[a.reparto] = [];
+      asigPorReparto[a.reparto].push({ id: a.id, user_id: a.user_id });
+    });
+
     wrap.innerHTML = `
       <table class="clientes-table" style="margin-top:12px">
-        <thead><tr><th>Reparto</th><th>Usuario asignado</th></tr></thead>
+        <thead><tr><th>Reparto</th><th>Responsables</th></tr></thead>
         <tbody>
           ${repartos.map((r) => `
             <tr>
               <td><strong>${esc(r.nombre)}</strong></td>
               <td>
-                <select class="reparto-user-sel" data-reparto="${esc(r.nombre)}" style="width:100%">
-                  <option value="">— Sin asignar —</option>
-                  ${userOptions}
-                </select>
+                <div style="display:flex;flex-direction:column;gap:4px">
+                  ${users.map(u => {
+                    const asig = (asigPorReparto[r.nombre] || []).find(a => a.user_id === u.id);
+                    return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+                      <input type="checkbox" class="reparto-user-cb"
+                             data-reparto="${esc(r.nombre)}"
+                             data-userid="${u.id}"
+                             data-asigid="${asig ? asig.id : ''}"
+                             ${asig ? 'checked' : ''} />
+                      ${esc(u.username)}
+                    </label>`;
+                  }).join('')}
+                </div>
               </td>
             </tr>
           `).join('')}
@@ -3311,34 +3327,31 @@ async function renderAsignaciones(repartos, users, semana) {
       <button id="btn-guardar-repartos" class="btn-primary" style="margin-top:14px">Guardar</button>
       <span id="reparto-save-msg" style="margin-left:10px;font-size:13px;color:var(--green);display:none">Guardado</span>
     `;
-    // Preseleccionar usuarios ya asignados
-    asignaciones.forEach((a) => {
-      const sel = wrap.querySelector(`.reparto-user-sel[data-reparto="${a.reparto}"]`);
-      if (sel) sel.value = a.user_id;
-    });
-    // Guardar todo de una vez
+
     wrap.querySelector('#btn-guardar-repartos').addEventListener('click', async (e) => {
       const btn = e.currentTarget;
       btn.disabled = true;
       btn.textContent = '...';
       try {
-        const existentes = await api.getAsignaciones(semana);
-        const ops = repartos.map(async (r) => {
-          const sel = wrap.querySelector(`.reparto-user-sel[data-reparto="${r.nombre}"]`);
-          const userId = parseInt(sel?.value);
-          const anterior = existentes.find((x) => x.reparto === r.nombre);
-          if (userId) {
-            await api.setAsignacion({ semana, reparto: r.nombre, user_id: userId });
-          } else if (anterior) {
-            await api.deleteAsignacion(anterior.id);
+        const cbs = wrap.querySelectorAll('.reparto-user-cb');
+        const ops = [];
+        cbs.forEach(cb => {
+          const userId = parseInt(cb.dataset.userid);
+          const reparto = cb.dataset.reparto;
+          const asigId = cb.dataset.asigid ? parseInt(cb.dataset.asigid) : null;
+          if (cb.checked && !asigId) {
+            ops.push(api.setAsignacion({ semana, reparto, user_id: userId }));
+          } else if (!cb.checked && asigId) {
+            ops.push(api.deleteAsignacion(asigId));
           }
         });
         await Promise.all(ops);
+        // Recargar para actualizar data-asigid
+        await renderAsignaciones(repartos, users, semana);
         const msg = wrap.querySelector('#reparto-save-msg');
-        msg.style.display = 'inline';
-        setTimeout(() => { msg.style.display = 'none'; }, 2000);
+        if (msg) { msg.style.display = 'inline'; setTimeout(() => { msg.style.display = 'none'; }, 2000); }
       } catch (err) {
-        alert(err.message);
+        showToast(err.message, 'error');
       } finally {
         btn.disabled = false;
         btn.textContent = 'Guardar';

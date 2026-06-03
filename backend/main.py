@@ -6,7 +6,7 @@ from app.api.yaguar import semanas as yaguar_semanas
 from app.api.diarco import semanas as diarco_semanas
 from app.api.sobrantes import router_yaguar as sob_yaguar, router_diarco as sob_diarco, router_shared as sob_shared
 from app.api.novedades import router_yaguar as nov_yaguar, router_diarco as nov_diarco
-from app.api.asignaciones import router_yaguar as asig_yaguar, router_diarco as asig_diarco
+from app.api.asignaciones import router_yaguar as asig_yaguar, router_diarco as asig_diarco, router_shared as asig_shared
 # picks, clientes y export tienen routers dobles (uno por mayorista)
 from app.auth.jwt import hash_password
 from app.db.database import init_pool, get_db
@@ -183,13 +183,21 @@ async def lifespan(app: FastAPI):
             CREATE TABLE IF NOT EXISTS asignaciones_reparto (
                 id bigserial PRIMARY KEY,
                 semana varchar NOT NULL,
-                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                mayorista varchar NOT NULL DEFAULT 'shared',
                 reparto varchar NOT NULL,
                 user_id bigint REFERENCES users(id) ON DELETE SET NULL,
                 username varchar NOT NULL,
-                created_at timestamptz DEFAULT now(),
-                UNIQUE (semana, mayorista, reparto)
+                created_at timestamptz DEFAULT now()
             )
+        """)
+        # Migrar: eliminar old unique constraint y crear uno nuevo (semana, reparto, user_id)
+        cur.execute("""
+            ALTER TABLE asignaciones_reparto
+                DROP CONSTRAINT IF EXISTS asignaciones_reparto_semana_mayorista_reparto_key
+        """)
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS asig_uniq_semana_reparto_user
+                ON asignaciones_reparto(semana, reparto, user_id)
         """)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS sobrantes (
@@ -399,6 +407,7 @@ app.include_router(nov_diarco, prefix="/api")
 # ── Asignaciones de reparto ────────────────────────────────────────────────────
 app.include_router(asig_yaguar, prefix="/api")
 app.include_router(asig_diarco, prefix="/api")
+app.include_router(asig_shared, prefix="/api")
 # ── Artículos catálogo ─────────────────────────────────────────────────────────
 app.include_router(articulos.router_yaguar, prefix="/api")
 app.include_router(articulos.router_diarco, prefix="/api")

@@ -279,10 +279,26 @@ const api = {
   novSearch: (q, semana) => request('GET', `/api/${getMayorista()}/novedades/search?q=${encodeURIComponent(q)}&semana=${encodeURIComponent(semana || '')}`),
   novExportUrl: (semana) => `/api/${getMayorista()}/novedades/export?semana=${encodeURIComponent(semana)}`,
 
-  // Asignaciones de reparto
-  getAsignaciones: (semana) => request('GET', `/api/${getMayorista()}/asignaciones/?semana=${encodeURIComponent(semana)}`),
-  setAsignacion: (data) => request('PUT', `/api/${getMayorista()}/asignaciones/`, data),
-  deleteAsignacion: (id) => request('DELETE', `/api/${getMayorista()}/asignaciones/${id}`),
+  // Asignaciones de reparto (universal, sin mayorista)
+  getAsignaciones: (semana) => request('GET', `/api/asignaciones/?semana=${encodeURIComponent(semana)}`),
+  setAsignacion: (data) => request('PUT', `/api/asignaciones/`, data),
+  deleteAsignacion: (id) => request('DELETE', `/api/asignaciones/${id}`),
+  // Semanas de ambos mayoristas combinadas
+  getSemanasAll: async () => {
+    const [y, d] = await Promise.all([
+      request('GET', '/api/yaguar/semanas/?all=true').catch(() => []),
+      request('GET', '/api/diarco/semanas/?all=true').catch(() => []),
+    ]);
+    const all = [
+      ...y.map(s => ({...s, _m: 'Yaguar'})),
+      ...d.map(s => ({...s, _m: 'DIARCO'})),
+    ];
+    // Deduplicar por nombre, ordenar por fecha desc
+    const seen = new Set();
+    return all
+      .filter(s => { if (seen.has(s.nombre)) return false; seen.add(s.nombre); return true; })
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  },
 
   // Sobrantes (compartido entre mayoristas)
   sobGetListas: () => request('GET', '/api/sobrantes/listas'),
