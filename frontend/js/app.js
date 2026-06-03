@@ -4283,7 +4283,7 @@ function renderRoles() {
   const rolesOrdenados = [..._rolesData].sort((a, b) => {
     if (a.nombre === 'superadmin') return -1;
     if (b.nombre === 'superadmin') return  1;
-    return a.nombre.localeCompare(b.nombre);
+    return (a.orden ?? 100) - (b.orden ?? 100);
   });
 
   const cardsHtml = rolesOrdenados.map(r => {
