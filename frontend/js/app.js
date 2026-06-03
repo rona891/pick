@@ -349,7 +349,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   }
 });
 
-document.getElementById('logout-btn').addEventListener('click', async () => {
+document.getElementById('logout-btn')?.addEventListener('click', async () => {
   await api.logout().catch(() => {});
   clearToken();
   stopScanner();
@@ -2347,7 +2347,7 @@ document.getElementById('btn-importar-diarco').addEventListener('click', async (
 });
 
 // ── Cambiar contraseña ─────────────────────────────────────────────────────
-document.getElementById('change-pw-btn').addEventListener('click', () => {
+document.getElementById('change-pw-btn')?.addEventListener('click', () => {
   document.getElementById('pw-form').reset();
   document.getElementById('username-form').reset();
   document.getElementById('pw-modal').classList.remove('hidden');
