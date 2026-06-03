@@ -275,10 +275,19 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
                 except (ValueError, TypeError):
                     qty = 0
                 if qty <= 0:
-                    continue
-                # Si factor>1: Value2 está en bultos → multiplicar por uxb para obtener unidades
-                uni = qty * uxb if qty_en_bultos and uxb > 0 else qty
-                bul = uni // uxb if uxb > 0 else 0
+                    # Algunos ítems DIARCO guardan la cantidad en Value1 (ya en unidades, sin factor)
+                    try:
+                        qty_v1 = int(float(item["Value1"] or 0))
+                    except (ValueError, TypeError):
+                        qty_v1 = 0
+                    if qty_v1 <= 0:
+                        continue
+                    uni = qty_v1
+                    bul = uni // uxb if uxb > 0 else 0
+                else:
+                    # Si factor>1: Value2 está en bultos → multiplicar por uxb para obtener unidades
+                    uni = qty * uxb if qty_en_bultos and uxb > 0 else qty
+                    bul = uni // uxb if uxb > 0 else 0
 
                 try:
                     formula_sin_iva = float(item["Formula"] or 0)
