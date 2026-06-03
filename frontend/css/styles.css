@@ -2398,14 +2398,17 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   .topbar, .sob-view-header {
     padding: 14px 40px;
   }
+  /* ── Hub: full-width en desktop ────────────────────────────────────── */
+  .hub { max-width: 100%; }
+
   /* ── Bottom nav: se vuelve una barra horizontal estática en desktop ─── */
   .bottom-nav {
     position: static;
     border-top: none;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
-    max-width: 720px;
-    margin: 0 auto;
+    max-width: 100%;
+    margin: 0;
     padding-bottom: 0;
   }
   .bottom-nav .tab-btn {
@@ -2424,24 +2427,24 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   .nav-label { font-size: 13px; letter-spacing: .3px; }
 
 
-  /* ── Semana row, progreso, stats: centrados y acotados ─────────────── */
+  /* ── Semana row, progreso, stats: full-width ────────────────────────── */
   .semana-row,
   .progress-bar-wrap,
   .stats {
-    max-width: 720px;
-    margin-left: auto;
-    margin-right: auto;
-    padding-left: 20px;
-    padding-right: 20px;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 40px;
+    padding-right: 40px;
   }
   .semana-row   { padding-top: 20px; }
 
-  /* Pick y Clientes: panel centrado, ancho acotado */
+  /* Pick y Clientes: full-width */
   .tab-panel[data-panel="pick"],
   .tab-panel[data-panel="clientes"] {
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 0 20px;
+    max-width: 100%;
+    margin: 0;
+    padding: 0 40px;
   }
 
   /* ── Admin: panel completo full-width ───────────────────────────────── */
