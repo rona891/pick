@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=99" />
+  <link rel="stylesheet" href="css/styles.css?v=100" />
 </head>
 <body>
 
@@ -34,7 +34,7 @@
   <div id="hub-view" class="hidden">
     <!-- Topbar del hub: admin button + utilidades -->
     <div class="hub-topbar">
-      <button id="hub-admin-btn" class="hub-topbar-btn hidden" title="Gestión de usuarios">⚙ Usuarios</button>
+      <button id="hub-admin-btn" class="hub-topbar-btn hidden" title="Administración">⚙ Administración</button>
       <div class="topbar-center">
         <span id="hub-usuario" class="topbar-usuario"></span>
         <button id="hub-theme-btn" class="hub-topbar-btn" title="Cambiar modo"></button>
@@ -958,52 +958,6 @@
     </div>
   </div>
 
-  <!-- ── Modal: crear/editar rol ─────────────────────────────────────────── -->
-  <div id="rol-modal" class="modal-overlay hidden">
-    <div class="modal" style="max-width:480px">
-      <div class="modal-header">
-        <span id="rol-modal-title">Nuevo rol</span>
-        <button id="rol-modal-cancel" class="modal-close">✕</button>
-      </div>
-      <form id="rol-form" style="padding:16px">
-        <div class="form-group">
-          <label>Nombre del rol *</label>
-          <input type="text" id="rol-nombre-input" class="clientes-search-input" style="width:100%" autocomplete="off" placeholder="Ej: supervisor" required />
-        </div>
-        <div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
-          <div>
-            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Herramientas operativas</div>
-            <div style="display:flex;gap:16px;flex-wrap:wrap">
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_pick" /> Pick</label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_sobrantes" /> Sobrantes</label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_novedades" /> Novedades</label>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Mayoristas</div>
-            <div style="display:flex;gap:16px;flex-wrap:wrap">
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_yaguar" /> Yaguar</label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_diarco" /> DIARCO</label>
-            </div>
-          </div>
-          <div>
-            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Panel admin</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_clientes" /> Gestionar clientes</label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_semanas" /> Importar semanas</label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_zonas" /> Zonas y repartos</label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_auditoria" /> Auditoría</label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_articulos" /> Catálogo artículos</label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_usuarios" /> Gestionar usuarios</label>
-              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_roles" /> Gestionar roles</label>
-            </div>
-          </div>
-        </div>
-        <button type="submit" class="btn-primary" style="width:100%;margin-top:20px">Guardar</button>
-      </form>
-    </div>
-  </div>
-
   <!-- ── Modal: artículo no encontrado (fallback manual) ──────────────────── -->
   <div id="fallback-art-modal" class="modal-overlay hidden">
     <div class="modal" style="max-width:380px">
@@ -1323,6 +1277,52 @@
     </div>
   </div>
 
+  <!-- ── Modal: crear/editar rol (después de usuarios-modal para z-index correcto) ── -->
+  <div id="rol-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <span id="rol-modal-title">Nuevo rol</span>
+        <button id="rol-modal-cancel" class="modal-close">✕</button>
+      </div>
+      <form id="rol-form" style="padding:16px">
+        <div class="form-group">
+          <label>Nombre del rol *</label>
+          <input type="text" id="rol-nombre-input" class="clientes-search-input" style="width:100%" autocomplete="off" placeholder="Ej: supervisor" required />
+        </div>
+        <div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Herramientas operativas</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_pick" /> Pick</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_sobrantes" /> Sobrantes</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_novedades" /> Novedades</label>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Mayoristas</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_yaguar" /> Yaguar</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_diarco" /> DIARCO</label>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Panel admin</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_clientes" /> Gestionar clientes</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_semanas" /> Importar semanas</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_zonas" /> Zonas y repartos</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_auditoria" /> Auditoría</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_articulos" /> Catálogo artículos</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_usuarios" /> Gestionar usuarios</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_roles" /> Gestionar roles</label>
+            </div>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary" style="width:100%;margin-top:20px">Guardar</button>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal de alerta de scan (no match en cliente) -->
   <div id="scan-alert-overlay" class="confirm-overlay hidden">
     <div class="confirm-box">
@@ -1371,7 +1371,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=99"></script>
-  <script src="js/app.js?v=99"></script>
+  <script src="js/api.js?v=100"></script>
+  <script src="js/app.js?v=100"></script>
 </body>
 </html>

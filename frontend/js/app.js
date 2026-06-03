@@ -4215,23 +4215,50 @@ async function loadRoles() {
 }
 
 function renderRoles() {
-  const tbody = document.getElementById('roles-tbody');
-  if (!tbody) return;
+  const panel = document.getElementById('gest-panel-roles');
+  if (!panel) return;
+
   const esc = s => (s || '').replace(/</g,'&lt;');
-  tbody.innerHTML = _rolesData.map(r => {
-    const protegido = r.es_protegido ? '<span style="color:var(--muted);font-size:11px">🔒</span>' : '';
-    const permsIcons = _PERMS_UI.map(p =>
-      `<td style="text-align:center;font-size:14px">${r[p.key] ? '✓' : '<span style="color:var(--border)">·</span>'}</td>`
-    ).join('');
+  const tag = label =>
+    `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--text);font-family:var(--font)">${label}</span>`;
+
+  const groups = [
+    { label: 'Herramientas', perms: ['perm_pick','perm_sobrantes','perm_novedades'] },
+    { label: 'Mayoristas',   perms: ['perm_yaguar','perm_diarco'] },
+    { label: 'Panel admin',  perms: ['perm_admin_clientes','perm_admin_semanas','perm_admin_zonas','perm_admin_auditoria','perm_admin_articulos','perm_admin_usuarios','perm_admin_roles'] },
+  ];
+  const permLabel = {};
+  _PERMS_UI.forEach(p => { permLabel[p.key] = p.label; });
+
+  const cardsHtml = _rolesData.map(r => {
+    const protegido = r.es_protegido ? ' <span style="font-size:11px">🔒</span>' : '';
     const acciones = r.es_protegido ? '' :
       `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>
        <button class="btn-del" onclick="_deleteRol('${esc(r.nombre)}')">Eliminar</button>`;
-    return `<tr>
-      <td><strong>${esc(r.nombre)}</strong> ${protegido}</td>
-      ${permsIcons}
-      <td><div class="td-actions">${acciones}</div></td>
-    </tr>`;
+    const groupsHtml = groups.map(g => {
+      const active = g.perms.filter(pk => r[pk]).map(pk => tag(permLabel[pk]));
+      if (!active.length) return '';
+      return `<div style="display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;margin-top:4px">
+        <span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;flex-shrink:0">${g.label}:</span>
+        ${active.join(' ')}
+      </div>`;
+    }).join('');
+    const noPerms = groups.every(g => g.perms.every(pk => !r[pk]));
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <strong style="font-size:14px">${esc(r.nombre)}${protegido}</strong>
+        <div class="td-actions">${acciones}</div>
+      </div>
+      ${noPerms ? '<span style="font-size:12px;color:var(--muted)">Sin permisos asignados</span>' : groupsHtml}
+    </div>`;
   }).join('');
+
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+      <button class="btn-search" onclick="_openRolModal(null)">+ Nuevo rol</button>
+    </div>
+    ${_rolesData.length ? cardsHtml : '<p class="muted-text" style="text-align:center;padding:20px">No hay roles cargados.</p>'}
+  `;
 }
 
 function _openRolModal(nombre) {
