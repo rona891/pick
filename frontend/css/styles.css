@@ -3237,11 +3237,26 @@ body.light-mode .historial-stat.ok {
   flex: 1;
 }
 
-/* ── Hub: el hub-view necesita flex-direction column para el topbar ──────── */
+/* ── Hub: colores siempre neutrales, independientes del tema del mayorista ── */
 #hub-view {
   flex-direction: column;
   justify-content: flex-start;
   padding-top: 12px;
+  /* Sobrescribir variables de tema con valores neutros */
+  --text:    #e2e2e2;
+  --muted:   #a0a0a0;
+  --border:  #2e2e2e;
+  --surface: #1c1c1c;
+  --bg:      #111111;
+  --accent:  #a0a0a0;
+}
+body.light-mode #hub-view {
+  --text:    #1a1a1a;
+  --muted:   #606060;
+  --border:  #d0d0d0;
+  --surface: #f0f0f0;
+  --bg:      #ffffff;
+  --accent:  #606060;
 }
 
 #hub-view .hub {
