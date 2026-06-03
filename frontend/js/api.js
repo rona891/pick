@@ -45,13 +45,31 @@ function setToken(token) {
   localStorage.setItem('token', token);
 }
 
+const _ALL_PERMS = [
+  'perm_pick','perm_sobrantes','perm_novedades','perm_yaguar','perm_diarco',
+  'perm_admin_clientes','perm_admin_semanas','perm_admin_zonas',
+  'perm_admin_auditoria','perm_admin_articulos','perm_admin_usuarios','perm_admin_roles',
+];
+
 function clearToken() {
   localStorage.removeItem('token');
   localStorage.removeItem('rol');
   localStorage.removeItem('username');
+  _ALL_PERMS.forEach(p => localStorage.removeItem(p));
+  // legacy keys
   localStorage.removeItem('acceso_sobrantes');
   localStorage.removeItem('acceso_novedades');
   localStorage.removeItem('acceso_pick');
+}
+
+function _savePerms(res) {
+  _ALL_PERMS.forEach(p => {
+    if (p in res) localStorage.setItem(p, res[p] ? '1' : '0');
+  });
+}
+
+function hasPerm(key) {
+  return localStorage.getItem('perm_' + key) === '1';
 }
 
 function getMayorista() {
@@ -77,30 +95,26 @@ function setRol(rol) {
 }
 
 function esAdmin() {
-  const r = getRol();
-  return r === 'admin' || r === 'superadmin';
+  return ['clientes','semanas','zonas','auditoria','articulos','usuarios','roles']
+    .some(p => hasPerm('admin_' + p));
 }
 
-function esVendedor() {
-  return getRol() === 'vendedor';
-}
+function esSuperadmin() { return getRol() === 'superadmin'; }
+function esVendedor()   { return getRol() === 'vendedor'; }
+function esAdminOVendedor() { return esAdmin() || esVendedor(); }
 
-function esAdminOVendedor() {
-  return esAdmin() || esVendedor();
-}
-
-function tieneSobrantes() {
-  return localStorage.getItem('acceso_sobrantes') === '1';
-}
-
-function tieneNovedades() {
-  return localStorage.getItem('acceso_novedades') === '1';
-}
-
-function tienePick() {
-  const val = localStorage.getItem('acceso_pick');
-  return val === null || val === '1'; // default true si no existe aún
-}
+function tieneSobrantes()       { return hasPerm('sobrantes'); }
+function tieneNovedades()       { return hasPerm('novedades'); }
+function tienePick()            { return hasPerm('pick'); }
+function tieneYaguar()          { return hasPerm('yaguar'); }
+function tieneDiarco()          { return hasPerm('diarco'); }
+function puedeGestionarRoles()    { return hasPerm('admin_roles'); }
+function puedeGestionarUsuarios() { return hasPerm('admin_usuarios'); }
+function puedeVerAuditoria()      { return hasPerm('admin_auditoria'); }
+function puedeImportarSemanas()   { return hasPerm('admin_semanas'); }
+function puedeGestionarClientes() { return hasPerm('admin_clientes'); }
+function puedeGestionarZonas()    { return hasPerm('admin_zonas'); }
+function puedeVerArticulos()      { return hasPerm('admin_articulos'); }
 
 async function request(method, path, body = null) {
   const token = getToken();
@@ -187,6 +201,12 @@ const api = {
   marcarNoApto: (codigo) => request('PUT', '/api/yaguar/clientes/marcar-no-apto', { codigo }),
   marcarNoZona: (codigo) => request('PUT', '/api/yaguar/clientes/marcar-no-zona', { codigo }),
   marcarNoZonaDiarco: (codigo) => request('PUT', '/api/diarco/clientes/marcar-no-zona', { codigo }),
+
+  // Roles
+  getRoles: () => request('GET', '/api/roles/'),
+  createRol: (data) => request('POST', '/api/roles/', data),
+  updateRol: (nombre, data) => request('PUT', `/api/roles/${encodeURIComponent(nombre)}`, data),
+  deleteRol: (nombre) => request('DELETE', `/api/roles/${encodeURIComponent(nombre)}`),
 
   // Artículos catálogo
   getArticulos: (q, limit = 300) => {

@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (target === 'reparto') loadAsignaciones();
       if (target === 'historial') loadHistorial();
       if (target === 'articulos') loadArticulos();
+      if (target === 'roles') loadRoles();
     });
   });
 });
@@ -188,16 +189,11 @@ async function checkPermissions() {
   if (!getToken()) return;
   try {
     const me = await api.getMe();
-    const prevSob = localStorage.getItem('acceso_sobrantes');
-    const prevNov = localStorage.getItem('acceso_novedades');
-    const prevPick = localStorage.getItem('acceso_pick');
-    const newSob = me.acceso_sobrantes ? '1' : '0';
-    const newNov = me.acceso_novedades ? '1' : '0';
-    const newPick = me.acceso_pick ? '1' : '0';
-    localStorage.setItem('acceso_sobrantes', newSob);
-    localStorage.setItem('acceso_novedades', newNov);
-    localStorage.setItem('acceso_pick', newPick);
-    if (prevSob !== newSob || prevNov !== newNov || prevPick !== newPick) {
+    const prev = _ALL_PERMS.map(p => localStorage.getItem(p));
+    _savePerms(me);
+    if (me.rol) setRol(me.rol);
+    const changed = _ALL_PERMS.some((p, i) => (me[p] ? '1' : '0') !== prev[i]);
+    if (changed) {
       const hubVisible = !document.getElementById('hub-view').classList.contains('hidden');
       if (hubVisible) showHub();
     }
@@ -329,9 +325,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     const res = await api.login(username, password);
     setToken(res.access_token);
     setRol(res.rol);
-    localStorage.setItem('acceso_sobrantes', res.acceso_sobrantes ? '1' : '0');
-    localStorage.setItem('acceso_novedades', res.acceso_novedades ? '1' : '0');
-    localStorage.setItem('acceso_pick', res.acceso_pick ? '1' : '0');
+    _savePerms(res);
     localStorage.setItem('username', username);
     if (mayoristaCaducado()) {
       showMayoristaSelector();
@@ -1542,13 +1536,15 @@ function initAdmin() {
     document.getElementById('admin-lock').classList.add('hidden');
     document.getElementById('admin-panel').classList.remove('hidden');
 
-    // Usuarios siempre oculto del panel (movido al hub)
-    document.querySelector('.admin-tab-btn[data-admin-tab="usuarios"]').classList.add('hidden');
-    // Vendedor: ocultar Semanas, Zonas, Reparto e Historial
-    document.querySelector('.admin-tab-btn[data-admin-tab="nueva-semana"]').classList.toggle('hidden', vendedor);
-    document.querySelector('.admin-tab-btn[data-admin-tab="zonas"]').classList.toggle('hidden', vendedor);
-    document.querySelector('.admin-tab-btn[data-admin-tab="reparto"]').classList.toggle('hidden', vendedor);
-    document.querySelector('.admin-tab-btn[data-admin-tab="historial"]').classList.toggle('hidden', vendedor);
+    // Visibilidad de tabs según permisos granulares del rol
+    document.querySelector('.admin-tab-btn[data-admin-tab="usuarios"]').classList.add('hidden'); // siempre en hub modal
+    document.querySelector('.admin-tab-btn[data-admin-tab="clientes"]').classList.toggle('hidden', !puedeGestionarClientes());
+    document.querySelector('.admin-tab-btn[data-admin-tab="nueva-semana"]').classList.toggle('hidden', !puedeImportarSemanas());
+    document.querySelector('.admin-tab-btn[data-admin-tab="zonas"]').classList.toggle('hidden', !puedeGestionarZonas());
+    document.querySelector('.admin-tab-btn[data-admin-tab="reparto"]').classList.toggle('hidden', !puedeGestionarZonas());
+    document.querySelector('.admin-tab-btn[data-admin-tab="historial"]').classList.toggle('hidden', !puedeVerAuditoria());
+    document.querySelector('.admin-tab-btn[data-admin-tab="articulos"]').classList.toggle('hidden', !puedeVerArticulos());
+    document.querySelector('.admin-tab-btn[data-admin-tab="roles"]')?.classList.toggle('hidden', !puedeGestionarRoles());
 
     const esDiarco = getMayorista() === 'diarco';
     if (esDiarco && !vendedor) {
@@ -4083,4 +4079,127 @@ document.getElementById('admin-articulos-search').addEventListener('input', (e) 
 
 document.getElementById('btn-exportar-articulos')?.addEventListener('click', () => {
   window.location.href = api.exportArticulosUrl();
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ROLES — ABM
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _PERMS_UI = [
+  { key: 'perm_pick',               label: 'Pick',                  group: 'Herramientas' },
+  { key: 'perm_sobrantes',          label: 'Sobrantes',             group: 'Herramientas' },
+  { key: 'perm_novedades',          label: 'Novedades',             group: 'Herramientas' },
+  { key: 'perm_yaguar',             label: 'Yaguar',                group: 'Mayoristas' },
+  { key: 'perm_diarco',             label: 'DIARCO',                group: 'Mayoristas' },
+  { key: 'perm_admin_clientes',     label: 'Gestionar clientes',    group: 'Panel Admin' },
+  { key: 'perm_admin_semanas',      label: 'Importar semanas',      group: 'Panel Admin' },
+  { key: 'perm_admin_zonas',        label: 'Zonas y repartos',      group: 'Panel Admin' },
+  { key: 'perm_admin_auditoria',    label: 'Auditoría',             group: 'Panel Admin' },
+  { key: 'perm_admin_articulos',    label: 'Catálogo de artículos', group: 'Panel Admin' },
+  { key: 'perm_admin_usuarios',     label: 'Gestionar usuarios',    group: 'Panel Admin' },
+  { key: 'perm_admin_roles',        label: 'Gestionar roles',       group: 'Panel Admin' },
+];
+
+let _rolesData = [];
+let _editingRolNombre = null;
+
+async function loadRoles() {
+  const tbody = document.getElementById('roles-tbody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="99" class="loading">Cargando...</td></tr>';
+  try {
+    _rolesData = await api.getRoles();
+    renderRoles();
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="99" class="error-msg">${err.message}</td></tr>`;
+  }
+}
+
+function renderRoles() {
+  const tbody = document.getElementById('roles-tbody');
+  if (!tbody) return;
+  const esc = s => (s || '').replace(/</g,'&lt;');
+  tbody.innerHTML = _rolesData.map(r => {
+    const protegido = r.es_protegido ? '<span style="color:var(--muted);font-size:11px">🔒</span>' : '';
+    const permsIcons = _PERMS_UI.map(p =>
+      `<td style="text-align:center;font-size:14px">${r[p.key] ? '✓' : '<span style="color:var(--border)">·</span>'}</td>`
+    ).join('');
+    const acciones = r.es_protegido ? '' :
+      `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>
+       <button class="btn-del" onclick="_deleteRol('${esc(r.nombre)}')">Eliminar</button>`;
+    return `<tr>
+      <td><strong>${esc(r.nombre)}</strong> ${protegido}</td>
+      ${permsIcons}
+      <td><div class="td-actions">${acciones}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function _openRolModal(nombre) {
+  _editingRolNombre = nombre || null;
+  const rol = nombre ? _rolesData.find(r => r.nombre === nombre) : null;
+  document.getElementById('rol-modal-title').textContent = nombre ? `Editar rol: ${nombre}` : 'Nuevo rol';
+  document.getElementById('rol-nombre-input').value = rol ? rol.nombre : '';
+  document.getElementById('rol-nombre-input').readOnly = !!(rol && rol.es_protegido);
+  _PERMS_UI.forEach(p => {
+    const cb = document.getElementById(`rolperm-${p.key}`);
+    if (cb) cb.checked = rol ? !!rol[p.key] : false;
+  });
+  document.getElementById('rol-modal').classList.remove('hidden');
+}
+
+function _closeRolModal() {
+  document.getElementById('rol-modal').classList.add('hidden');
+  _editingRolNombre = null;
+}
+
+document.getElementById('rol-modal-cancel')?.addEventListener('click', _closeRolModal);
+document.getElementById('rol-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _closeRolModal(); });
+
+document.getElementById('rol-form')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const nombre = document.getElementById('rol-nombre-input').value.trim();
+  if (!nombre) { showToast('El nombre del rol es obligatorio', 'error'); return; }
+  const data = { nombre };
+  _PERMS_UI.forEach(p => { data[p.key] = !!document.getElementById(`rolperm-${p.key}`)?.checked; });
+  try {
+    if (_editingRolNombre) {
+      await api.updateRol(_editingRolNombre, data);
+      showToast('Rol actualizado', 'success');
+    } else {
+      await api.createRol(data);
+      showToast('Rol creado', 'success');
+    }
+    _closeRolModal();
+    await loadRoles();
+    await _recargarSelectsRoles();
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+async function _deleteRol(nombre) {
+  if (!await confirmar(`¿Eliminar el rol "${nombre}"? Esta acción no se puede deshacer.`, 'Sí, eliminar')) return;
+  try {
+    await api.deleteRol(nombre);
+    showToast('Rol eliminado', 'success');
+    await loadRoles();
+    await _recargarSelectsRoles();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function _recargarSelectsRoles() {
+  try {
+    const roles = await api.getRoles();
+    ['nu-rol','edit-rol'].forEach(id => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const current = sel.value;
+      sel.innerHTML = roles.map(r => `<option value="${r.nombre}">${r.nombre}</option>`).join('');
+      if (roles.find(r => r.nombre === current)) sel.value = current;
+    });
+  } catch {}
+}
+
+// Cargar roles dinámicamente al abrir el modal de usuarios
+const _origLoadUsers = typeof loadUsers !== 'undefined' ? loadUsers : null;
+document.getElementById('hub-admin-btn')?.addEventListener('click', async () => {
+  await _recargarSelectsRoles();
 });

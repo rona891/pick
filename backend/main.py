@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import picks, auth, health, clientes, admin, zonas, export, articulos
+from app.api import picks, auth, health, clientes, admin, zonas, export, articulos, roles as roles_api
 from app.api.yaguar import semanas as yaguar_semanas
 from app.api.diarco import semanas as diarco_semanas
 from app.api.sobrantes import router_yaguar as sob_yaguar, router_diarco as sob_diarco, router_shared as sob_shared
@@ -245,6 +245,37 @@ async def lifespan(app: FastAPI):
             )
         """)
         cur.execute("""
+            CREATE TABLE IF NOT EXISTS roles (
+                nombre            VARCHAR PRIMARY KEY,
+                es_protegido      BOOLEAN NOT NULL DEFAULT false,
+                perm_pick         BOOLEAN NOT NULL DEFAULT false,
+                perm_sobrantes    BOOLEAN NOT NULL DEFAULT false,
+                perm_novedades    BOOLEAN NOT NULL DEFAULT false,
+                perm_yaguar       BOOLEAN NOT NULL DEFAULT false,
+                perm_diarco       BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_clientes  BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_semanas   BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_zonas     BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_auditoria BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_articulos BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_usuarios  BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_roles     BOOLEAN NOT NULL DEFAULT false,
+                created_at        TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            INSERT INTO roles (nombre, es_protegido,
+                perm_pick, perm_sobrantes, perm_novedades, perm_yaguar, perm_diarco,
+                perm_admin_clientes, perm_admin_semanas, perm_admin_zonas,
+                perm_admin_auditoria, perm_admin_articulos, perm_admin_usuarios, perm_admin_roles)
+            VALUES
+                ('superadmin', true,  true, true, true, true, true, true, true, true, true, true, true, true),
+                ('admin',      false, true, true, true, true, true, true, true, true, true, true, true, true),
+                ('operario',   false, true, false,false,true, true, false,false,false,false,false,false,false),
+                ('vendedor',   false, true, false,false,true, true, true, false,false,false,true, false,false)
+            ON CONFLICT (nombre) DO NOTHING
+        """)
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS articulos_catalogo (
                 cod_art           VARCHAR NOT NULL,
                 mayorista         VARCHAR NOT NULL,
@@ -371,3 +402,5 @@ app.include_router(asig_diarco, prefix="/api")
 # ── Artículos catálogo ─────────────────────────────────────────────────────────
 app.include_router(articulos.router_yaguar, prefix="/api")
 app.include_router(articulos.router_diarco, prefix="/api")
+# ── Roles ──────────────────────────────────────────────────────────────────────
+app.include_router(roles_api.router, prefix="/api")
