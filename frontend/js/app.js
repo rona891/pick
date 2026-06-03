@@ -2816,6 +2816,9 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#sob-lista-wrap')) {
     document.getElementById('sob-lista-dropdown')?.classList.add('hidden');
   }
+  if (!e.target.closest('#nov-semana-wrap')) {
+    document.getElementById('nov-semana-dropdown')?.classList.add('hidden');
+  }
 });
 
 // Nueva lista — modal custom
@@ -3225,25 +3228,43 @@ let _novDescripTimer = null;
 let _novMaxUni = null;  // máximo de unidades según lo pedido por el cliente
 
 async function initNovedades() {
-  const sel = document.getElementById('nov-semana-select');
+  const btn = document.getElementById('nov-semana-btn');
+  const optionsContainer = document.getElementById('nov-semana-options');
   try {
     const semanas = await api.getSemanas();
     if (!semanas.length) {
-      sel.innerHTML = '<option value="">Sin semanas</option>';
       _novSemana = '';
+      btn.textContent = 'Sin semanas ▾';
+      optionsContainer.innerHTML = '';
     } else {
-      sel.innerHTML = semanas.map(s => `<option value="${s.nombre}">${s.nombre}</option>`).join('');
       _novSemana = semanas[0].nombre;
-      sel.value = _novSemana;
+      btn.textContent = `${_novSemana} ▾`;
+      optionsContainer.innerHTML = semanas.map(s =>
+        `<button class="chip-reparto${s.nombre === _novSemana ? ' active' : ''}" data-semana="${s.nombre}">${s.nombre}</button>`
+      ).join('');
     }
-  } catch { sel.innerHTML = '<option value="">Error</option>'; }
+  } catch {
+    _novSemana = '';
+    btn.textContent = 'Error ▾';
+  }
   try { _novClientes = await api.getClientes(); } catch { _novClientes = []; }
   _resetNovForm();
   await loadNovedades();
 }
 
-document.getElementById('nov-semana-select').addEventListener('change', (e) => {
-  _novSemana = e.target.value;
+document.getElementById('nov-semana-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('nov-semana-dropdown').classList.toggle('hidden');
+});
+
+document.getElementById('nov-semana-options').addEventListener('click', (e) => {
+  const opt = e.target.closest('[data-semana]');
+  if (!opt) return;
+  _novSemana = opt.dataset.semana;
+  document.getElementById('nov-semana-btn').textContent = `${_novSemana} ▾`;
+  document.getElementById('nov-semana-dropdown').classList.add('hidden');
+  document.querySelectorAll('#nov-semana-options [data-semana]').forEach(b => b.classList.remove('active'));
+  opt.classList.add('active');
   loadNovedades();
 });
 
