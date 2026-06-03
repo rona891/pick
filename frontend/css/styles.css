@@ -2428,10 +2428,8 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
     border-bottom: 1px solid var(--border);
     background: var(--surface);
     max-width: 100%;
-    margin: 0;
+    margin: 0 40px;
     padding-bottom: 0;
-    padding-left: 40px;
-    padding-right: 40px;
   }
   .bottom-nav .tab-btn {
     flex-direction: row;
