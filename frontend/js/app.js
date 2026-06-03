@@ -3870,7 +3870,7 @@ async function loadArticulos(q) {
   thead.innerHTML = '';
 
   try {
-    const items = await api.getArticulos(q || '', 500);
+    const items = await api.getArticulos(q || '', 20000);
     _articulosData = items;
 
     if (!items.length) {

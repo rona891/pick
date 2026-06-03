@@ -41,11 +41,11 @@ def _list(mayorista: str, q: Optional[str], limit: int):
 
 @router_yaguar.get("/")
 def yaguar_list(q: Optional[str] = Query(default=None),
-                limit: int = Query(default=300, ge=1, le=5000)):
+                limit: int = Query(default=20000, ge=1, le=50000)):
     return _list("yaguar", q, limit)
 
 
 @router_diarco.get("/")
 def diarco_list(q: Optional[str] = Query(default=None),
-                limit: int = Query(default=300, ge=1, le=5000)):
+                limit: int = Query(default=20000, ge=1, le=50000)):
     return _list("diarco", q, limit)
