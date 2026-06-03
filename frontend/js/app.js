@@ -2131,9 +2131,11 @@ function renderUsers() {
   if (!tbody) return;
   const q = (document.getElementById('users-search')?.value || '').toLowerCase();
 
-  // Ordenar
+  // superadmin siempre arriba, el resto se ordena normalmente
   const _rolWeight = (r) => ({ superadmin: 0, admin: 1 }[r] ?? 2);
-  const data = [..._usersData].sort((a, b) => {
+  const superadmins = _usersData.filter(u => u.rol === 'superadmin');
+  const resto = _usersData.filter(u => u.rol !== 'superadmin');
+  const data = [...superadmins, ...resto.sort((a, b) => {
     let va, vb;
     if (_usersSortCol === 'rol') {
       va = _rolWeight(a.rol);
@@ -2145,7 +2147,7 @@ function renderUsers() {
     if (va < vb) return -_usersSortDir;
     if (va > vb) return  _usersSortDir;
     return 0;
-  });
+  })];
 
   // Actualizar indicadores en headers
   document.querySelectorAll('#users-table th[data-sort]').forEach(th => {
@@ -4269,7 +4271,14 @@ function renderRoles() {
   const permLabel = {};
   _PERMS_UI.forEach(p => { permLabel[p.key] = p.label; });
 
-  const cardsHtml = _rolesData.map(r => {
+  // superadmin siempre arriba del todo
+  const rolesOrdenados = [..._rolesData].sort((a, b) => {
+    if (a.nombre === 'superadmin') return -1;
+    if (b.nombre === 'superadmin') return  1;
+    return a.nombre.localeCompare(b.nombre);
+  });
+
+  const cardsHtml = rolesOrdenados.map(r => {
     const protegido = r.es_protegido ? ' <span style="font-size:11px">🔒</span>' : '';
     const acciones = r.es_protegido ? '' :
       `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>
