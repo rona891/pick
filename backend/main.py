@@ -262,8 +262,9 @@ async def lifespan(app: FastAPI):
                 perm_novedades    BOOLEAN NOT NULL DEFAULT false,
                 perm_yaguar       BOOLEAN NOT NULL DEFAULT false,
                 perm_diarco       BOOLEAN NOT NULL DEFAULT false,
-                perm_admin_clientes  BOOLEAN NOT NULL DEFAULT false,
-                perm_admin_semanas   BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_clientes       BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_clientes_full  BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_semanas        BOOLEAN NOT NULL DEFAULT false,
                 perm_admin_zonas     BOOLEAN NOT NULL DEFAULT false,
                 perm_admin_auditoria BOOLEAN NOT NULL DEFAULT false,
                 perm_admin_articulos BOOLEAN NOT NULL DEFAULT false,
@@ -275,15 +276,20 @@ async def lifespan(app: FastAPI):
         cur.execute("""
             INSERT INTO roles (nombre, es_protegido,
                 perm_pick, perm_sobrantes, perm_novedades, perm_yaguar, perm_diarco,
-                perm_admin_clientes, perm_admin_semanas, perm_admin_zonas,
+                perm_admin_clientes, perm_admin_clientes_full,
+                perm_admin_semanas, perm_admin_zonas,
                 perm_admin_auditoria, perm_admin_articulos, perm_admin_usuarios, perm_admin_roles)
             VALUES
-                ('superadmin', true,  true, true, true, true, true, true, true, true, true, true, true, true),
-                ('admin',      false, true, true, true, true, true, true, true, true, true, true, true, true),
-                ('operario',   false, true, false,false,true, true, false,false,false,false,false,false,false),
-                ('vendedor',   false, true, false,false,true, true, true, false,false,false,true, false,false)
+                ('superadmin', true,  true, true, true, true, true, true, true,  true, true, true, true, true, true),
+                ('admin',      false, true, true, true, true, true, true, true,  true, true, true, true, true, true),
+                ('operario',   false, true, false,false,true, true, false,false, false,false,false,false,false,false),
+                ('vendedor',   false, true, false,false,true, true, true, false, false,false,false,true, false,false)
             ON CONFLICT (nombre) DO NOTHING
         """)
+        # Migración: nueva columna perm_admin_clientes_full
+        cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS perm_admin_clientes_full BOOLEAN NOT NULL DEFAULT false")
+        # Superadmin y admin reciben full=true si ya tenían clientes=true
+        cur.execute("UPDATE roles SET perm_admin_clientes_full = true WHERE nombre IN ('superadmin', 'admin') AND perm_admin_clientes = true")
         # Migración: agregar columna orden si no existe, y asignar valores iniciales
         cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS orden INTEGER NOT NULL DEFAULT 100")
         cur.execute("""

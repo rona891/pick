@@ -1864,12 +1864,14 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null,
   }
 
   // Vendedores editando: solo pueden tocar nombre, zona, dirección, teléfono, contacto
-  const soloLectura = id && esVendedor();
+  // soloLectura = tiene permiso básico pero NO el completo (al editar un cliente existente)
+  const soloLectura = !!id && !puedeGestionarClientesFull();
   idInput.readOnly = idInput.readOnly || soloLectura;
-  selVend.disabled = soloLectura;  // select no soporta readOnly; disabled pero JS aún lee .value
+  selVend.disabled = soloLectura;
   document.getElementById('cf-flete-wrap').style.display   = soloLectura ? 'none' : '';
   document.getElementById('cf-cod-sis-wrap').classList.toggle('hidden', !esYaguar || soloLectura);
-  document.getElementById('cf-cuit-wrap').style.display    = soloLectura ? 'none' : '';
+  // cuit_deposito visible en ambos modos (básico y completo)
+  document.getElementById('cf-cuit-wrap').style.display    = '';
   _actualizarCuitHint();
 
   document.getElementById('cliente-modal').classList.remove('hidden');
@@ -4240,7 +4242,8 @@ const _PERMS_UI = [
   { key: 'perm_novedades',          label: 'Novedades',             group: 'Herramientas' },
   { key: 'perm_yaguar',             label: 'Yaguar',                group: 'Mayoristas' },
   { key: 'perm_diarco',             label: 'DIARCO',                group: 'Mayoristas' },
-  { key: 'perm_admin_clientes',     label: 'Gestionar clientes',    group: 'Panel Admin' },
+  { key: 'perm_admin_clientes',      label: 'Ver clientes (editar básico)',  group: 'Panel Admin' },
+  { key: 'perm_admin_clientes_full', label: 'Editar clientes completo',    group: 'Panel Admin' },
   { key: 'perm_admin_semanas',      label: 'Importar semanas',      group: 'Panel Admin' },
   { key: 'perm_admin_zonas',        label: 'Zonas y repartos',      group: 'Panel Admin' },
   { key: 'perm_admin_auditoria',    label: 'Auditoría',             group: 'Panel Admin' },
@@ -4274,7 +4277,7 @@ function renderRoles() {
   const groups = [
     { label: 'Herramientas', perms: ['perm_pick','perm_sobrantes','perm_novedades'] },
     { label: 'Mayoristas',   perms: ['perm_yaguar','perm_diarco'] },
-    { label: 'Panel admin',  perms: ['perm_admin_clientes','perm_admin_semanas','perm_admin_zonas','perm_admin_auditoria','perm_admin_articulos','perm_admin_usuarios','perm_admin_roles'] },
+    { label: 'Panel admin',  perms: ['perm_admin_clientes','perm_admin_clientes_full','perm_admin_semanas','perm_admin_zonas','perm_admin_auditoria','perm_admin_articulos','perm_admin_usuarios','perm_admin_roles'] },
   ];
   const permLabel = {};
   _PERMS_UI.forEach(p => { permLabel[p.key] = p.label; });

@@ -40,6 +40,7 @@ class LoginResponse(BaseModel):
     perm_diarco: bool = True
     # Panel admin
     perm_admin_clientes: bool = False
+    perm_admin_clientes_full: bool = False
     perm_admin_semanas: bool = False
     perm_admin_zonas: bool = False
     perm_admin_auditoria: bool = False

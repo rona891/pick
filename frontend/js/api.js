@@ -47,7 +47,8 @@ function setToken(token) {
 
 const _ALL_PERMS = [
   'perm_pick','perm_sobrantes','perm_novedades','perm_yaguar','perm_diarco',
-  'perm_admin_clientes','perm_admin_semanas','perm_admin_zonas',
+  'perm_admin_clientes','perm_admin_clientes_full',
+  'perm_admin_semanas','perm_admin_zonas',
   'perm_admin_auditoria','perm_admin_articulos','perm_admin_usuarios','perm_admin_roles',
 ];
 
@@ -95,7 +96,7 @@ function setRol(rol) {
 }
 
 function esAdmin() {
-  return ['clientes','semanas','zonas','auditoria','articulos','usuarios','roles']
+  return ['clientes','clientes_full','semanas','zonas','auditoria','articulos','usuarios','roles']
     .some(p => hasPerm('admin_' + p));
 }
 
@@ -112,7 +113,8 @@ function puedeGestionarRoles()    { return hasPerm('admin_roles'); }
 function puedeGestionarUsuarios() { return hasPerm('admin_usuarios'); }
 function puedeVerAuditoria()      { return hasPerm('admin_auditoria'); }
 function puedeImportarSemanas()   { return hasPerm('admin_semanas'); }
-function puedeGestionarClientes() { return hasPerm('admin_clientes'); }
+function puedeGestionarClientes()     { return hasPerm('admin_clientes'); }
+function puedeGestionarClientesFull() { return hasPerm('admin_clientes_full'); }
 function puedeGestionarZonas()    { return hasPerm('admin_zonas'); }
 function puedeVerArticulos()      { return hasPerm('admin_articulos'); }
 

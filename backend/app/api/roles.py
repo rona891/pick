@@ -9,7 +9,8 @@ router = APIRouter(prefix="/roles", tags=["Roles"])
 ALL_PERMS = [
     "perm_pick", "perm_sobrantes", "perm_novedades",
     "perm_yaguar", "perm_diarco",
-    "perm_admin_clientes", "perm_admin_semanas", "perm_admin_zonas",
+    "perm_admin_clientes", "perm_admin_clientes_full",
+    "perm_admin_semanas", "perm_admin_zonas",
     "perm_admin_auditoria", "perm_admin_articulos",
     "perm_admin_usuarios", "perm_admin_roles",
 ]
