@@ -162,7 +162,13 @@ async function request(method, path, body = null) {
   }
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || 'Error del servidor');
+  if (!res.ok) {
+    let detail = data.detail;
+    if (Array.isArray(detail)) {
+      detail = detail.map(e => e.msg || e.message || JSON.stringify(e)).join(' | ');
+    }
+    throw new Error(detail || `Error del servidor (${res.status})`);
+  }
   return data;
 }
 
