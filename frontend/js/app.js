@@ -3446,14 +3446,17 @@ document.getElementById('nov-item-clear').addEventListener('click', () => {
   document.getElementById('nov-cliente-btn').classList.remove('hidden');
 });
 
-// ── Carga manual ─────────────────────────────────────────────────────────────
+// ── Buscar artículo por catálogo (reemplaza ingreso manual libre) ─────────────
+
+let _novManualTimer = null;
+let _novManualItems = [];
 
 function _openNovManualModal() {
-  document.getElementById('nov-manual-codart').value = '';
-  document.getElementById('nov-manual-descrip').value = '';
-  document.getElementById('nov-manual-uxb').value = '';
-  document.getElementById('nov-manual-precio').value = '';
+  document.getElementById('nov-manual-search').value = '';
+  document.getElementById('nov-manual-results').innerHTML = '';
+  _novManualItems = [];
   document.getElementById('nov-manual-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('nov-manual-search').focus(), 50);
 }
 
 function _closeNovManualModal() {
@@ -3466,17 +3469,45 @@ document.getElementById('nov-manual-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) _closeNovManualModal();
 });
 
-document.getElementById('nov-manual-confirm').addEventListener('click', async () => {
-  const codArt = document.getElementById('nov-manual-codart').value.trim().toUpperCase();
-  if (!codArt) { showToast('El código de artículo es obligatorio', 'error'); return; }
-  const descrip = document.getElementById('nov-manual-descrip').value.trim();
-  if (!descrip) { showToast('La descripción es obligatoria', 'error'); return; }
-  const uxb = parseInt(document.getElementById('nov-manual-uxb').value);
-  if (!uxb || uxb <= 0) { showToast('El UxB es obligatorio', 'error'); return; }
-  const precio = parseFloat(document.getElementById('nov-manual-precio').value) || null;
-  const item = { cod_art: codArt, cod_bar: null, descrip: descrip || null, uxb, precio_manual: precio, manual: true };
+document.getElementById('nov-manual-search').addEventListener('input', (e) => {
+  clearTimeout(_novManualTimer);
+  const q = e.target.value.trim();
+  const results = document.getElementById('nov-manual-results');
+  if (q.length < 2) { results.innerHTML = ''; return; }
+  _novManualTimer = setTimeout(async () => {
+    try {
+      const items = await api.getArticulos(q, 50);
+      _novManualItems = items;
+      if (!items.length) {
+        results.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
+        return;
+      }
+      const fmt = (v) => v != null ? '$' + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+      results.innerHTML = items.map((item, idx) => `
+        <div class="descrip-item" data-idx="${idx}" style="cursor:pointer">
+          <div style="font-size:13px;font-weight:600">${item.descrip || '—'}</div>
+          <div style="font-size:11px;color:var(--muted)">${item.cod_art}${item.uxb != null ? ' · UxB: ' + item.uxb : ''}${item.precio_con_iva != null ? ' · ' + fmt(item.precio_con_iva) : ''}</div>
+        </div>
+      `).join('');
+    } catch { }
+  }, 250);
+});
+
+document.getElementById('nov-manual-results').addEventListener('click', async (e) => {
+  const el = e.target.closest('[data-idx]');
+  if (!el) return;
+  const item = _novManualItems[parseInt(el.dataset.idx)];
+  if (!item) return;
   _closeNovManualModal();
-  await _setNovItem(item);
+  await _setNovItem({
+    cod_art: item.cod_art,
+    cod_bar: item.cod_bar || null,
+    descrip: item.descrip || null,
+    uxb: item.uxb || 0,
+    precio_manual: item.precio_con_iva || null,
+    manual: true,
+  });
+
 });
 
 // ── Scanner ──────────────────────────────────────────────────────────────────
@@ -3723,7 +3754,7 @@ document.getElementById('nov-agregar-btn').addEventListener('click', async () =>
 
 function _resetNovForm() {
   _novItem = null; _novCliente = null; _novTipo = 'devolucion'; _novBultos = 0; _novUnidades = 0; _novMaxUni = null;
-  ['nov-barcode-input','nov-descrip-input','nov-observaciones','nov-manual-codart','nov-manual-descrip','nov-manual-uxb','nov-manual-precio'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['nov-barcode-input','nov-descrip-input','nov-observaciones','nov-manual-search'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   _closeNovManualModal();
   document.getElementById('nov-item-selected').classList.add('hidden');
   document.getElementById('nov-cliente-selected').classList.add('hidden');
