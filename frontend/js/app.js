@@ -2125,9 +2125,16 @@ function renderUsers() {
   const q = (document.getElementById('users-search')?.value || '').toLowerCase();
 
   // Ordenar
+  const _rolWeight = (r) => ({ superadmin: 0, admin: 1 }[r] ?? 2);
   const data = [..._usersData].sort((a, b) => {
-    const va = (a[_usersSortCol] || '').toLowerCase();
-    const vb = (b[_usersSortCol] || '').toLowerCase();
+    let va, vb;
+    if (_usersSortCol === 'rol') {
+      va = _rolWeight(a.rol);
+      vb = _rolWeight(b.rol);
+    } else {
+      va = (a[_usersSortCol] || '').toLowerCase();
+      vb = (b[_usersSortCol] || '').toLowerCase();
+    }
     if (va < vb) return -_usersSortDir;
     if (va > vb) return  _usersSortDir;
     return 0;
