@@ -3388,20 +3388,18 @@ document.getElementById('nov-barcode-input').addEventListener('keydown', (e) => 
 
 async function novBuscarPorCodigo(cod) {
   if (!cod) return;
+  document.getElementById('nov-barcode-input').value = '';
   try {
-    const items = await api.getArticulos(cod, 10);
-    const exactos = items.filter(i => i.cod_bar === cod || i.cod_bar_bulto === cod);
-    const lista_ = exactos.length ? exactos : items;
-    if (lista_.length >= 1) {
-      const a = lista_[0];
-      await _setNovItem({ cod_bar: cod, cod_art: a.cod_art, descrip: a.descrip, uxb: a.uxb || 0, precio_manual: a.precio_con_iva || null, manual: true });
-      return;
+    const res = await api.novLookup(cod, _novSemana);
+    if (res.found) {
+      _setNovItem({ cod_bar: cod, cod_art: res.cod_art, descrip: res.descrip, uxb: res.uxb || 0 });
+    } else {
+      await confirmar(
+        `Este artículo no está en el pick de la semana "${_novSemana || 'actual'}". Para registrar una novedad usá el botón ✏️ Manual.`,
+        'Entendido'
+      );
     }
-  } catch {}
-  // No encontrado en catálogo → fallback manual
-  _abrirFallbackModal(cod, async (art) => {
-    await _setNovItem({ cod_bar: art.cod_bar || cod, cod_art: art.cod_art, descrip: art.descrip, uxb: art.uxb, precio_manual: null, manual: true });
-  });
+  } catch { showToast('Error en la búsqueda', 'error'); }
 }
 
 document.getElementById('nov-descrip-input').addEventListener('input', (e) => {
