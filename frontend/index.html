@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=56" />
+  <link rel="stylesheet" href="css/styles.css?v=57" />
 </head>
 <body>
 
@@ -886,7 +886,7 @@
         <div class="form-group"><label>Vendedor *</label><select id="cf-vendedor" required><option value="">— Seleccioná un vendedor —</option></select></div>
         <div id="cf-flete-wrap" class="form-group"><label>Flete</label><div class="input-suffix-wrap"><input type="number" id="cf-flete" step="0.01" min="0" max="100" placeholder="7" /><span class="input-suffix">%</span></div></div>
         <div id="cf-cod-sis-wrap" class="form-group hidden"><label>COD SIS <span style="color:var(--muted);font-weight:normal">(opcional)</span></label><input type="text" id="cf-cod_sis" placeholder="Ej: 1876" autocomplete="off" /></div>
-        <div id="cf-cuit-wrap" class="form-group"><label>CUIT Depósito <span style="color:var(--muted);font-weight:normal">(opcional)</span></label><input type="text" id="cf-cuit_deposito" autocomplete="off" placeholder="Ej: 20-12345678-9" /></div>
+        <div id="cf-cuit-wrap" class="form-group"><label>CUIT Depósito <span id="cf-cuit-hint" style="color:var(--muted);font-weight:normal">(opcional)</span></label><input type="text" id="cf-cuit_deposito" autocomplete="off" placeholder="Ej: 20-12345678-9" /></div>
         <button type="submit" class="btn-primary">Guardar</button>
       </form>
     </div>
@@ -1176,7 +1176,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=56"></script>
-  <script src="js/app.js?v=56"></script>
+  <script src="js/api.js?v=57"></script>
+  <script src="js/app.js?v=57"></script>
 </body>
 </html>

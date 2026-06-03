@@ -22,6 +22,13 @@ let clienteActual = '';        // nombre del cliente cuyo sheet está abierto
 let filtroRepartosClientes = new Set();  // repartos seleccionados como chips
 let _clienteEsFA = false;               // true cuando el nuevo cliente es Factura A
 
+function _actualizarCuitHint() {
+  const hint = document.getElementById('cf-cuit-hint');
+  if (!hint) return;
+  hint.textContent = _clienteEsFA ? '*' : '(opcional)';
+  hint.style.color = _clienteEsFA ? 'var(--danger, #e53e3e)' : 'var(--muted)';
+}
+
 // ── Estado: filtro de repartos en Pick tab ─────────────────────────────────
 let filtroRepartosPick = new Set();      // repartos seleccionados en Pick
 let zonaRepartoMap = {};                 // { 'MERLO': 'Merlo', 'VILLA LARCA': 'Sur Arriba', ... }
@@ -254,14 +261,18 @@ function cambiarMayorista() {
 }
 
 document.getElementById('hub-btn-sobrantes').addEventListener('click', () => {
-  document.getElementById('hub-sob-selector').classList.remove('hidden');
+  const sel = document.getElementById('hub-sob-selector');
+  sel.classList.remove('hidden');
+  sel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });
 
 document.getElementById('sob-back-btn').addEventListener('click', volverAlHub);
 
 document.getElementById('hub-btn-novedades').addEventListener('click', () => {
   document.getElementById('hub-sob-selector').classList.add('hidden');
-  document.getElementById('hub-nov-selector').classList.remove('hidden');
+  const sel = document.getElementById('hub-nov-selector');
+  sel.classList.remove('hidden');
+  sel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });
 document.getElementById('hub-nov-cancelar').addEventListener('click', () => {
   document.getElementById('hub-nov-selector').classList.add('hidden');
@@ -1801,6 +1812,8 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null,
         document.getElementById('cf-flete').value = c.flete != null ? Math.round(c.flete * 10000) / 100 : '';
         document.getElementById('cf-cod_sis').value = c.cod_sis ?? '';
         document.getElementById('cf-cuit_deposito').value = c.cuit_deposito ?? '';
+        _clienteEsFA = c.es_factura_a ?? false;
+        _actualizarCuitHint();
         // Vendor: add to list if value isn't already an option (legacy/imported data)
         const vv = c.vendedor ?? '';
         if (vv && !selVend.querySelector(`option[value="${vv.replace(/"/g, '\\"')}"]`)) {
@@ -1824,6 +1837,7 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null,
   document.getElementById('cf-flete-wrap').style.display   = soloLectura ? 'none' : '';
   document.getElementById('cf-cod-sis-wrap').classList.toggle('hidden', !esYaguar || soloLectura);
   document.getElementById('cf-cuit-wrap').style.display    = soloLectura ? 'none' : '';
+  _actualizarCuitHint();
 
   document.getElementById('cliente-modal').classList.remove('hidden');
 }
@@ -1875,6 +1889,7 @@ document.getElementById('cliente-form').addEventListener('submit', async (e) => 
 
   if (!data.localidad) { showToast('Seleccioná una zona', 'error'); return; }
   if (!data.vendedor) { showToast('Ingresá el vendedor', 'error'); return; }
+  if (_clienteEsFA && !data.cuit_deposito) { showToast('El CUIT es obligatorio para clientes Factura A', 'error'); return; }
 
   if (editingClienteId) {
     const ok = await confirmar('¿Confirmás los cambios en este cliente?');
