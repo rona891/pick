@@ -3503,7 +3503,7 @@ document.getElementById('fallback-art-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) _cerrarFallbackModal();
 });
 
-document.getElementById('fallback-art-confirm').addEventListener('click', () => {
+document.getElementById('fallback-art-confirm').addEventListener('click', async () => {
   const descrip = document.getElementById('fallback-art-descrip').value.trim();
   if (!descrip) { showToast('La descripción es obligatoria', 'error'); return; }
   const uxb = parseInt(document.getElementById('fallback-art-uxb').value);
@@ -3511,7 +3511,11 @@ document.getElementById('fallback-art-confirm').addEventListener('click', () => 
   const codBar = document.getElementById('fallback-art-codbar').value || null;
   const cb = _fallbackArtCallback;
   _cerrarFallbackModal();
-  if (cb) cb({ cod_bar: codBar, cod_art: null, descrip, uxb, precio_unit: null });
+  // Guardar en articulos_catalogo del mayorista actual
+  if (codBar) {
+    try { await api.crearArticuloManual({ cod_bar: codBar, descrip, uxb }); } catch {}
+  }
+  if (cb) cb({ cod_bar: codBar, cod_art: codBar, descrip, uxb, precio_unit: null });
 });
 
 // ── Buscar artículo por catálogo (reemplaza ingreso manual libre) ─────────────

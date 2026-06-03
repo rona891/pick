@@ -194,6 +194,7 @@ const api = {
     if (q) params.set('q', q);
     return request('GET', `/api/${getMayorista()}/articulos/?${params}`);
   },
+  crearArticuloManual: (data) => request('POST', `/api/${getMayorista()}/articulos/manual`, data),
   exportArticulosUrl: () => `/api/${getMayorista()}/export/articulos`,
 
   // Admin
