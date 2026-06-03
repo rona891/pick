@@ -3838,12 +3838,12 @@ function renderArticulos() {
   // Ordenar
   const data = [..._articulosData].sort((a, b) => {
     let va = a[_articulosSortCol], vb = b[_articulosSortCol];
-    if (_articulosSortCol === 'uxb' || _articulosSortCol === 'precio_con_iva') {
-      va = parseFloat(va) || 0;
-      vb = parseFloat(vb) || 0;
+    const na = parseFloat(va), nb = parseFloat(vb);
+    if (!isNaN(na) && !isNaN(nb)) {
+      va = na; vb = nb;
     } else {
-      va = (va || '').toString().toLowerCase();
-      vb = (vb || '').toString().toLowerCase();
+      va = (va ?? '').toString().toLowerCase();
+      vb = (vb ?? '').toString().toLowerCase();
     }
     if (va < vb) return -_articulosSortDir;
     if (va > vb) return  _articulosSortDir;
