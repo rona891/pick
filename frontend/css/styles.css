@@ -3289,28 +3289,28 @@ body.light-mode #hub-view {
   border-color: #8ec5e8;
 }
 
-/* Light mode: invertir — textos oscuros, botones un poco más claros */
+/* Light mode: textos marrón oscuro, botones naranja/siena cálido */
 body.light-mode #hub-view .hub-section-title,
 body.light-mode #hub-view .topbar-usuario,
 body.light-mode #sobrantes-view .sob-view-header .topbar-usuario,
 body.light-mode #novedades-view  .sob-view-header .topbar-usuario {
-  color: #1b3f60;
+  color: #5c2e0e;
 }
 body.light-mode #hub-view .hub-topbar-btn,
 body.light-mode #sobrantes-view .sob-view-header .btn-logout,
 body.light-mode #novedades-view  .sob-view-header .btn-logout,
 body.light-mode #sobrantes-view .sob-view-header .sob-back-btn,
 body.light-mode #novedades-view  .sob-view-header .sob-back-btn {
-  color: #2e6090;
-  border-color: rgba(46, 96, 144, 0.45);
+  color: #b85020;
+  border-color: rgba(184, 80, 32, 0.45);
 }
 body.light-mode #hub-view .hub-topbar-btn:hover,
 body.light-mode #sobrantes-view .sob-view-header .btn-logout:hover,
 body.light-mode #novedades-view  .sob-view-header .btn-logout:hover,
 body.light-mode #sobrantes-view .sob-view-header .sob-back-btn:hover,
 body.light-mode #novedades-view  .sob-view-header .sob-back-btn:hover {
-  color: #1b3f60;
-  border-color: #1b3f60;
+  color: #5c2e0e;
+  border-color: #5c2e0e;
 }
 
 /* ── Sobrantes: botones de stepper más pequeños para que entren en la card ── */
