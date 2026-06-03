@@ -3289,72 +3289,111 @@ async function renderAsignaciones(repartos, users, semana) {
   wrap.innerHTML = '<p class="loading">Cargando asignaciones...</p>';
   try {
     const asignaciones = await api.getAsignaciones(semana);
-    const esc = (s) => (s || '').replace(/</g, '&lt;');
-
-    // Para cada reparto, qué usuarios ya están asignados
+    const esc = s => (s || '').replace(/</g, '&lt;');
     const asigPorReparto = {};
     asignaciones.forEach(a => {
       if (!asigPorReparto[a.reparto]) asigPorReparto[a.reparto] = [];
-      asigPorReparto[a.reparto].push({ id: a.id, user_id: a.user_id });
+      asigPorReparto[a.reparto].push({ id: a.id, user_id: a.user_id, username: a.username });
     });
 
     wrap.innerHTML = `
       <table class="clientes-table" style="margin-top:12px">
-        <thead><tr><th>Reparto</th><th>Responsables</th></tr></thead>
+        <thead><tr><th>Reparto</th><th>Responsables</th><th></th></tr></thead>
         <tbody>
-          ${repartos.map((r) => `
-            <tr>
+          ${repartos.map((r) => {
+            const asigs = asigPorReparto[r.nombre] || [];
+            const nombres = asigs.length ? asigs.map(a => esc(a.username)).join(', ') : '<span style="color:var(--muted)">Sin asignar</span>';
+            return `<tr data-reparto="${esc(r.nombre)}">
               <td><strong>${esc(r.nombre)}</strong></td>
-              <td>
-                <div style="display:flex;flex-direction:column;gap:4px">
-                  ${users.map(u => {
-                    const asig = (asigPorReparto[r.nombre] || []).find(a => a.user_id === u.id);
-                    return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
-                      <input type="checkbox" class="reparto-user-cb"
-                             data-reparto="${esc(r.nombre)}"
-                             data-userid="${u.id}"
-                             data-asigid="${asig ? asig.id : ''}"
-                             ${asig ? 'checked' : ''} />
-                      ${esc(u.username)}
-                    </label>`;
-                  }).join('')}
-                </div>
+              <td class="reparto-nombres-cell">${nombres}</td>
+              <td style="white-space:nowrap">
+                <button class="btn-edit reparto-editar-btn" data-reparto="${esc(r.nombre)}">✏ Editar</button>
               </td>
             </tr>
-          `).join('')}
+            <tr class="reparto-dropdown-row hidden" data-reparto="${esc(r.nombre)}">
+              <td colspan="3" style="padding:0">
+                <div class="reparto-dropdown-panel" style="padding:12px 16px;background:var(--surface);border-top:1px solid var(--border)">
+                  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+                    ${users.map(u => {
+                      const asig = asigs.find(a => a.user_id === u.id);
+                      return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">
+                        <input type="checkbox" class="reparto-user-cb"
+                               data-reparto="${esc(r.nombre)}"
+                               data-userid="${u.id}"
+                               data-asigid="${asig ? asig.id : ''}"
+                               ${asig ? 'checked' : ''} />
+                        ${esc(u.username)}
+                      </label>`;
+                    }).join('')}
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <button class="btn-primary reparto-guardar-btn" data-reparto="${esc(r.nombre)}" style="padding:6px 16px">Guardar</button>
+                    <button class="btn-secondary reparto-cancelar-btn" data-reparto="${esc(r.nombre)}" style="padding:6px 12px">Cancelar</button>
+                  </div>
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
-      <button id="btn-guardar-repartos" class="btn-primary" style="margin-top:14px">Guardar</button>
-      <span id="reparto-save-msg" style="margin-left:10px;font-size:13px;color:var(--green);display:none">Guardado</span>
     `;
 
-    wrap.querySelector('#btn-guardar-repartos').addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      btn.disabled = true;
-      btn.textContent = '...';
-      try {
-        const cbs = wrap.querySelectorAll('.reparto-user-cb');
-        const ops = [];
-        cbs.forEach(cb => {
-          const userId = parseInt(cb.dataset.userid);
-          const reparto = cb.dataset.reparto;
-          const asigId = cb.dataset.asigid ? parseInt(cb.dataset.asigid) : null;
-          if (cb.checked && !asigId) {
-            ops.push(api.setAsignacion({ semana, reparto, user_id: userId }));
-          } else if (!cb.checked && asigId) {
-            ops.push(api.deleteAsignacion(asigId));
-          }
+    // Abrir/cerrar dropdown por reparto
+    wrap.addEventListener('click', async (e) => {
+      const editBtn = e.target.closest('.reparto-editar-btn');
+      const cancelBtn = e.target.closest('.reparto-cancelar-btn');
+      const guardarBtn = e.target.closest('.reparto-guardar-btn');
+
+      if (editBtn) {
+        const reparto = editBtn.dataset.reparto;
+        // Cerrar otros dropdowns abiertos
+        wrap.querySelectorAll('.reparto-dropdown-row').forEach(row => {
+          if (row.dataset.reparto !== reparto) row.classList.add('hidden');
         });
-        await Promise.all(ops);
-        // Recargar para actualizar data-asigid
-        await renderAsignaciones(repartos, users, semana);
-        const msg = wrap.querySelector('#reparto-save-msg');
-        if (msg) { msg.style.display = 'inline'; setTimeout(() => { msg.style.display = 'none'; }, 2000); }
-      } catch (err) {
-        showToast(err.message, 'error');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Guardar';
+        const dropRow = wrap.querySelector(`.reparto-dropdown-row[data-reparto="${reparto}"]`);
+        dropRow?.classList.toggle('hidden');
+      }
+
+      if (cancelBtn) {
+        const reparto = cancelBtn.dataset.reparto;
+        wrap.querySelector(`.reparto-dropdown-row[data-reparto="${reparto}"]`)?.classList.add('hidden');
+      }
+
+      if (guardarBtn) {
+        const reparto = guardarBtn.dataset.reparto;
+        guardarBtn.disabled = true;
+        guardarBtn.textContent = '...';
+        try {
+          const cbs = wrap.querySelectorAll(`.reparto-user-cb[data-reparto="${reparto}"]`);
+          const ops = [];
+          cbs.forEach(cb => {
+            const userId = parseInt(cb.dataset.userid);
+            const asigId = cb.dataset.asigid ? parseInt(cb.dataset.asigid) : null;
+            if (cb.checked && !asigId) ops.push(api.setAsignacion({ semana, reparto, user_id: userId }));
+            else if (!cb.checked && asigId) ops.push(api.deleteAsignacion(asigId));
+          });
+          await Promise.all(ops);
+          // Recargar asignaciones de este reparto y actualizar la celda de nombres
+          const newAsigs = await api.getAsignaciones(semana);
+          const newAsigReparto = newAsigs.filter(a => a.reparto === reparto);
+          const nuevosNombres = newAsigReparto.length ? newAsigReparto.map(a => esc(a.username)).join(', ') : '<span style="color:var(--muted)">Sin asignar</span>';
+          const nombreCell = wrap.querySelector(`tr[data-reparto="${reparto}"] .reparto-nombres-cell`);
+          if (nombreCell) nombreCell.innerHTML = nuevosNombres;
+          // Actualizar data-asigid en los checkboxes
+          cbs.forEach(cb => {
+            const uid = parseInt(cb.dataset.userid);
+            const match = newAsigReparto.find(a => a.user_id === uid);
+            cb.dataset.asigid = match ? match.id : '';
+            cb.checked = !!match;
+          });
+          wrap.querySelector(`.reparto-dropdown-row[data-reparto="${reparto}"]`)?.classList.add('hidden');
+          showToast('Asignación guardada', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        } finally {
+          guardarBtn.disabled = false;
+          guardarBtn.textContent = 'Guardar';
+        }
       }
     });
   } catch (err) {
