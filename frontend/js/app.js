@@ -261,6 +261,7 @@ function cambiarMayorista() {
 }
 
 document.getElementById('hub-btn-sobrantes').addEventListener('click', () => {
+  document.getElementById('hub-nov-selector').classList.add('hidden');
   const sel = document.getElementById('hub-sob-selector');
   sel.classList.remove('hidden');
   sel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
