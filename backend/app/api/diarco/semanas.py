@@ -352,16 +352,20 @@ def _leer_catalogo_diarco(conn, barcodes_13: dict, barcodes_14: dict) -> list:
         WHERE Key1='ALO' AND TRIM(STEPUID) GLOB '[0-9]*' AND TRIM(STEPUID) != ''
         GROUP BY STEPUID
     """).fetchall():
+        def _f(v):
+            try: return float(v) if v not in (None, '', -1) else None
+            except (ValueError, TypeError): return None
+
         cod = str(row["STEPUID"]).strip()
         uxb, _, descrip = _parse_pack(row["RepDesc"])
         catalogo.append({
             "cod_art":          cod,
             "descrip":          descrip,
             "uxb":              uxb,
-            "precio_costo":     float(row["Value1"]) if row["Value1"] else None,
-            "precio_con_iva":   float(row["Value2"]) if row["Value2"] else None,
-            "precio_mayorista": float(row["Value4"]) if row["Value4"] else None,
-            "stock":            float(row["Value5"]) if row["Value5"] else None,
+            "precio_costo":     _f(row["Value1"]),
+            "precio_con_iva":   _f(row["Value2"]),
+            "precio_mayorista": _f(row["Value4"]),
+            "stock":            _f(row["Value5"]),
             "tipo_unidad":      str(row["Value8"]).strip() if row["Value8"] else None,
             "tipo_estado":      str(row["Key5"]).strip() if row["Key5"] else None,
             "cod_bar":          barcodes_13.get(cod),
