@@ -17,6 +17,53 @@ from config import settings
 async def lifespan(app: FastAPI):
     init_pool()
     with get_db() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id bigserial PRIMARY KEY,
+                username varchar UNIQUE NOT NULL,
+                password_hash varchar NOT NULL,
+                created_at timestamptz DEFAULT now(),
+                rol varchar NOT NULL DEFAULT 'operario'
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS pick (
+                id bigserial PRIMARY KEY,
+                cod_bar varchar,
+                cod_art varchar,
+                descrip varchar,
+                nombre varchar,
+                cliente varchar,
+                localidad varchar,
+                uni integer,
+                bul integer,
+                cantidad_pickeada integer DEFAULT 0,
+                estado varchar,
+                semana varchar,
+                updated_at timestamptz,
+                created_at timestamptz DEFAULT now(),
+                uxb integer DEFAULT 0,
+                importe_total numeric DEFAULT 0,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                cod_bar_bulto varchar
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS clientes_yaguar (
+                id bigserial PRIMARY KEY,
+                nombre varchar,
+                localidad varchar,
+                direccion varchar,
+                telefono varchar,
+                contacto varchar,
+                vendedor varchar,
+                created_at timestamptz DEFAULT now(),
+                id_yaguar varchar,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                estado varchar,
+                flete numeric
+            )
+        """)
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS rol VARCHAR NOT NULL DEFAULT 'operario'")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_sobrantes BOOLEAN NOT NULL DEFAULT false")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_novedades BOOLEAN NOT NULL DEFAULT false")
@@ -157,6 +204,12 @@ async def lifespan(app: FastAPI):
                 created_at timestamptz DEFAULT now(),
                 precio_unit numeric,
                 uxb integer DEFAULT 0
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS sobrantes_listas (
+                nombre VARCHAR PRIMARY KEY,
+                created_at TIMESTAMPTZ DEFAULT NOW()
             )
         """)
         cur.execute("""

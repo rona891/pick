@@ -2579,28 +2579,30 @@ async function loadSobListas() {
     _sobListas = await api.sobGetListas();
   } catch { _sobListas = []; }
 
-  const sel = document.getElementById('sob-lista-select');
+  const btn = document.getElementById('sob-lista-btn');
+  const optionsContainer = document.getElementById('sob-lista-options');
+
   if (_sobListas.length === 0) {
     const now = new Date();
     const hoy = `${String(now.getDate()).padStart(2,'0')}-${String(now.getMonth()+1).padStart(2,'0')}-${now.getFullYear()}`;
     const nombre = `Sobrantes ${hoy}`;
     _sobListaActual = nombre;
-    sel.innerHTML = `<option value="${nombre}">${nombre}</option>`;
+    btn.textContent = `${nombre} ▾`;
+    optionsContainer.innerHTML = `<button class="chip-reparto active" data-lista="${nombre}">${nombre}</button>`;
   } else {
-    sel.innerHTML = _sobListas.map(l =>
-      `<option value="${l.lista}">${l.lista}</option>`
-    ).join('');
     if (!_sobListaActual || !_sobListas.find(l => l.lista === _sobListaActual)) {
       _sobListaActual = _sobListas[0].lista;
     }
-    sel.value = _sobListaActual;
+    btn.textContent = `${_sobListaActual} ▾`;
+    optionsContainer.innerHTML = _sobListas.map(l =>
+      `<button class="chip-reparto${l.lista === _sobListaActual ? ' active' : ''}" data-lista="${l.lista}">${l.lista}</button>`
+    ).join('');
   }
   await loadSobItems();
 }
 
 async function loadSobItems() {
-  const lista = document.getElementById('sob-lista-select').value;
-  _sobListaActual = lista;
+  const lista = _sobListaActual;
   if (!lista) { renderSobItems([]); return; }
   try {
     _sobItems = await api.sobGetItems(lista);
@@ -2683,7 +2685,7 @@ document.getElementById('sob-items').addEventListener('click', async (e) => {
 // Buscar / escanear
 async function sobBuscar(codBar) {
   if (!codBar.trim()) return;
-  const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
+  const lista = _sobListaActual;
   if (!lista) { showToast('Creá una lista primero', 'error'); return; }
 
   let cod_art = null, descrip = null, mayorista = getMayorista(), precio_unit = null, uxb = 0;
@@ -2759,7 +2761,7 @@ document.getElementById('sob-descrip-results').addEventListener('click', async (
   if (!item) return;
   document.getElementById('sob-descrip-results').classList.add('hidden');
   document.getElementById('sob-descrip-input').value = '';
-  const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
+  const lista = _sobListaActual;
   if (!lista) { showToast('Creá una lista primero', 'error'); return; }
   try {
     const res = await api.sobAddItem(lista, {
@@ -2791,6 +2793,9 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#sob-descrip-input') && !e.target.closest('#sob-descrip-results')) {
     document.getElementById('sob-descrip-results')?.classList.add('hidden');
   }
+  if (!e.target.closest('#sob-lista-wrap')) {
+    document.getElementById('sob-lista-dropdown')?.classList.add('hidden');
+  }
 });
 
 // Nueva lista — modal custom
@@ -2819,12 +2824,26 @@ document.getElementById('sob-nueva-input').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') document.getElementById('sob-nueva-modal').classList.add('hidden');
 });
 
-// Cambiar lista
-document.getElementById('sob-lista-select').addEventListener('change', loadSobItems);
+// Dropdown de lista
+document.getElementById('sob-lista-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('sob-lista-dropdown').classList.toggle('hidden');
+});
+
+document.getElementById('sob-lista-options').addEventListener('click', (e) => {
+  const opt = e.target.closest('[data-lista]');
+  if (!opt) return;
+  _sobListaActual = opt.dataset.lista;
+  document.getElementById('sob-lista-btn').textContent = `${_sobListaActual} ▾`;
+  document.getElementById('sob-lista-dropdown').classList.add('hidden');
+  document.querySelectorAll('#sob-lista-options [data-lista]').forEach(b => b.classList.remove('active'));
+  opt.classList.add('active');
+  loadSobItems();
+});
 
 // Eliminar lista
 document.getElementById('sob-del-lista-btn').addEventListener('click', async () => {
-  const lista = document.getElementById('sob-lista-select').value;
+  const lista = _sobListaActual;
   if (!lista) return;
   if (!await confirmar(`¿Eliminar la lista "${lista}"? Esta acción no se puede deshacer.`, 'Sí, eliminar')) return;
   try {
@@ -3323,17 +3342,19 @@ async function _setNovItem(item) {
   const clienteBtn = document.getElementById('nov-cliente-btn');
   clienteBtn.disabled = false;
   clienteBtn.textContent = 'Elegir cliente...';
-  // Cargar picks de este ítem para filtrar clientes y conocer cantidades
-  try {
-    let picks = [];
-    if (item.cod_art) picks = await api.getByCodArt(item.cod_art, _novSemana).catch(() => []);
-    if (!picks.length && item.cod_bar) picks = await api.getByBarcode(item.cod_bar, _novSemana).catch(() => []);
-    const seen = new Set();
-    _novClientesFiltrados = picks
-      .filter(p => p.nombre && !seen.has(p.nombre) && seen.add(p.nombre))
-      .map(p => ({ nombre: p.nombre, id_yaguar: p.cliente, uni: p.uni, bul: p.bul, uxb: p.uxb }));
-  } catch {
-    _novClientesFiltrados = _novClientes;
+  // Para ítems manuales, usar siempre la lista completa de clientes
+  if (!item.manual) {
+    try {
+      let picks = [];
+      if (item.cod_art) picks = await api.getByCodArt(item.cod_art, _novSemana).catch(() => []);
+      if (!picks.length && item.cod_bar) picks = await api.getByBarcode(item.cod_bar, _novSemana).catch(() => []);
+      const seen = new Set();
+      _novClientesFiltrados = picks
+        .filter(p => p.nombre && !seen.has(p.nombre) && seen.add(p.nombre))
+        .map(p => ({ nombre: p.nombre, id_yaguar: p.cliente, uni: p.uni, bul: p.bul, uxb: p.uxb }));
+    } catch {
+      _novClientesFiltrados = _novClientes;
+    }
   }
   // Si ya hay cliente seleccionado, actualizar el máximo
   if (_novCliente) _novActualizarMax();

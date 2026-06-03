@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=54" />
+  <link rel="stylesheet" href="css/styles.css?v=55" />
 </head>
 <body>
 
@@ -137,7 +137,12 @@
           <label class="sob-card-label">Lista activa</label>
           <button id="sob-del-lista-btn" class="btn-link-del">Eliminar</button>
         </div>
-        <select id="sob-lista-select" class="sob-lista-select"></select>
+        <div id="sob-lista-wrap" class="filtro-dropdown-wrap" style="width:100%">
+          <button id="sob-lista-btn" class="btn-filtro-toggle" style="width:100%;text-align:left">Sin listas ▾</button>
+          <div id="sob-lista-dropdown" class="filtro-reparto-dropdown hidden" style="width:100%;box-sizing:border-box;flex-direction:column">
+            <div id="sob-lista-options" style="display:flex;flex-direction:column;gap:4px;width:100%"></div>
+          </div>
+        </div>
         <button id="sob-nueva-btn" class="btn-secondary sob-nueva-btn">+ Nueva lista</button>
       </div>
 
@@ -1171,7 +1176,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=54"></script>
-  <script src="js/app.js?v=54"></script>
+  <script src="js/api.js?v=55"></script>
+  <script src="js/app.js?v=55"></script>
 </body>
 </html>
