@@ -2397,8 +2397,12 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   .topbar, .sob-view-header {
     padding: 14px 40px;
   }
-  /* ── Hub: full-width en desktop ────────────────────────────────────── */
+  /* ── Hub: full-width y distribuido verticalmente en desktop ─────────── */
   .hub { max-width: 100%; }
+  #hub-view .hub {
+    justify-content: space-evenly;
+    padding: 40px 0;
+  }
   .hub-topbar {
     max-width: 100%;
     align-self: stretch;
