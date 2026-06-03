@@ -3450,6 +3450,8 @@ document.getElementById('nov-item-clear').addEventListener('click', () => {
 
 let _novManualTimer = null;
 let _novManualItems = [];
+let _novManualScannerActive = false;
+let _novManualCodeReader = null;
 
 function _openNovManualModal() {
   document.getElementById('nov-manual-search').value = '';
@@ -3460,8 +3462,62 @@ function _openNovManualModal() {
 }
 
 function _closeNovManualModal() {
+  stopNovManualScanner();
   document.getElementById('nov-manual-modal').classList.add('hidden');
 }
+
+async function startNovManualScanner() {
+  const container = document.getElementById('nov-manual-scanner-container');
+  container.classList.remove('hidden');
+  document.getElementById('nov-manual-scan-btn').textContent = 'Detener';
+  _novManualScannerActive = true;
+  const hints = new Map([[2, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+                              ZXing.BarcodeFormat.EAN_14, ZXing.BarcodeFormat.CODE_128,
+                              ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.UPC_A]], [3, true]]);
+  _novManualCodeReader = new ZXing.BrowserMultiFormatReader(hints, 0);
+  const targetId = localStorage.getItem('pick_last_camera') ?? null;
+  await _novManualCodeReader.decodeFromVideoDevice(targetId, 'nov-manual-scanner-video', async (result) => {
+    if (result) { stopNovManualScanner(); await _novManualBuscarPorBarcode(result.getText()); }
+  });
+}
+
+function stopNovManualScanner() {
+  if (!_novManualScannerActive) return;
+  _novManualScannerActive = false;
+  if (_novManualCodeReader) { _novManualCodeReader.reset(); _novManualCodeReader = null; }
+  const video = document.getElementById('nov-manual-scanner-video');
+  if (video?.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  document.getElementById('nov-manual-scanner-container').classList.add('hidden');
+  document.getElementById('nov-manual-scan-btn').textContent = 'Escanear';
+}
+
+async function _novManualBuscarPorBarcode(barcode) {
+  try {
+    const items = await api.getArticulos(barcode, 10);
+    const matches = items.filter(i => i.cod_bar === barcode || i.cod_bar_bulto === barcode);
+    const lista = matches.length ? matches : items;
+    if (!lista.length) { showToast('Artículo no encontrado en el catálogo', 'error'); return; }
+    if (lista.length === 1) {
+      const item = lista[0];
+      _closeNovManualModal();
+      await _setNovItem({ cod_art: item.cod_art, cod_bar: item.cod_bar || null,
+        descrip: item.descrip || null, uxb: item.uxb || 0,
+        precio_manual: item.precio_con_iva || null, manual: true });
+      return;
+    }
+    _novManualItems = lista;
+    const fmt = (v) => v != null ? '$' + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+    document.getElementById('nov-manual-results').innerHTML = lista.map((item, idx) => `
+      <div class="descrip-item" data-idx="${idx}" style="cursor:pointer">
+        <div style="font-size:13px;font-weight:600">${item.descrip || '—'}</div>
+        <div style="font-size:11px;color:var(--muted)">${item.cod_art}${item.uxb != null ? ' · UxB: ' + item.uxb : ''}${item.precio_con_iva != null ? ' · ' + fmt(item.precio_con_iva) : ''}</div>
+      </div>`).join('');
+  } catch { showToast('Error al buscar el artículo', 'error'); }
+}
+
+document.getElementById('nov-manual-scan-btn').addEventListener('click', async () => {
+  if (_novManualScannerActive) stopNovManualScanner(); else await startNovManualScanner();
+});
 
 document.getElementById('nov-manual-btn').addEventListener('click', _openNovManualModal);
 document.getElementById('nov-manual-cancel').addEventListener('click', _closeNovManualModal);

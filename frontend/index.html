@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=71" />
+  <link rel="stylesheet" href="css/styles.css?v=72" />
 </head>
 <body>
 
@@ -340,10 +340,19 @@
         <button type="button" id="nov-manual-cancel" class="modal-close">✕</button>
       </div>
       <div style="padding:16px">
+        <button type="button" id="nov-manual-scan-btn" class="btn-scan-full" style="margin-bottom:10px">Escanear</button>
+        <div id="nov-manual-scanner-container" class="hidden" style="position:relative;border-radius:8px;overflow:hidden;margin-bottom:10px">
+          <video id="nov-manual-scanner-video" autoplay muted playsinline style="width:100%;display:block"></video>
+          <button class="btn-scanner-close" onclick="stopNovManualScanner()">✕</button>
+          <div class="scanner-guide-overlay">
+            <div class="scanner-guide-rect"></div>
+            <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
+          </div>
+        </div>
         <input type="text" id="nov-manual-search" class="clientes-search-input"
-               placeholder="Código o descripción..." autocomplete="off"
+               placeholder="O buscá por código / descripción..." autocomplete="off"
                style="width:100%;margin-bottom:10px" />
-        <div id="nov-manual-results" style="max-height:55vh;overflow-y:auto"></div>
+        <div id="nov-manual-results" style="max-height:45vh;overflow-y:auto"></div>
       </div>
     </div>
   </div>
@@ -1212,7 +1221,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=71"></script>
-  <script src="js/app.js?v=71"></script>
+  <script src="js/api.js?v=72"></script>
+  <script src="js/app.js?v=72"></script>
 </body>
 </html>

@@ -24,10 +24,11 @@ def _list(mayorista: str, q: Optional[str], limit: int):
                 FROM articulos_catalogo
                 WHERE mayorista = %s
                   AND (descrip ILIKE %s OR cod_art ILIKE %s
-                       OR cod_bar ILIKE %s OR fabricante ILIKE %s)
+                       OR cod_bar ILIKE %s OR cod_bar_bulto ILIKE %s
+                       OR fabricante ILIKE %s)
                 ORDER BY descrip
                 LIMIT %s
-            """, (mayorista, pattern, pattern, pattern, pattern, limit))
+            """, (mayorista, pattern, pattern, pattern, pattern, pattern, limit))
         else:
             cur.execute(f"""
                 SELECT {_COLS}
