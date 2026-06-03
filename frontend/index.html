@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=97" />
+  <link rel="stylesheet" href="css/styles.css?v=98" />
 </head>
 <body>
 
@@ -567,7 +567,6 @@
           <button class="admin-tab-btn" data-admin-tab="reparto">Reparto</button>
           <button class="admin-tab-btn" data-admin-tab="historial">Auditoría</button>
           <button class="admin-tab-btn" data-admin-tab="articulos">Artículos</button>
-          <button class="admin-tab-btn hidden" data-admin-tab="roles">Roles</button>
         </div>
 
         <div class="admin-main">
@@ -1231,10 +1230,19 @@
   <div id="usuarios-modal" class="modal-overlay hidden" style="align-items:flex-start;padding:16px">
     <div class="modal usuarios-modal-box">
       <div class="modal-header">
-        <span>Gestión de usuarios</span>
+        <span>Administración</span>
         <button id="usuarios-modal-close" class="modal-close">✕</button>
       </div>
-      <div class="usuarios-modal-body">
+      <!-- Tabs Usuarios / Roles -->
+      <div style="display:flex;border-bottom:1px solid var(--border);padding:0 16px">
+        <button class="gest-tab-btn active" data-gest-tab="usuarios"
+                style="background:none;border:none;border-bottom:2px solid var(--accent);color:var(--text);font-family:var(--font);font-size:13px;padding:10px 16px 8px;cursor:pointer;margin-bottom:-1px">Usuarios</button>
+        <button class="gest-tab-btn" data-gest-tab="roles"
+                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:13px;padding:10px 16px 8px;cursor:pointer;margin-bottom:-1px">Roles</button>
+      </div>
+
+      <!-- Panel: Usuarios -->
+      <div id="gest-panel-usuarios" class="usuarios-modal-body">
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <input type="text" id="users-search" class="clientes-search-input"
                  placeholder="Buscar usuario o rol..." autocomplete="off" style="flex:1" />
@@ -1250,6 +1258,36 @@
               </tr>
             </thead>
             <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Panel: Roles -->
+      <div id="gest-panel-roles" class="usuarios-modal-body hidden">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <button class="btn-search" onclick="_openRolModal(null)">+ Nuevo rol</button>
+        </div>
+        <div class="table-wrap" style="overflow-x:auto">
+          <table class="clientes-table" id="roles-hub-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th title="Pick" style="text-align:center;font-size:11px">Pick</th>
+                <th title="Sobrantes" style="text-align:center;font-size:11px">Sob.</th>
+                <th title="Novedades" style="text-align:center;font-size:11px">Nov.</th>
+                <th title="Yaguar" style="text-align:center;font-size:11px">Yag.</th>
+                <th title="DIARCO" style="text-align:center;font-size:11px">DRC</th>
+                <th title="Clientes" style="text-align:center;font-size:11px">Cli.</th>
+                <th title="Semanas" style="text-align:center;font-size:11px">Sem.</th>
+                <th title="Zonas" style="text-align:center;font-size:11px">Zon.</th>
+                <th title="Auditoría" style="text-align:center;font-size:11px">Aud.</th>
+                <th title="Artículos" style="text-align:center;font-size:11px">Art.</th>
+                <th title="Usuarios" style="text-align:center;font-size:11px">Usr.</th>
+                <th title="Roles" style="text-align:center;font-size:11px">Rol.</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="roles-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -1333,7 +1371,7 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=97"></script>
-  <script src="js/app.js?v=97"></script>
+  <script src="js/api.js?v=98"></script>
+  <script src="js/app.js?v=98"></script>
 </body>
 </html>

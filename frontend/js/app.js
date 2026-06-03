@@ -92,7 +92,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (target === 'reparto') loadAsignaciones();
       if (target === 'historial') loadHistorial();
       if (target === 'articulos') loadArticulos();
-      if (target === 'roles') loadRoles();
     });
   });
 });
@@ -277,8 +276,17 @@ document.getElementById('hub-nov-cancelar').addEventListener('click', () => {
 
 // ── Hub topbar: Usuarios, Tema, Cuenta, Salir ──────────────────────────────
 document.getElementById('hub-admin-btn').addEventListener('click', () => {
+  // Resetear al tab Usuarios
+  document.getElementById('gest-panel-usuarios').classList.remove('hidden');
+  document.getElementById('gest-panel-roles').classList.add('hidden');
+  document.querySelectorAll('.gest-tab-btn').forEach(b => {
+    const active = b.dataset.gestTab === 'usuarios';
+    b.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
+    b.style.color = active ? 'var(--text)' : 'var(--muted)';
+  });
   document.getElementById('usuarios-modal').classList.remove('hidden');
   loadUsers();
+  _recargarSelectsRoles();
 });
 
 document.getElementById('usuarios-modal-close').addEventListener('click', () => {
@@ -1544,7 +1552,6 @@ function initAdmin() {
     document.querySelector('.admin-tab-btn[data-admin-tab="reparto"]').classList.toggle('hidden', !puedeGestionarZonas());
     document.querySelector('.admin-tab-btn[data-admin-tab="historial"]').classList.toggle('hidden', !puedeVerAuditoria());
     document.querySelector('.admin-tab-btn[data-admin-tab="articulos"]').classList.toggle('hidden', !puedeVerArticulos());
-    document.querySelector('.admin-tab-btn[data-admin-tab="roles"]')?.classList.toggle('hidden', !puedeGestionarRoles());
 
     const esDiarco = getMayorista() === 'diarco';
     if (esDiarco && !vendedor) {
@@ -2175,6 +2182,21 @@ document.addEventListener('click', (e) => {
 
 // Buscador
 document.getElementById('users-search')?.addEventListener('input', renderUsers);
+
+// Tabs del modal de administración (Usuarios / Roles)
+document.querySelectorAll('.gest-tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.gestTab;
+    document.querySelectorAll('.gest-tab-btn').forEach(b => {
+      const isActive = b.dataset.gestTab === tab;
+      b.style.borderBottomColor = isActive ? 'var(--accent)' : 'transparent';
+      b.style.color = isActive ? 'var(--text)' : 'var(--muted)';
+    });
+    document.getElementById('gest-panel-usuarios').classList.toggle('hidden', tab !== 'usuarios');
+    document.getElementById('gest-panel-roles').classList.toggle('hidden', tab !== 'roles');
+    if (tab === 'roles') loadRoles();
+  });
+});
 
 // Botón Nuevo usuario
 document.getElementById('btn-nuevo-usuario')?.addEventListener('click', () => {
