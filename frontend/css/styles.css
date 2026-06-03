@@ -3461,12 +3461,14 @@ body.light-mode .historial-stat.ok {
   #filtro-estado-dropdown { left: 0; right: auto; max-width: calc(100vw - 32px); }
 }
 
-/* ── Admin clientes: tabla con scroll interno ─────────────────────────────── */
-.admin-tab-panel[data-admin-panel="clientes"] .table-wrap {
+/* ── Admin clientes / artículos: tabla con scroll interno ─────────────────── */
+.admin-tab-panel[data-admin-panel="clientes"] .table-wrap,
+.admin-tab-panel[data-admin-panel="articulos"] .table-wrap {
   max-height: 65vh;
   overflow-y: auto;
 }
-.admin-tab-panel[data-admin-panel="clientes"] .clientes-table thead th {
+.admin-tab-panel[data-admin-panel="clientes"] .clientes-table thead th,
+.admin-tab-panel[data-admin-panel="articulos"] .clientes-table thead th {
   position: sticky;
   top: 0;
   z-index: 10;
