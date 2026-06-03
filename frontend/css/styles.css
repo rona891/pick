@@ -416,7 +416,7 @@ input:focus, select:focus { border-color: var(--accent); }
 
 /* ── App layout ───────────────────────────────────────────────────────────── */
 #app-view { max-width: 680px; margin: 0 auto; padding: 20px 16px 80px; }
-#app-view > .topbar { margin: -20px -16px 0; }
+#app-view > .topbar { margin: -20px -16px 16px; }
 
 /* ── Semana selector ──────────────────────────────────────────────────────── */
 .semana-row {
