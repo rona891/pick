@@ -1785,8 +1785,12 @@ function _lev(a, b) {
   const d = Array.from({length: m + 1}, (_, i) =>
     Array.from({length: n + 1}, (_, j) => i === 0 ? j : j === 0 ? i : 0));
   for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      d[i][j] = a[i-1] === b[j-1] ? d[i-1][j-1] : 1 + Math.min(d[i-1][j], d[i][j-1], d[i-1][j-1]);
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i-1] === b[j-1] ? 0 : 1;
+      d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + cost);
+      if (i > 1 && j > 1 && a[i-1] === b[j-2] && a[i-2] === b[j-1])
+        d[i][j] = Math.min(d[i][j], d[i-2][j-2] + cost);
+    }
   return d[m][n];
 }
 
