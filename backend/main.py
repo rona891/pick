@@ -68,13 +68,27 @@ async def lifespan(app: FastAPI):
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_sobrantes BOOLEAN NOT NULL DEFAULT false")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_novedades BOOLEAN NOT NULL DEFAULT false")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_pick BOOLEAN NOT NULL DEFAULT true")
-        # Crear superadmin si no existe ninguno
-        cur.execute("SELECT COUNT(*) AS n FROM users WHERE rol = 'superadmin'")
-        if cur.fetchone()["n"] == 0:
+        # Crear usuario ADMIN con el rol protegido si no existe ningún usuario con rol protegido
+        cur.execute("""
+            SELECT r.nombre FROM users u
+            JOIN roles r ON r.nombre = u.rol
+            WHERE r.es_protegido = true LIMIT 1
+        """)
+        rol_protegido = cur.fetchone()
+        if not rol_protegido:
+            # Primera vez: el rol protegido aún no existe (se crea más adelante en el seed)
+            # Insertar ADMIN con 'superadmin' provisional; se corregirá en el próximo arranque
             cur.execute(
                 """INSERT INTO users (username, password_hash, rol) VALUES (%s, %s, 'superadmin')
-                   ON CONFLICT (username) DO UPDATE SET rol = 'superadmin', password_hash = EXCLUDED.password_hash""",
+                   ON CONFLICT (username) DO NOTHING""",
                 ("ADMIN", hash_password(settings.ADMIN_PASSWORD)),
+            )
+        else:
+            # Asegurar que ADMIN tenga el rol protegido actualizado y la contraseña correcta
+            cur.execute(
+                """INSERT INTO users (username, password_hash, rol) VALUES (%s, %s, %s)
+                   ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash""",
+                ("ADMIN", hash_password(settings.ADMIN_PASSWORD), rol_protegido["nombre"]),
             )
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS id_yaguar VARCHAR")
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
@@ -275,6 +289,19 @@ async def lifespan(app: FastAPI):
         """)
         # Migración: nueva columna perm_admin_clientes_full (debe ir ANTES del seed INSERT)
         cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS perm_admin_clientes_full BOOLEAN NOT NULL DEFAULT false")
+        # Rol protegido: solo insertar si no existe ninguno (puede haber sido renombrado)
+        cur.execute("SELECT COUNT(*) AS n FROM roles WHERE es_protegido = true")
+        if cur.fetchone()["n"] == 0:
+            cur.execute("""
+                INSERT INTO roles (nombre, es_protegido,
+                    perm_pick, perm_sobrantes, perm_novedades, perm_yaguar, perm_diarco,
+                    perm_admin_clientes, perm_admin_clientes_full,
+                    perm_admin_semanas, perm_admin_zonas,
+                    perm_admin_auditoria, perm_admin_articulos, perm_admin_usuarios, perm_admin_roles)
+                VALUES ('superadmin', true, true, true, true, true, true, true, true, true, true, true, true, true, true)
+                ON CONFLICT (nombre) DO NOTHING
+            """)
+        # Roles no protegidos: siempre seed seguro con ON CONFLICT
         cur.execute("""
             INSERT INTO roles (nombre, es_protegido,
                 perm_pick, perm_sobrantes, perm_novedades, perm_yaguar, perm_diarco,
@@ -282,24 +309,23 @@ async def lifespan(app: FastAPI):
                 perm_admin_semanas, perm_admin_zonas,
                 perm_admin_auditoria, perm_admin_articulos, perm_admin_usuarios, perm_admin_roles)
             VALUES
-                ('superadmin', true,  true, true, true, true, true, true, true,  true, true, true, true, true, true),
-                ('admin',      false, true, true, true, true, true, true, true,  true, true, true, true, true, true),
-                ('operario',   false, true, false,false,true, true, false,false, false,false,false,false,false,false),
-                ('vendedor',   false, true, false,false,true, true, true, false, false,false,false,true, false,false)
+                ('admin',    false, true, true, true, true, true, true, true,  true, true, true, true, true, true),
+                ('operario', false, true, false,false,true, true, false,false, false,false,false,false,false,false),
+                ('vendedor', false, true, false,false,true, true, true, false, false,false,false,true, false,false)
             ON CONFLICT (nombre) DO NOTHING
         """)
-        # Superadmin y admin reciben full=true si ya tenían clientes=true
-        cur.execute("UPDATE roles SET perm_admin_clientes_full = true WHERE nombre IN ('superadmin', 'admin') AND perm_admin_clientes = true")
+        # Rol protegido y admin reciben full=true si ya tenían clientes=true
+        cur.execute("UPDATE roles SET perm_admin_clientes_full = true WHERE (es_protegido = true OR nombre = 'admin') AND perm_admin_clientes = true")
         # Migración: columna color para roles
         cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS color VARCHAR DEFAULT NULL")
         # Migración: agregar columna orden si no existe, y asignar valores iniciales
         cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS orden INTEGER NOT NULL DEFAULT 100")
         cur.execute("""
-            UPDATE roles SET orden = CASE nombre
-                WHEN 'superadmin' THEN 0
-                WHEN 'admin'      THEN 1
-                WHEN 'operario'   THEN 2
-                WHEN 'vendedor'   THEN 3
+            UPDATE roles SET orden = CASE
+                WHEN es_protegido = true THEN 0
+                WHEN nombre = 'admin'    THEN 1
+                WHEN nombre = 'operario' THEN 2
+                WHEN nombre = 'vendedor' THEN 3
                 ELSE 100
             END
             WHERE orden = 100 OR orden IS NULL
