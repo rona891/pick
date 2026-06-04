@@ -273,6 +273,8 @@ async def lifespan(app: FastAPI):
                 created_at        TIMESTAMPTZ DEFAULT NOW()
             )
         """)
+        # Migración: nueva columna perm_admin_clientes_full (debe ir ANTES del seed INSERT)
+        cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS perm_admin_clientes_full BOOLEAN NOT NULL DEFAULT false")
         cur.execute("""
             INSERT INTO roles (nombre, es_protegido,
                 perm_pick, perm_sobrantes, perm_novedades, perm_yaguar, perm_diarco,
@@ -286,8 +288,6 @@ async def lifespan(app: FastAPI):
                 ('vendedor',   false, true, false,false,true, true, true, false, false,false,false,true, false,false)
             ON CONFLICT (nombre) DO NOTHING
         """)
-        # Migración: nueva columna perm_admin_clientes_full
-        cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS perm_admin_clientes_full BOOLEAN NOT NULL DEFAULT false")
         # Superadmin y admin reciben full=true si ya tenían clientes=true
         cur.execute("UPDATE roles SET perm_admin_clientes_full = true WHERE nombre IN ('superadmin', 'admin') AND perm_admin_clientes = true")
         # Migración: agregar columna orden si no existe, y asignar valores iniciales
