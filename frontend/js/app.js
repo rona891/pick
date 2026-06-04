@@ -3364,12 +3364,12 @@ async function loadAsignaciones() {
   wrap.innerHTML = '<p class="loading">Cargando...</p>';
   try {
     const [semanas, repartos, users] = await Promise.all([
-      api.getSemanasAll(),
+      api.getSemanasAdmin(),  // solo semanas del mayorista activo
       api.getRepartos(),
       api.getUsers(),
     ]);
     sel.innerHTML = semanas.length
-      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}${s._m ? ' (' + s._m + ')' : ''}</option>`).join('')
+      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('')
       : '<option value="">Sin semanas cargadas</option>';
     if (semanaActual && semanas.find((s) => s.nombre === semanaActual)) sel.value = semanaActual;
     await renderAsignaciones(repartos, users, sel.value);
