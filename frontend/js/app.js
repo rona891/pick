@@ -140,11 +140,18 @@ function showHub() {
   if (hubTheme) hubTheme.textContent = esLightMode() ? '🌙' : '☀';
   document.getElementById('hub-usuario').textContent = localStorage.getItem('username') || '';
 
-  // Ocultar cards de mayoristas sin permiso
-  document.querySelectorAll('.mayorista-card[data-mayorista="yaguar"]').forEach(c =>
-    c.classList.toggle('hidden', !tieneYaguar()));
-  document.querySelectorAll('.mayorista-card[data-mayorista="diarco"]').forEach(c =>
-    c.classList.toggle('hidden', !tieneDiarco()));
+  // Ocultar cards según mayorista + destino: solo mostrar si el usuario
+  // tiene permiso para ese mayorista Y para esa sección
+  document.querySelectorAll('.mayorista-card').forEach(c => {
+    const m    = c.dataset.mayorista;
+    const dest = c.dataset.destino || 'pick';
+    const tieneM = m === 'yaguar' ? tieneYaguar() : tieneDiarco();
+    let tieneDest;
+    if      (dest === 'sobrantes') tieneDest = tieneSobrantes();
+    else if (dest === 'novedades') tieneDest = tieneNovedades();
+    else                           tieneDest = tienePick() || esAdmin();
+    c.classList.toggle('hidden', !tieneM || !tieneDest);
+  });
 
   // Si el mayorista activo ya no es accesible, cambiar al que sí está disponible
   const actual = getMayorista();
