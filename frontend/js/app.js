@@ -4430,7 +4430,7 @@ function renderRoles() {
     const handle = r.es_protegido ? '' :
       `<span class="rol-drag-handle" title="Arrastrar para reordenar" style="cursor:grab;font-size:16px;color:var(--muted);margin-right:6px;user-select:none">⠿</span>`;
     // Superadmin protegido: solo el caller superadmin puede editar (solo color)
-    const btnEditarProtegido = (r.es_protegido && esSuperadmin())
+    const btnEditarProtegido = (r.es_protegido && esRolProtegido())
       ? `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>` : '';
     const acciones = r.es_protegido
       ? btnEditarProtegido
@@ -4488,7 +4488,8 @@ function _openRolModal(nombre) {
   const rol = nombre ? _rolesData.find(r => r.nombre === nombre) : null;
   document.getElementById('rol-modal-title').textContent = nombre ? `Editar rol: ${nombre}` : 'Nuevo rol';
   document.getElementById('rol-nombre-input').value = rol ? rol.nombre : '';
-  document.getElementById('rol-nombre-input').readOnly = !!(rol && rol.es_protegido);
+  // Protegido: nombre editable solo si el caller tiene el rol protegido
+  document.getElementById('rol-nombre-input').readOnly = !!(rol && rol.es_protegido && !esRolProtegido());
   document.getElementById('rol-color-input').value = rol?.color || '#888888';
   _PERMS_UI.forEach(p => {
     const cb = document.getElementById(`rolperm-${p.key}`);

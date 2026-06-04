@@ -13,7 +13,8 @@ _PERM_COLS = (
     "perm_admin_semanas", "perm_admin_zonas",
     "perm_admin_auditoria", "perm_admin_articulos", "perm_admin_usuarios", "perm_admin_roles",
 )
-_PERM_SEL = ", ".join(f"COALESCE(r.{p}, false) AS {p}" for p in _PERM_COLS)
+_PERM_SEL = ", ".join(f"COALESCE(r.{p}, false) AS {p}" for p in _PERM_COLS) + \
+            ", COALESCE(r.es_protegido, false) AS es_rol_protegido"
 
 
 def _get_perms(user_id: int) -> dict:
@@ -52,6 +53,7 @@ def login(request: LoginRequest):
     result = {
         "access_token": create_access_token(user["id"], user["username"]),
         "rol": user["rol"],
+        "es_rol_protegido": bool(user["es_rol_protegido"]),
     }
     for p in _PERM_COLS:
         result[p] = bool(user[p])
@@ -69,7 +71,10 @@ def get_me(authorization: str = Header(...)):
     perms = _get_perms(payload.get("sub"))
     if not perms:
         raise HTTPException(404, "Usuario no encontrado")
-    result = {"rol": perms["rol"]}
+    result = {
+        "rol": perms["rol"],
+        "es_rol_protegido": bool(perms.get("es_rol_protegido", False)),
+    }
     for p in _PERM_COLS:
         result[p] = bool(perms.get(p, False))
     return result

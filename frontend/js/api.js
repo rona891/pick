@@ -56,6 +56,7 @@ function clearToken() {
   localStorage.removeItem('token');
   localStorage.removeItem('rol');
   localStorage.removeItem('username');
+  localStorage.removeItem('es_rol_protegido');
   _ALL_PERMS.forEach(p => localStorage.removeItem(p));
   // legacy keys
   localStorage.removeItem('acceso_sobrantes');
@@ -67,6 +68,13 @@ function _savePerms(res) {
   _ALL_PERMS.forEach(p => {
     if (p in res) localStorage.setItem(p, res[p] ? '1' : '0');
   });
+  if ('es_rol_protegido' in res) {
+    localStorage.setItem('es_rol_protegido', res.es_rol_protegido ? '1' : '0');
+  }
+}
+
+function esRolProtegido() {
+  return localStorage.getItem('es_rol_protegido') === '1';
 }
 
 function hasPerm(key) {

@@ -104,19 +104,31 @@ def update_rol_perms(nombre: str, data: RolIn, authorization: str = Header(...))
         rol = cur.fetchone()
         if not rol:
             raise HTTPException(404, "Rol no encontrado")
-        # Protegido: no se puede renombrar, pero SÍ se pueden editar permisos
         nuevo_nombre = data.nombre.strip()
         if rol["es_protegido"] and nuevo_nombre != nombre:
-            raise HTTPException(403, "No se puede renombrar un rol protegido")
+            # Solo quien tiene el rol protegido puede renombrarlo
+            payload = verify_token(authorization)
+            with get_db() as cur2:
+                cur2.execute("""
+                    SELECT r.es_protegido FROM users u
+                    LEFT JOIN roles r ON r.nombre = u.rol
+                    WHERE u.id = %s
+                """, (payload.get("sub"),))
+                caller_rol = cur2.fetchone()
+            if not caller_rol or not caller_rol["es_protegido"]:
+                raise HTTPException(403, "Solo el titular del rol protegido puede renombrarlo")
         if nuevo_nombre != nombre:
             cur.execute("SELECT nombre FROM roles WHERE nombre = %s", (nuevo_nombre,))
             if cur.fetchone():
                 raise HTTPException(400, f"Ya existe un rol con el nombre '{nuevo_nombre}'")
-            # Actualizar referencias en users
             cur.execute("UPDATE users SET rol = %s WHERE rol = %s", (nuevo_nombre, nombre))
         if rol["es_protegido"]:
-            # Rol protegido: solo se puede cambiar el color
-            cur.execute("UPDATE roles SET color = %s WHERE nombre = %s", (data.color, nombre))
+            # Rol protegido: solo color (y nombre si se autorizó arriba)
+            if nuevo_nombre != nombre:
+                cur.execute("UPDATE roles SET nombre = %s, color = %s WHERE nombre = %s",
+                            (nuevo_nombre, data.color, nombre))
+            else:
+                cur.execute("UPDATE roles SET color = %s WHERE nombre = %s", (data.color, nombre))
         else:
             sets = ", ".join([f"{p} = %s" for p in ALL_PERMS]) + ", color = %s"
             if nuevo_nombre != nombre:

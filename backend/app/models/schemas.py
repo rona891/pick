@@ -32,6 +32,7 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     rol: str
+    es_rol_protegido: bool = False
     # Herramientas operativas
     perm_pick: bool = True
     perm_sobrantes: bool = False
