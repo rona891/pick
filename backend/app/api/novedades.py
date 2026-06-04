@@ -142,11 +142,13 @@ def _export(mayorista: str, semana: str):
     ws.title = "Novedades"
 
     hdrs = [
-        ("Semana",             18), ("Tipo",          14), ("Cliente",        28),
-        ("Cód. Cliente",       14), ("Cód. Artículo", 14), ("Descripción",    40),
-        ("Bultos",             10), ("UxB",            8), ("Unidades sueltas",14),
-        ("Unidades totales",   14), ("Precio unit. c/IVA",18), ("Total c/IVA",16),
-        ("Observaciones",      30),
+        ("Tipo",             14),
+        ("Cód. Cliente",     14),
+        ("Cliente",          28),
+        ("Cód. Artículo",   14),
+        ("Descripción",      40),
+        ("Unidades totales", 14),
+        ("Observaciones",    30),
     ]
     for ci, (label, width) in enumerate(hdrs, 1):
         ws.cell(row=1, column=ci, value=label)
@@ -157,28 +159,20 @@ def _export(mayorista: str, semana: str):
     for ri, r in enumerate(rows, 2):
         uxb       = r["uxb"] or 0
         uni_total = (r["bultos"] or 0) * uxb + (r["unidades"] or 0)
-        precio    = round(float(r["precio_unit"]), 2) if r["precio_unit"] is not None else ""
-        total     = round(float(r["precio_unit"]) * uni_total, 2) if r["precio_unit"] is not None else ""
         tipo_str  = tipo_labels.get(r["tipo"], r["tipo"])
 
-        data_cell(ws, ri, 1,  r["semana"],              align="left")
-        data_cell(ws, ri, 2,  tipo_str,                 align="center", bold=True)
-        data_cell(ws, ri, 3,  r["cliente_nombre"],      align="left")
-        data_cell(ws, ri, 4,  r["cliente"],             align="center")
-        data_cell(ws, ri, 5,  r["cod_art"],             align="center")
-        data_cell(ws, ri, 6,  r["descrip"],             align="left")
-        data_cell(ws, ri, 7,  r["bultos"],              align="center")
         _f = openpyxl.styles.PatternFill("solid", fgColor=ROW_ALT if ri % 2 == 0 else WHITE)
-        for ci in range(1, 14):
+        for ci in range(1, 8):
             ws.cell(row=ri, column=ci).fill = _f
-        data_cell(ws, ri, 8,  uxb if uxb else "",       align="center")
-        data_cell(ws, ri, 9,  r["unidades"],            align="center")
-        data_cell(ws, ri, 10, uni_total,                align="center")
-        data_cell(ws, ri, 11, precio, align="right", fmt=MONEY if isinstance(precio, float) else None)
-        data_cell(ws, ri, 12, total,  align="right", fmt=MONEY if isinstance(total, float) else None)
-        data_cell(ws, ri, 13, r["observaciones"] or "", align="left")
+        data_cell(ws, ri, 1, tipo_str,                 align="center", bold=True)
+        data_cell(ws, ri, 2, r["cliente"],             align="center")
+        data_cell(ws, ri, 3, r["cliente_nombre"],      align="left")
+        data_cell(ws, ri, 4, r["cod_art"],             align="center")
+        data_cell(ws, ri, 5, r["descrip"],             align="left")
+        data_cell(ws, ri, 6, uni_total,                align="center")
+        data_cell(ws, ri, 7, r["observaciones"] or "", align="left")
 
-    ws.auto_filter.ref = f"A1:M{len(rows)+1}" if rows else None
+    ws.auto_filter.ref = f"A1:G{len(rows)+1}" if rows else None
     ws.freeze_panes = "A2"
     fname = build_filename("Novedades", f"{semana} {mayorista.capitalize()}")
     return stream_wb(wb, fname)
