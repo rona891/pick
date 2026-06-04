@@ -1822,11 +1822,12 @@ function renderClientes() {
     const tipoCell = c.es_factura_a
       ? '<span class="badge-fa">A</span>'
       : '<span class="badge-cf">CF</span>';
-    const hidden = q && !_clienteMatch(q, c.nombre) && !_clienteMatch(q, c.id_yaguar ?? '') ? 'style="display:none"' : '';
+    const hidden = q && !_clienteMatch(q, c.nombre) && !_clienteMatch(q, c.id_yaguar ?? '') && !_clienteMatch(q, c.localidad ?? '') ? 'style="display:none"' : '';
     return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})" ${hidden}>
       <td class="td-full td-cod">${c.id_yaguar ?? '—'}</td>
       <td style="text-align:center;width:52px">${tipoCell}</td>
       <td class="td-full">${c.nombre ?? ''}</td>
+      <td>${c.localidad ?? '—'}</td>
       <td>${flete}</td>
       <td onclick="event.stopPropagation()"><div class="td-actions">
         <button class="btn-edit" onclick="openClienteForm(${c.id})">Editar</button>
