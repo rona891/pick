@@ -3435,7 +3435,7 @@ async function renderAsignaciones(repartos, users, semana) {
     `;
 
     // Abrir/cerrar dropdown por reparto
-    wrap.addEventListener('click', async (e) => {
+    wrap.onclick = async (e) => {
       const editBtn = e.target.closest('.reparto-editar-btn');
       const cancelBtn = e.target.closest('.reparto-cancelar-btn');
       const guardarBtn = e.target.closest('.reparto-guardar-btn');
@@ -3497,7 +3497,7 @@ async function renderAsignaciones(repartos, users, semana) {
           guardarBtn.textContent = 'Guardar';
         }
       }
-    });
+    };
   } catch (err) {
     wrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
   }
