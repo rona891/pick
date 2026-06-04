@@ -139,6 +139,19 @@ function showHub() {
   const hubTheme = document.getElementById('hub-theme-btn');
   if (hubTheme) hubTheme.textContent = esLightMode() ? '🌙' : '☀';
   document.getElementById('hub-usuario').textContent = localStorage.getItem('username') || '';
+
+  // Ocultar cards de mayoristas sin permiso
+  document.querySelectorAll('.mayorista-card[data-mayorista="yaguar"]').forEach(c =>
+    c.classList.toggle('hidden', !tieneYaguar()));
+  document.querySelectorAll('.mayorista-card[data-mayorista="diarco"]').forEach(c =>
+    c.classList.toggle('hidden', !tieneDiarco()));
+
+  // Si el mayorista activo ya no es accesible, cambiar al que sí está disponible
+  const actual = getMayorista();
+  if ((actual === 'yaguar' && !tieneYaguar()) || (actual === 'diarco' && !tieneDiarco())) {
+    if (tieneYaguar()) setMayorista('yaguar');
+    else if (tieneDiarco()) setMayorista('diarco');
+  }
 }
 
 function showSobrantes() {
@@ -195,6 +208,12 @@ async function checkPermissions() {
     if (changed) {
       const hubVisible = !document.getElementById('hub-view').classList.contains('hidden');
       if (hubVisible) showHub();
+      // Si el mayorista activo ya no es accesible, forzar cambio
+      const actual = getMayorista();
+      if ((actual === 'yaguar' && !tieneYaguar()) || (actual === 'diarco' && !tieneDiarco())) {
+        if (tieneYaguar()) setMayorista('yaguar');
+        else if (tieneDiarco()) setMayorista('diarco');
+      }
     }
   } catch { /* silencioso */ }
 }
