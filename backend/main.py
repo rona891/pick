@@ -68,6 +68,11 @@ async def lifespan(app: FastAPI):
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_sobrantes BOOLEAN NOT NULL DEFAULT false")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_novedades BOOLEAN NOT NULL DEFAULT false")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_pick BOOLEAN NOT NULL DEFAULT true")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS es_oculto BOOLEAN NOT NULL DEFAULT false")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS reparto_forzado BOOLEAN NOT NULL DEFAULT false")
+        # Usuarios con flags especiales (idempotente)
+        cur.execute("UPDATE users SET es_oculto = true WHERE LOWER(username) = 'mia'")
+        cur.execute("UPDATE users SET reparto_forzado = true WHERE LOWER(username) = 'rona'")
         # Crear usuario ADMIN con el rol protegido si no existe ningún usuario con rol protegido
         cur.execute("""
             SELECT r.nombre FROM users u
@@ -316,6 +321,9 @@ async def lifespan(app: FastAPI):
         """)
         # Rol protegido y admin reciben full=true si ya tenían clientes=true
         cur.execute("UPDATE roles SET perm_admin_clientes_full = true WHERE (es_protegido = true OR nombre = 'admin') AND perm_admin_clientes = true")
+        # Migración: perm_reparto para indicar qué roles son elegibles en repartos
+        cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS perm_reparto BOOLEAN NOT NULL DEFAULT false")
+        cur.execute("UPDATE roles SET perm_reparto = true WHERE nombre = 'operario' AND perm_reparto = false")
         # Migración: columna color para roles
         cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS color VARCHAR DEFAULT NULL")
         # Migración: agregar columna orden si no existe, y asignar valores iniciales

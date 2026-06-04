@@ -3478,7 +3478,7 @@ async function renderAsignaciones(repartos, users, semana) {
               <td colspan="3" style="padding:0">
                 <div class="reparto-dropdown-panel" style="padding:12px 16px;background:var(--surface);border-top:1px solid var(--border)">
                   <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-                    ${users.map(u => {
+                    ${users.filter(u => u.perm_reparto || u.reparto_forzado).map(u => {
                       const asig = asigs.find(a => a.user_id === u.id);
                       return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">
                         <input type="checkbox" class="reparto-user-cb"
@@ -4421,6 +4421,7 @@ const _PERMS_UI = [
   { key: 'perm_pick',               label: 'Pick',                  group: 'Herramientas' },
   { key: 'perm_sobrantes',          label: 'Sobrantes',             group: 'Herramientas' },
   { key: 'perm_novedades',          label: 'Novedades',             group: 'Herramientas' },
+  { key: 'perm_reparto',            label: 'Elegible en reparto',   group: 'Herramientas' },
   { key: 'perm_yaguar',             label: 'Yaguar',                group: 'Mayoristas' },
   { key: 'perm_diarco',             label: 'DIARCO',                group: 'Mayoristas' },
   { key: 'perm_admin_clientes',      label: 'Ver clientes (editar básico)',  group: 'Panel Admin' },

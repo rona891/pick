@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Header
 from app.models.schemas import LoginRequest, LoginResponse, ChangePasswordRequest, ChangeUsernameRequest, UserCreate, UserOut, UserUpdate
 from app.db.database import get_db
 from app.auth.jwt import verify_password, create_access_token, hash_password, verify_token
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -120,12 +120,33 @@ def change_username(request: ChangeUsernameRequest, authorization: str = Header(
 
 
 @router.get("/users", response_model=List[UserOut])
-def list_users():
+def list_users(authorization: Optional[str] = Header(None)):
+    caller_id = None
+    caller_is_protected = False
+    if authorization:
+        try:
+            payload = verify_token(authorization)
+            caller_id = payload.get("sub")
+            with get_db() as cur2:
+                cur2.execute("""SELECT r.es_protegido FROM users u
+                    LEFT JOIN roles r ON r.nombre = u.rol WHERE u.id = %s""", (caller_id,))
+                row = cur2.fetchone()
+                caller_is_protected = bool(row and row["es_protegido"])
+        except Exception:
+            pass
+
     with get_db() as cur:
-        cur.execute("""
-            SELECT id, username, rol, acceso_sobrantes, acceso_novedades, acceso_pick, created_at FROM users
-            ORDER BY username
-        """)
+        base_sql = """
+            SELECT u.id, u.username, u.rol, u.acceso_sobrantes, u.acceso_novedades, u.acceso_pick,
+                   u.created_at, u.reparto_forzado,
+                   COALESCE(r.perm_reparto, false) AS perm_reparto
+            FROM users u LEFT JOIN roles r ON r.nombre = u.rol
+        """
+        if caller_is_protected:
+            cur.execute(base_sql + " ORDER BY u.username")
+        else:
+            cur.execute(base_sql + " WHERE u.es_oculto = false OR u.id = %s ORDER BY u.username",
+                        (caller_id,))
         return [dict(r) for r in cur.fetchall()]
 
 
