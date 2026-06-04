@@ -1294,9 +1294,15 @@
         <button id="rol-modal-cancel" class="modal-close">✕</button>
       </div>
       <form id="rol-form" style="padding:16px">
-        <div class="form-group">
-          <label>Nombre del rol *</label>
-          <input type="text" id="rol-nombre-input" class="clientes-search-input" style="width:100%" autocomplete="off" placeholder="Ej: supervisor" required />
+        <div class="form-group" style="display:flex;gap:10px;align-items:flex-end">
+          <div style="flex:1">
+            <label>Nombre del rol *</label>
+            <input type="text" id="rol-nombre-input" class="clientes-search-input" style="width:100%" autocomplete="off" placeholder="Ej: supervisor" required />
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:6px;font-size:12px">Color</label>
+            <input type="color" id="rol-color-input" value="#888888" style="width:38px;height:38px;border:none;border-radius:6px;cursor:pointer;padding:2px;background:none" />
+          </div>
         </div>
         <div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
           <div>
@@ -1382,7 +1388,7 @@
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-  <script src="js/api.js?v=120"></script>
-  <script src="js/app.js?v=120"></script>
+  <script src="js/api.js?v=121"></script>
+  <script src="js/app.js?v=121"></script>
 </body>
 </html>

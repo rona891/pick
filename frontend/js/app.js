@@ -2174,7 +2174,7 @@ const ROL_COLORS = { superadmin: 'var(--accent)', admin: 'var(--green)', vendedo
 const ROL_LABELS = { superadmin: 'Superadmin', admin: 'Admin', vendedor: 'Vendedor', operario: 'Operario' };
 
 let _usersData = [];
-let _usersSortCol = 'username';
+let _usersSortCol = 'rol';
 let _usersSortDir = 1;
 
 async function loadUsers() {
@@ -2238,7 +2238,8 @@ function renderUsers() {
     const esUltimoSuperadmin = esEsteSuperadmin && superadminCount <= 1;
     // Para los demás superadmins: solo otro superadmin puede tocarlos
     const puedeTocar = !esUltimoSuperadmin && (!esEsteSuperadmin || callerEsSuperadmin);
-    const rolLabel = `<span style="color:${ROL_COLORS[u.rol] || 'var(--muted)'}">${ROL_LABELS[u.rol] || u.rol}</span>`;
+    const rolColor = _rolesData.find(r => r.nombre === u.rol)?.color || ROL_COLORS[u.rol] || 'var(--muted)';
+    const rolLabel = `<span style="color:${rolColor}">${ROL_LABELS[u.rol] || u.rol}</span>`;
     const deleteBtn = puedeTocar ? `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>` : '';
     const clickAttr = puedeTocar ? `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"` : '';
     return `<tr ${clickAttr}>
@@ -4369,6 +4370,9 @@ function renderRoles() {
 
   const cardsHtml = rolesOrdenados.map(r => {
     const protegido = r.es_protegido ? ' <span style="font-size:11px">🔒</span>' : '';
+    const colorDot = r.color
+      ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${r.color};margin-right:6px;flex-shrink:0"></span>`
+      : '';
     const handle = r.es_protegido ? '' :
       `<span class="rol-drag-handle" title="Arrastrar para reordenar" style="cursor:grab;font-size:16px;color:var(--muted);margin-right:6px;user-select:none">⠿</span>`;
     const acciones = r.es_protegido ? '' :
@@ -4386,7 +4390,7 @@ function renderRoles() {
     return `<div data-rol="${esc(r.nombre)}" data-protegido="${r.es_protegido}"
                style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="display:flex;align-items:center">${handle}<strong style="font-size:14px">${esc(r.nombre)}${protegido}</strong></div>
+        <div style="display:flex;align-items:center">${handle}${colorDot}<strong style="font-size:14px">${esc(r.nombre)}${protegido}</strong></div>
         <div class="td-actions">${acciones}</div>
       </div>
       ${noPerms ? '<span style="font-size:12px;color:var(--muted)">Sin permisos asignados</span>' : groupsHtml}
@@ -4427,6 +4431,7 @@ function _openRolModal(nombre) {
   document.getElementById('rol-modal-title').textContent = nombre ? `Editar rol: ${nombre}` : 'Nuevo rol';
   document.getElementById('rol-nombre-input').value = rol ? rol.nombre : '';
   document.getElementById('rol-nombre-input').readOnly = !!(rol && rol.es_protegido);
+  document.getElementById('rol-color-input').value = rol?.color || '#888888';
   _PERMS_UI.forEach(p => {
     const cb = document.getElementById(`rolperm-${p.key}`);
     if (cb) cb.checked = rol ? !!rol[p.key] : false;
@@ -4446,7 +4451,7 @@ document.getElementById('rol-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   const nombre = document.getElementById('rol-nombre-input').value.trim();
   if (!nombre) { showToast('El nombre del rol es obligatorio', 'error'); return; }
-  const data = { nombre };
+  const data = { nombre, color: document.getElementById('rol-color-input').value || null };
   _PERMS_UI.forEach(p => { data[p.key] = !!document.getElementById(`rolperm-${p.key}`)?.checked; });
   try {
     if (_editingRolNombre) {

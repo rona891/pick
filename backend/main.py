@@ -290,6 +290,8 @@ async def lifespan(app: FastAPI):
         """)
         # Superadmin y admin reciben full=true si ya tenían clientes=true
         cur.execute("UPDATE roles SET perm_admin_clientes_full = true WHERE nombre IN ('superadmin', 'admin') AND perm_admin_clientes = true")
+        # Migración: columna color para roles
+        cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS color VARCHAR DEFAULT NULL")
         # Migración: agregar columna orden si no existe, y asignar valores iniciales
         cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS orden INTEGER NOT NULL DEFAULT 100")
         cur.execute("""

@@ -18,6 +18,7 @@ ALL_PERMS = [
 
 class RolIn(BaseModel):
     nombre: str
+    color: Optional[str] = None
     perm_pick: bool = False
     perm_sobrantes: bool = False
     perm_novedades: bool = False
@@ -51,7 +52,7 @@ def _require_perm(authorization: str, perm: str):
 def list_roles():
     with get_db() as cur:
         cur.execute(f"""
-            SELECT nombre, es_protegido, orden, {', '.join(ALL_PERMS)}, created_at
+            SELECT nombre, es_protegido, orden, color, {', '.join(ALL_PERMS)}, created_at
             FROM roles
             ORDER BY
                 CASE WHEN nombre = 'superadmin' THEN 0 ELSE 1 END,
@@ -81,9 +82,9 @@ def create_rol(data: RolIn, authorization: str = Header(...)):
     nombre = data.nombre.strip()
     if not nombre:
         raise HTTPException(400, "El nombre del rol no puede estar vacío")
-    cols = ", ".join(ALL_PERMS)
-    placeholders = ", ".join(["%s"] * len(ALL_PERMS))
-    vals = [getattr(data, p) for p in ALL_PERMS]
+    cols = ", ".join(ALL_PERMS) + ", color"
+    placeholders = ", ".join(["%s"] * (len(ALL_PERMS) + 1))
+    vals = [getattr(data, p) for p in ALL_PERMS] + [data.color]
     with get_db() as cur:
         cur.execute("SELECT nombre FROM roles WHERE nombre = %s", (nombre,))
         if cur.fetchone():
@@ -113,12 +114,12 @@ def update_rol_perms(nombre: str, data: RolIn, authorization: str = Header(...))
                 raise HTTPException(400, f"Ya existe un rol con el nombre '{nuevo_nombre}'")
             # Actualizar referencias en users
             cur.execute("UPDATE users SET rol = %s WHERE rol = %s", (nuevo_nombre, nombre))
-        sets = ", ".join([f"{p} = %s" for p in ALL_PERMS])
+        sets = ", ".join([f"{p} = %s" for p in ALL_PERMS]) + ", color = %s"
         if nuevo_nombre != nombre:
             sets = f"nombre = %s, {sets}"
-            vals = [nuevo_nombre] + [getattr(data, p) for p in ALL_PERMS]
+            vals = [nuevo_nombre] + [getattr(data, p) for p in ALL_PERMS] + [data.color]
         else:
-            vals = [getattr(data, p) for p in ALL_PERMS]
+            vals = [getattr(data, p) for p in ALL_PERMS] + [data.color]
         cur.execute(f"UPDATE roles SET {sets} WHERE nombre = %s", vals + [nombre])
     return {"ok": True}
 
