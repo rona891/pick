@@ -800,25 +800,14 @@
                 </select>
               </div>
             </div>
-            <div class="auditoria-filter-row">
-              <div class="auditoria-filter-field" style="flex:1">
-                <label class="auditoria-filter-label">Artículo</label>
-                <div class="hist-scan-row">
-                  <input type="text" id="hist-filter-producto" class="clientes-search-input" placeholder="Código o descripción..." autocomplete="off" />
-                  <button id="hist-scan-btn" class="btn-icon">Escanear</button>
-                </div>
-              </div>
-              <div class="auditoria-filter-field" style="flex:1">
-                <label class="auditoria-filter-label">Cliente</label>
-                <input type="text" id="hist-filter-cliente" class="clientes-search-input" placeholder="Nombre del cliente..." autocomplete="off" />
-              </div>
-              <div class="auditoria-filter-field auditoria-filter-toggle">
-                <label class="auditoria-filter-label" style="visibility:hidden">_</label>
-                <label class="historial-toggle-label">
-                  <input type="checkbox" id="historial-solo-errores" />
-                  <span>Solo incompletos</span>
-                </label>
-              </div>
+            <div style="display:flex;gap:6px;align-items:stretch;flex-wrap:wrap">
+              <input type="text" id="hist-filter-producto" class="clientes-search-input" placeholder="Artículo..." autocomplete="off" style="flex:1;min-width:120px;margin-bottom:0" />
+              <button id="hist-scan-btn" class="btn-icon" style="flex-shrink:0">Escanear</button>
+              <input type="text" id="hist-filter-cliente" class="clientes-search-input" placeholder="Cliente..." autocomplete="off" style="flex:1;min-width:120px;margin-bottom:0" />
+              <label class="historial-toggle-label" style="flex-shrink:0">
+                <input type="checkbox" id="historial-solo-errores" />
+                <span>Solo incompletos</span>
+              </label>
             </div>
           </div>
           <div id="hist-scanner-container" class="hidden">
@@ -1423,7 +1412,7 @@
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-  <script src="js/api.js?v=144"></script>
-  <script src="js/app.js?v=144"></script>
+  <script src="js/api.js?v=145"></script>
+  <script src="js/app.js?v=145"></script>
 </body>
 </html>
