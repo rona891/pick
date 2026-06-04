@@ -4382,7 +4382,7 @@ function renderRoles() {
       `<span class="rol-drag-handle" title="Arrastrar para reordenar" style="cursor:grab;font-size:16px;color:var(--muted);margin-right:6px;user-select:none">⠿</span>`;
     // Superadmin protegido: solo el caller superadmin puede editar (solo color)
     const btnEditarProtegido = (r.es_protegido && esSuperadmin())
-      ? `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar color</button>` : '';
+      ? `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>` : '';
     const acciones = r.es_protegido
       ? btnEditarProtegido
       : `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>
@@ -4446,8 +4446,10 @@ function _openRolModal(nombre) {
     if (!cb) return;
     cb.checked = rol ? !!rol[p.key] : false;
     // Roles protegidos: checkboxes siempre marcados y no editables
-    cb.disabled = !!(rol && rol.es_protegido);
-    cb.closest('label').style.opacity = (rol && rol.es_protegido) ? '0.45' : '';
+    const protegido = !!(rol && rol.es_protegido);
+    cb.disabled = protegido;
+    cb.dataset.permanentDisabled = protegido ? '1' : '';
+    cb.closest('label').style.opacity = protegido ? '0.45' : '';
   });
   document.getElementById('rol-modal').classList.remove('hidden');
   _syncClientePerms();
@@ -4465,6 +4467,8 @@ function _syncClientePerms() {
   const basico = document.getElementById('rolperm-perm_admin_clientes');
   const full   = document.getElementById('rolperm-perm_admin_clientes_full');
   if (!basico || !full) return;
+  // No tocar si ya está permanentemente deshabilitado (rol protegido)
+  if (basico.dataset.permanentDisabled || full.dataset.permanentDisabled) return;
   full.disabled = !basico.checked;
   if (!basico.checked) full.checked = false;
   full.closest('label').style.opacity = basico.checked ? '' : '0.4';
