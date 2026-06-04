@@ -42,6 +42,14 @@ function _saveView(view) {
   localStorage.setItem('_last_view', view);
 }
 
+function _saveAdminTab(adminTab) {
+  localStorage.setItem('_last_admin_tab', adminTab);
+}
+
+function _getAdminTab() {
+  return localStorage.getItem('_last_admin_tab') || null;
+}
+
 function _updateActivity() {
   localStorage.setItem('_last_activity', Date.now().toString());
 }
@@ -91,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.admin-tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.adminTab === target));
       document.querySelectorAll('.admin-tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.adminPanel !== target));
       _setTopbarSection(_ADMIN_TAB_LABELS[target] || target);
+      _saveAdminTab(target);
       if (target === 'usuarios') loadUsers();
       if (target === 'nueva-semana') loadSemanasAdmin();
       if (target === 'zonas') loadZonas();
@@ -1624,16 +1633,24 @@ function initAdmin() {
     document.querySelector('.admin-tab-btn[data-admin-tab="historial"]').classList.toggle('hidden', !puedeVerAuditoria());
     document.querySelector('.admin-tab-btn[data-admin-tab="articulos"]').classList.toggle('hidden', !puedeVerArticulos());
 
-    // Ambas ramas (Yaguar y DIARCO) buscan el primer tab visible según permisos
+    // Buscar el tab a mostrar: el guardado (si existe y es visible) o el primero visible
     document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.add('hidden'));
-    const firstBtn = document.querySelector('.admin-tab-btn:not(.hidden)');
+    const savedAdminTab = _getAdminTab();
+    const savedBtn = savedAdminTab
+      ? document.querySelector(`.admin-tab-btn[data-admin-tab="${savedAdminTab}"]:not(.hidden)`)
+      : null;
+    const firstBtn = savedBtn || document.querySelector('.admin-tab-btn:not(.hidden)');
     if (firstBtn) {
       firstBtn.classList.add('active');
       const target = firstBtn.dataset.adminTab;
       document.querySelector(`.admin-tab-panel[data-admin-panel="${target}"]`)?.classList.remove('hidden');
       if (target === 'nueva-semana') loadSemanasAdmin();
       if (target === 'clientes') loadClientes();
+      if (target === 'historial') loadHistorial();
+      if (target === 'zonas') loadZonas();
+      if (target === 'reparto') loadAsignaciones();
+      if (target === 'articulos') loadArticulos();
       _setTopbarSection(_ADMIN_TAB_LABELS[target] || target);
     }
   } else {
