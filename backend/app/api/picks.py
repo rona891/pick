@@ -130,15 +130,15 @@ def _buscar(mayorista: str, q: str, semana: Optional[str]):
         if semana:
             cur.execute("""
                 SELECT DISTINCT cod_bar, cod_art, descrip FROM pick
-                WHERE descrip ILIKE %s AND semana = %s AND mayorista = %s
+                WHERE (descrip ILIKE %s OR cod_art ILIKE %s) AND semana = %s AND mayorista = %s
                 ORDER BY descrip LIMIT 25
-            """, (pattern, semana, mayorista))
+            """, (pattern, pattern, semana, mayorista))
         else:
             cur.execute("""
                 SELECT DISTINCT cod_bar, cod_art, descrip FROM pick
-                WHERE descrip ILIKE %s AND mayorista = %s
+                WHERE (descrip ILIKE %s OR cod_art ILIKE %s) AND mayorista = %s
                 ORDER BY descrip LIMIT 25
-            """, (pattern, mayorista))
+            """, (pattern, pattern, mayorista))
         return [dict(r) for r in cur.fetchall()]
 
 

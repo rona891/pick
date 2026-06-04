@@ -429,6 +429,96 @@ def _export_mod_yaguar(semana: str):  # noqa: C901
     return stream_wb(wb, fname)
 
 
+# ── Artículos catálogo export ──────────────────────────────────────────────────
+
+def _export_articulos(mayorista: str):
+    with get_db() as cur:
+        cur.execute("""
+            SELECT * FROM articulos_catalogo
+            WHERE mayorista = %s
+            ORDER BY descrip
+        """, (mayorista,))
+        rows = [dict(r) for r in cur.fetchall()]
+
+    es_yaguar = mayorista == "yaguar"
+
+    if es_yaguar:
+        hdrs = [
+            ("Código",        "cod_art",          14),
+            ("Barcode",       "cod_bar",          16),
+            ("Descripción",   "descrip",          45),
+            ("Fabricante",    "fabricante",       22),
+            ("UxB",           "uxb",               8),
+            ("Precio c/IVA",  "precio_con_iva",   14),
+            ("% IVA",         "porc_iva",         10),
+            ("Costo",         "precio_costo",     14),
+            ("% Dto.",        "descuento_default",10),
+            ("Imp. Monto",    "impuestos_monto",  12),
+            ("Imp. %",        "impuestos_porc",   10),
+            ("Subcategoría",  "subcategoria",     28),
+            ("Unidad med.",   "unidad_medida",    12),
+            ("Stock",         "stock",            10),
+            ("Estado",        "estado",            8),
+            ("Observaciones", "observaciones",    30),
+            ("Folder",        "folder",           16),
+        ]
+    else:
+        hdrs = [
+            ("Código",          "cod_art",          14),
+            ("Barcode unidad",  "cod_bar",          16),
+            ("Barcode bulto",   "cod_bar_bulto",    16),
+            ("Descripción",     "descrip",          45),
+            ("UxB",             "uxb",               8),
+            ("Precio c/IVA",    "precio_con_iva",   14),
+            ("Costo",           "precio_costo",     14),
+            ("Precio mayorista","precio_mayorista", 16),
+            ("Familia",         "familia",          20),
+            ("Subcategoría",    "subcategoria",     28),
+            ("Tipo unidad",     "tipo_unidad",      12),
+            ("Estado cat.",     "tipo_estado",      12),
+            ("Stock",           "stock",            10),
+        ]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Artículos"
+    ws.row_dimensions[1].height = 28
+
+    for ci, (label, _, width) in enumerate(hdrs, 1):
+        hdr_cell(ws, 1, ci, label)
+        ws.column_dimensions[get_column_letter(ci)].width = width
+
+    FILL_ODD  = PatternFill("solid", fgColor=WHITE)
+    FILL_EVEN = PatternFill("solid", fgColor=ROW_ALT)
+
+    for ri, r in enumerate(rows, 2):
+        row_fill = FILL_EVEN if ri % 2 == 0 else FILL_ODD
+        for ci, (label, field, _) in enumerate(hdrs, 1):
+            val = r.get(field)
+            fmt, align = None, "left"
+            if field in ("precio_con_iva", "precio_costo", "precio_mayorista",
+                         "impuestos_monto"):
+                fmt, align = MONEY, "right"
+            elif field in ("porc_iva", "descuento_default", "impuestos_porc"):
+                fmt, align = '0.00"%"', "center"
+            elif field in ("uxb", "stock", "estado"):
+                align = "center"
+            cell = ws.cell(row=ri, column=ci, value=val)
+            cell.font = Font(size=10, color=TEXT)
+            cell.fill = row_fill
+            cell.alignment = Alignment(horizontal=align, vertical="center")
+            if fmt:
+                cell.number_format = fmt
+
+    if rows:
+        last = len(rows) + 1
+        make_table(ws, f"A1:{get_column_letter(len(hdrs))}{last}", "TablaArticulos")
+
+    ws.freeze_panes = "A2"
+    fname = build_filename("Articulos", mayorista.capitalize())
+    return stream_wb(wb, fname)
+
+
 # ── Rutas ──────────────────────────────────────────────────────────────────────
 
 @router_yaguar.get("/picks")
@@ -450,3 +540,11 @@ def diarco_export(semana: str = Query(...)):
 @router_diarco.get("/clientes")
 def diarco_export_clientes():
     return _export_clientes("diarco")
+
+@router_yaguar.get("/articulos")
+def yaguar_export_articulos():
+    return _export_articulos("yaguar")
+
+@router_diarco.get("/articulos")
+def diarco_export_articulos():
+    return _export_articulos("diarco")

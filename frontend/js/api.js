@@ -45,13 +45,32 @@ function setToken(token) {
   localStorage.setItem('token', token);
 }
 
+const _ALL_PERMS = [
+  'perm_pick','perm_sobrantes','perm_novedades','perm_yaguar','perm_diarco',
+  'perm_admin_clientes','perm_admin_clientes_full',
+  'perm_admin_semanas','perm_admin_zonas',
+  'perm_admin_auditoria','perm_admin_articulos','perm_admin_usuarios','perm_admin_roles',
+];
+
 function clearToken() {
   localStorage.removeItem('token');
   localStorage.removeItem('rol');
   localStorage.removeItem('username');
+  _ALL_PERMS.forEach(p => localStorage.removeItem(p));
+  // legacy keys
   localStorage.removeItem('acceso_sobrantes');
   localStorage.removeItem('acceso_novedades');
   localStorage.removeItem('acceso_pick');
+}
+
+function _savePerms(res) {
+  _ALL_PERMS.forEach(p => {
+    if (p in res) localStorage.setItem(p, res[p] ? '1' : '0');
+  });
+}
+
+function hasPerm(key) {
+  return localStorage.getItem('perm_' + key) === '1';
 }
 
 function getMayorista() {
@@ -77,30 +96,27 @@ function setRol(rol) {
 }
 
 function esAdmin() {
-  const r = getRol();
-  return r === 'admin' || r === 'superadmin';
+  return ['clientes','clientes_full','semanas','zonas','auditoria','articulos','usuarios','roles']
+    .some(p => hasPerm('admin_' + p));
 }
 
-function esVendedor() {
-  return getRol() === 'vendedor';
-}
+function esSuperadmin() { return getRol() === 'superadmin'; }
+function esVendedor()   { return getRol() === 'vendedor'; }
+function esAdminOVendedor() { return esAdmin() || esVendedor(); }
 
-function esAdminOVendedor() {
-  return esAdmin() || esVendedor();
-}
-
-function tieneSobrantes() {
-  return localStorage.getItem('acceso_sobrantes') === '1';
-}
-
-function tieneNovedades() {
-  return localStorage.getItem('acceso_novedades') === '1';
-}
-
-function tienePick() {
-  const val = localStorage.getItem('acceso_pick');
-  return val === null || val === '1'; // default true si no existe aún
-}
+function tieneSobrantes()       { return hasPerm('sobrantes'); }
+function tieneNovedades()       { return hasPerm('novedades'); }
+function tienePick()            { return hasPerm('pick'); }
+function tieneYaguar()          { return hasPerm('yaguar'); }
+function tieneDiarco()          { return hasPerm('diarco'); }
+function puedeGestionarRoles()    { return hasPerm('admin_roles'); }
+function puedeGestionarUsuarios() { return hasPerm('admin_usuarios'); }
+function puedeVerAuditoria()      { return hasPerm('admin_auditoria'); }
+function puedeImportarSemanas()   { return hasPerm('admin_semanas'); }
+function puedeGestionarClientes()     { return hasPerm('admin_clientes'); }
+function puedeGestionarClientesFull() { return hasPerm('admin_clientes_full'); }
+function puedeGestionarZonas()    { return hasPerm('admin_zonas'); }
+function puedeVerArticulos()      { return hasPerm('admin_articulos'); }
 
 async function request(method, path, body = null) {
   const token = getToken();
@@ -148,7 +164,13 @@ async function request(method, path, body = null) {
   }
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || 'Error del servidor');
+  if (!res.ok) {
+    let detail = data.detail;
+    if (Array.isArray(detail)) {
+      detail = detail.map(e => e.msg || e.message || JSON.stringify(e)).join(' | ');
+    }
+    throw new Error(detail || `Error del servidor (${res.status})`);
+  }
   return data;
 }
 
@@ -187,6 +209,22 @@ const api = {
   marcarNoApto: (codigo) => request('PUT', '/api/yaguar/clientes/marcar-no-apto', { codigo }),
   marcarNoZona: (codigo) => request('PUT', '/api/yaguar/clientes/marcar-no-zona', { codigo }),
   marcarNoZonaDiarco: (codigo) => request('PUT', '/api/diarco/clientes/marcar-no-zona', { codigo }),
+
+  // Roles
+  getRoles: () => request('GET', '/api/roles/'),
+  createRol: (data) => request('POST', '/api/roles/', data),
+  updateRolPerms: (nombre, data) => request('PUT', `/api/roles/${encodeURIComponent(nombre)}`, data),
+  deleteRol: (nombre) => request('DELETE', `/api/roles/${encodeURIComponent(nombre)}`),
+  setRolesOrden: (nombres) => request('PUT', '/api/roles/orden', { nombres }),
+
+  // Artículos catálogo
+  getArticulos: (q, limit = 300) => {
+    const params = new URLSearchParams({ limit });
+    if (q) params.set('q', q);
+    return request('GET', `/api/${getMayorista()}/articulos/?${params}`);
+  },
+  crearArticuloManual: (data) => request('POST', `/api/${getMayorista()}/articulos/manual`, data),
+  exportArticulosUrl: () => `/api/${getMayorista()}/export/articulos`,
 
   // Admin
   verifyAdmin: (password) => request('POST', '/api/admin/verify', { password }),
@@ -250,17 +288,33 @@ const api = {
   novSearch: (q, semana) => request('GET', `/api/${getMayorista()}/novedades/search?q=${encodeURIComponent(q)}&semana=${encodeURIComponent(semana || '')}`),
   novExportUrl: (semana) => `/api/${getMayorista()}/novedades/export?semana=${encodeURIComponent(semana)}`,
 
-  // Asignaciones de reparto
-  getAsignaciones: (semana) => request('GET', `/api/${getMayorista()}/asignaciones/?semana=${encodeURIComponent(semana)}`),
-  setAsignacion: (data) => request('PUT', `/api/${getMayorista()}/asignaciones/`, data),
-  deleteAsignacion: (id) => request('DELETE', `/api/${getMayorista()}/asignaciones/${id}`),
+  // Asignaciones de reparto (universal, sin mayorista)
+  getAsignaciones: (semana) => request('GET', `/api/asignaciones/?semana=${encodeURIComponent(semana)}`),
+  setAsignacion: (data) => request('PUT', `/api/asignaciones/`, data),
+  deleteAsignacion: (id) => request('DELETE', `/api/asignaciones/${id}`),
+  // Semanas de ambos mayoristas combinadas
+  getSemanasAll: async () => {
+    const [y, d] = await Promise.all([
+      request('GET', '/api/yaguar/semanas/?all=true').catch(() => []),
+      request('GET', '/api/diarco/semanas/?all=true').catch(() => []),
+    ]);
+    const all = [
+      ...y.map(s => ({...s, _m: 'Yaguar'})),
+      ...d.map(s => ({...s, _m: 'DIARCO'})),
+    ];
+    // Deduplicar por nombre, ordenar por fecha desc
+    const seen = new Set();
+    return all
+      .filter(s => { if (seen.has(s.nombre)) return false; seen.add(s.nombre); return true; })
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  },
 
   // Sobrantes (compartido entre mayoristas)
   sobGetListas: () => request('GET', '/api/sobrantes/listas'),
   sobCrearLista: (nombre) => request('POST', '/api/sobrantes/listas', { nombre }),
   sobDeleteLista: (lista) => request('DELETE', `/api/sobrantes/listas/${encodeURIComponent(lista)}`),
-  sobLookup: (codBar) => request('GET', `/api/sobrantes/lookup/${encodeURIComponent(codBar)}`),
-  sobSearch: (q) => request('GET', `/api/sobrantes/search?q=${encodeURIComponent(q)}&mayorista=${getMayorista()}`),
+  sobLookup: (codBar) => request('GET', `/api/${getMayorista()}/sobrantes/lookup/${encodeURIComponent(codBar)}`),
+  sobSearch: (q) => request('GET', `/api/${getMayorista()}/sobrantes/search?q=${encodeURIComponent(q)}`),
   sobGetItems: (lista) => request('GET', `/api/sobrantes/${encodeURIComponent(lista)}?mayorista=${getMayorista()}`),
   sobAddItem: (lista, item) => request('POST', `/api/sobrantes/${encodeURIComponent(lista)}/item`, item),
   sobUpdateItem: (lista, id, unidades, bultos) => request('PUT', `/api/sobrantes/${encodeURIComponent(lista)}/item/${id}`, { unidades, bultos }),

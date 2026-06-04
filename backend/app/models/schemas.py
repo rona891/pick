@@ -32,9 +32,21 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     rol: str
-    acceso_sobrantes: bool = False
-    acceso_novedades: bool = False
-    acceso_pick: bool = True
+    # Herramientas operativas
+    perm_pick: bool = True
+    perm_sobrantes: bool = False
+    perm_novedades: bool = False
+    perm_yaguar: bool = True
+    perm_diarco: bool = True
+    # Panel admin
+    perm_admin_clientes: bool = False
+    perm_admin_clientes_full: bool = False
+    perm_admin_semanas: bool = False
+    perm_admin_zonas: bool = False
+    perm_admin_auditoria: bool = False
+    perm_admin_articulos: bool = False
+    perm_admin_usuarios: bool = False
+    perm_admin_roles: bool = False
 
 
 class StatsResponse(BaseModel):

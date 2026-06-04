@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=54" />
+  <link rel="stylesheet" href="css/styles.css?v=103" />
 </head>
 <body>
 
@@ -34,10 +34,12 @@
   <div id="hub-view" class="hidden">
     <!-- Topbar del hub: admin button + utilidades -->
     <div class="hub-topbar">
-      <button id="hub-admin-btn" class="hub-topbar-btn hidden" title="Gestión de usuarios">⚙ Usuarios</button>
-      <span id="hub-usuario" class="topbar-usuario"></span>
-      <div class="hub-topbar-utils">
+      <button id="hub-admin-btn" class="hub-topbar-btn hidden" title="Administración">⚙ Administración</button>
+      <div class="topbar-center">
+        <span id="hub-usuario" class="topbar-usuario"></span>
         <button id="hub-theme-btn" class="hub-topbar-btn" title="Cambiar modo"></button>
+      </div>
+      <div class="hub-topbar-utils">
         <button id="hub-cuenta-btn" class="hub-topbar-btn" title="Mi cuenta">Cuenta</button>
         <button id="hub-salir-btn" class="hub-topbar-btn" title="Salir">Salir</button>
       </div>
@@ -109,8 +111,15 @@
 
     <div class="sob-view-header">
       <button id="sob-back-btn" class="sob-back-btn">← Volver</button>
-      <span id="sob-usuario" class="topbar-usuario sob-header-usuario"></span>
-      <span id="sob-view-badge" class="sob-view-badge"></span>
+      <div class="topbar-center">
+        <button class="btn-logout btn-fullscreen-mobile" title="Pantalla completa">⛶</button>
+        <span id="sob-usuario" class="topbar-usuario"></span>
+        <button class="btn-logout btn-theme" title="Cambiar modo"></button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <span class="topbar-section-label">Sobrantes</span>
+        <img id="sob-logo" src="" alt="Mayorista" class="topbar-logo" />
+      </div>
     </div>
 
     <div class="sob-view-body">
@@ -137,7 +146,12 @@
           <label class="sob-card-label">Lista activa</label>
           <button id="sob-del-lista-btn" class="btn-link-del">Eliminar</button>
         </div>
-        <select id="sob-lista-select" class="sob-lista-select"></select>
+        <div id="sob-lista-wrap" class="filtro-dropdown-wrap" style="width:100%">
+          <button id="sob-lista-btn" class="btn-filtro-toggle" style="width:100%;text-align:left">Sin listas ▾</button>
+          <div id="sob-lista-dropdown" class="filtro-reparto-dropdown hidden" style="width:100%;box-sizing:border-box;flex-direction:column">
+            <div id="sob-lista-options" style="display:flex;flex-direction:column;gap:4px;width:100%"></div>
+          </div>
+        </div>
         <button id="sob-nueva-btn" class="btn-secondary sob-nueva-btn">+ Nueva lista</button>
       </div>
 
@@ -181,8 +195,15 @@
 
     <div class="sob-view-header">
       <button id="nov-back-btn" class="sob-back-btn">← Volver</button>
-      <span id="nov-usuario" class="topbar-usuario sob-header-usuario"></span>
-      <span id="nov-view-badge" class="sob-view-badge"></span>
+      <div class="topbar-center">
+        <button class="btn-logout btn-fullscreen-mobile" title="Pantalla completa">⛶</button>
+        <span id="nov-usuario" class="topbar-usuario"></span>
+        <button class="btn-logout btn-theme" title="Cambiar modo"></button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <span class="topbar-section-label">Novedades</span>
+        <img id="nov-logo" src="" alt="Mayorista" class="topbar-logo" />
+      </div>
     </div>
 
     <div class="nov-view-body">
@@ -207,9 +228,16 @@
       </div>
 
       <!-- Semana -->
-      <div class="nov-semana-row">
-        <label class="nov-semana-label">Semana</label>
-        <select id="nov-semana-select" class="semana-select"></select>
+      <div class="sob-lista-card">
+        <div class="sob-lista-top">
+          <label class="sob-card-label">Semana activa</label>
+        </div>
+        <div id="nov-semana-wrap" class="filtro-dropdown-wrap" style="width:100%">
+          <button id="nov-semana-btn" class="btn-filtro-toggle" style="width:100%;text-align:left">Sin semanas ▾</button>
+          <div id="nov-semana-dropdown" class="filtro-reparto-dropdown hidden" style="width:100%;box-sizing:border-box;flex-direction:column">
+            <div id="nov-semana-options" style="display:flex;flex-direction:column;gap:4px;width:100%"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Formulario para agregar novedad -->
@@ -312,29 +340,27 @@
     </div>
   </div>
 
-  <!-- ── Modal: carga manual de artículo (novedades) ─────────────────────── -->
+  <!-- ── Modal: buscar artículo por catálogo (novedades) ──────────────────── -->
   <div id="nov-manual-modal" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
-        <span>Artículo manual</span>
+        <span>Buscar artículo</span>
         <button type="button" id="nov-manual-cancel" class="modal-close">✕</button>
       </div>
       <div style="padding:16px">
-        <label class="nov-manual-label">Cód. Artículo *</label>
-        <input type="text" id="nov-manual-codart" class="nov-manual-input" autocomplete="off" inputmode="numeric" placeholder="Ej: 12345" />
-        <label class="nov-manual-label">Descripción *</label>
-        <input type="text" id="nov-manual-descrip" class="nov-manual-input" autocomplete="off" placeholder="Ej: AGUA MINERAL 2L" />
-        <div class="nov-manual-row2">
-          <div class="nov-manual-col">
-            <label class="nov-manual-label">UxB *</label>
-            <input type="number" id="nov-manual-uxb" class="nov-manual-input" min="0" step="1" placeholder="0" />
-          </div>
-          <div class="nov-manual-col">
-            <label class="nov-manual-label">Precio unit. c/IVA</label>
-            <input type="number" id="nov-manual-precio" class="nov-manual-input" min="0" step="0.01" placeholder="0.00" />
+        <button type="button" id="nov-manual-scan-btn" class="btn-scan-full" style="margin-bottom:10px">Escanear</button>
+        <div id="nov-manual-scanner-container" class="hidden" style="position:relative;border-radius:8px;overflow:hidden;margin-bottom:10px">
+          <video id="nov-manual-scanner-video" autoplay muted playsinline style="width:100%;display:block"></video>
+          <button class="btn-scanner-close" onclick="stopNovManualScanner()">✕</button>
+          <div class="scanner-guide-overlay">
+            <div class="scanner-guide-rect"></div>
+            <span class="scanner-guide-hint">Acercá el código de barras al recuadro</span>
           </div>
         </div>
-        <button type="button" id="nov-manual-confirm" class="btn-primary" style="width:100%;margin-top:16px">Usar este artículo</button>
+        <input type="text" id="nov-manual-search" class="clientes-search-input"
+               placeholder="O buscá por código / descripción..." autocomplete="off"
+               style="width:100%;margin-bottom:10px" />
+        <div id="nov-manual-results" style="max-height:45vh;overflow-y:auto"></div>
       </div>
     </div>
   </div>
@@ -363,13 +389,15 @@
   <div id="app-view" class="hidden">
 
     <div class="topbar">
-      <img id="topbar-logo" src="" alt="Mayorista" class="topbar-logo" onclick="cambiarMayorista()" title="Cambiar mayorista" />
-      <div id="topbar-usuario" class="topbar-usuario"></div>
-      <div class="topbar-actions">
+      <button id="app-back-btn" class="sob-back-btn">← Volver</button>
+      <div class="topbar-center">
         <button id="btn-fullscreen" class="btn-logout btn-fullscreen-mobile" title="Pantalla completa">⛶</button>
+        <div id="topbar-usuario" class="topbar-usuario"></div>
         <button id="btn-theme" class="btn-logout btn-theme" title="Cambiar modo"></button>
-        <button id="change-pw-btn" class="btn-logout">Cuenta</button>
-        <button id="logout-btn" class="btn-logout">Salir</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <span id="topbar-section" class="topbar-section-label"></span>
+        <img id="topbar-logo" src="" alt="Mayorista" class="topbar-logo" />
       </div>
     </div>
 
@@ -547,6 +575,7 @@
           <button class="admin-tab-btn" data-admin-tab="zonas">Zonas</button>
           <button class="admin-tab-btn" data-admin-tab="reparto">Reparto</button>
           <button class="admin-tab-btn" data-admin-tab="historial">Auditoría</button>
+          <button class="admin-tab-btn" data-admin-tab="articulos">Artículos</button>
         </div>
 
         <div class="admin-main">
@@ -742,7 +771,12 @@
             <div class="auditoria-filter-row">
               <div class="auditoria-filter-field">
                 <label class="auditoria-filter-label">Semana</label>
-                <select id="hist-semana-sel" class="semana-select"></select>
+                <div id="hist-semana-wrap" class="filtro-dropdown-wrap" style="width:100%">
+                  <button id="hist-semana-btn" class="btn-filtro-toggle" style="width:100%;text-align:left">Sin semanas ▾</button>
+                  <div id="hist-semana-dropdown" class="filtro-reparto-dropdown hidden" style="width:100%;box-sizing:border-box;flex-direction:column">
+                    <div id="hist-semana-options" style="display:flex;flex-direction:column;gap:4px;width:100%"></div>
+                  </div>
+                </div>
               </div>
               <div class="auditoria-filter-field">
                 <label class="auditoria-filter-label">Usuario</label>
@@ -782,13 +816,59 @@
           <div id="historial-tabla-wrap"></div>
         </div>
 
+        <!-- Sub-panel: Artículos -->
+        <div class="admin-tab-panel hidden" data-admin-panel="articulos">
+          <div class="admin-header">
+            <input type="text" id="admin-articulos-search" class="clientes-search-input"
+                   placeholder="Buscar por código, descripción, barcode o fabricante..." autocomplete="off" style="flex:1;margin-right:8px" />
+            <button id="btn-exportar-articulos" class="btn-secondary hidden" style="margin-right:8px">↓ Exportar Excel</button>
+          </div>
+          <div id="articulos-count" class="muted-text" style="font-size:12px;margin-bottom:8px;padding:0 2px"></div>
+          <div class="table-wrap">
+            <table class="clientes-table" id="articulos-table">
+              <thead id="articulos-thead"></thead>
+              <tbody id="articulos-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Sub-panel: Roles -->
+        <div class="admin-tab-panel hidden" data-admin-panel="roles">
+          <div class="admin-header" style="margin-bottom:16px">
+            <button class="btn-search" onclick="_openRolModal(null)">+ Nuevo rol</button>
+          </div>
+          <div class="table-wrap" style="overflow-x:auto">
+            <table class="clientes-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th title="Pick" style="text-align:center;font-size:11px">Pick</th>
+                  <th title="Sobrantes" style="text-align:center;font-size:11px">Sob.</th>
+                  <th title="Novedades" style="text-align:center;font-size:11px">Nov.</th>
+                  <th title="Yaguar" style="text-align:center;font-size:11px">Yag.</th>
+                  <th title="DIARCO" style="text-align:center;font-size:11px">DRC</th>
+                  <th title="Gestionar clientes" style="text-align:center;font-size:11px">Cli.</th>
+                  <th title="Importar semanas" style="text-align:center;font-size:11px">Sem.</th>
+                  <th title="Zonas/Repartos" style="text-align:center;font-size:11px">Zon.</th>
+                  <th title="Auditoría" style="text-align:center;font-size:11px">Aud.</th>
+                  <th title="Catálogo artículos" style="text-align:center;font-size:11px">Art.</th>
+                  <th title="Gestionar usuarios" style="text-align:center;font-size:11px">Usr.</th>
+                  <th title="Gestionar roles" style="text-align:center;font-size:11px">Rol.</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="roles-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- Sub-panel: Reparto -->
         <div class="admin-tab-panel hidden" data-admin-panel="reparto">
           <div class="info-block" style="margin-bottom:12px">
             <button class="info-btn">Ayuda</button>
             <div class="info-content">
-              <p>Las asignaciones de reparto permiten indicar qué operario se encarga de pickear cada reparto (zona de entrega) en una semana específica. Esta información es de referencia — no bloquea ni restringe el acceso del operario a los picks.</p>
-              <p>Seleccioná la semana con el selector de arriba, asigná un usuario a cada reparto, y tocá <strong>Guardar</strong>. Si no querés asignar a nadie, dejá la opción en "Sin asignar".</p>
+              <p>Las asignaciones de reparto indican qué operarios se encargan de <strong>repartir</strong> (entregar la mercadería) en cada zona para una semana. Podés asignar uno o más operarios por reparto. Esta sección es universal — aplica a ambos mayoristas.</p>
+              <p>Seleccioná la semana con el selector de arriba, marcá con el checkbox los operarios responsables de cada reparto, y tocá <strong>Guardar</strong>.</p>
               <p>Los repartos se configuran desde <strong>Panel → Zonas</strong>.</p>
             </div>
           </div>
@@ -881,9 +961,40 @@
         <div class="form-group"><label>Vendedor *</label><select id="cf-vendedor" required><option value="">— Seleccioná un vendedor —</option></select></div>
         <div id="cf-flete-wrap" class="form-group"><label>Flete</label><div class="input-suffix-wrap"><input type="number" id="cf-flete" step="0.01" min="0" max="100" placeholder="7" /><span class="input-suffix">%</span></div></div>
         <div id="cf-cod-sis-wrap" class="form-group hidden"><label>COD SIS <span style="color:var(--muted);font-weight:normal">(opcional)</span></label><input type="text" id="cf-cod_sis" placeholder="Ej: 1876" autocomplete="off" /></div>
-        <div id="cf-cuit-wrap" class="form-group"><label>CUIT Depósito <span style="color:var(--muted);font-weight:normal">(opcional)</span></label><input type="text" id="cf-cuit_deposito" autocomplete="off" placeholder="Ej: 20-12345678-9" /></div>
+        <div id="cf-cuit-wrap" class="form-group"><label>CUIT Depósito <span id="cf-cuit-hint" style="color:var(--muted);font-weight:normal">(opcional)</span></label><input type="text" id="cf-cuit_deposito" autocomplete="off" placeholder="Ej: 20-12345678-9" /></div>
         <button type="submit" class="btn-primary">Guardar</button>
       </form>
+    </div>
+  </div>
+
+  <!-- ── Modal: artículo no encontrado (fallback manual) ──────────────────── -->
+  <div id="fallback-art-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header">
+        <span>Artículo no encontrado</span>
+        <button id="fallback-art-cancel" class="modal-close">✕</button>
+      </div>
+      <div style="padding:16px">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Este código no está en el catálogo. Podés ingresarlo manualmente.</p>
+        <label class="nov-manual-label">Código de barras</label>
+        <input type="text" id="fallback-art-codbar" class="nov-manual-input" readonly style="color:var(--muted)" />
+        <label class="nov-manual-label">Descripción *</label>
+        <input type="text" id="fallback-art-descrip" class="nov-manual-input" autocomplete="off" placeholder="Ej: AGUA MINERAL 2L" />
+        <label class="nov-manual-label">UxB *</label>
+        <input type="number" id="fallback-art-uxb" class="nov-manual-input" min="1" step="1" placeholder="1" />
+        <button id="fallback-art-confirm" class="btn-primary" style="width:100%;margin-top:16px">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Modal: detalle de artículo ───────────────────────────────────────── -->
+  <div id="art-detalle-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <span id="art-detalle-title" style="font-size:13px;max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <button id="art-detalle-close" class="modal-close">✕</button>
+      </div>
+      <div id="art-detalle-body" style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px 16px"></div>
     </div>
   </div>
 
@@ -1082,44 +1193,154 @@
   <div id="usuarios-modal" class="modal-overlay hidden" style="align-items:flex-start;padding:16px">
     <div class="modal usuarios-modal-box">
       <div class="modal-header">
-        <span>Gestión de usuarios</span>
+        <span>Administración</span>
         <button id="usuarios-modal-close" class="modal-close">✕</button>
       </div>
-      <div class="usuarios-modal-body">
-        <div class="admin-section-title" style="margin-bottom:12px">Usuarios activos</div>
-        <div class="table-wrap" style="margin-bottom:20px">
-          <table class="clientes-table">
+      <!-- Tabs Usuarios / Roles -->
+      <div style="display:flex;border-bottom:1px solid var(--border);padding:0 16px">
+        <button class="gest-tab-btn active" data-gest-tab="usuarios"
+                style="background:none;border:none;border-bottom:2px solid var(--accent);color:var(--text);font-family:var(--font);font-size:13px;padding:10px 16px 8px;cursor:pointer;margin-bottom:-1px">Usuarios</button>
+        <button class="gest-tab-btn" data-gest-tab="roles"
+                style="background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font);font-size:13px;padding:10px 16px 8px;cursor:pointer;margin-bottom:-1px">Roles</button>
+      </div>
+
+      <!-- Panel: Usuarios -->
+      <div id="gest-panel-usuarios" class="usuarios-modal-body">
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <input type="text" id="users-search" class="clientes-search-input"
+                 placeholder="Buscar usuario o rol..." autocomplete="off" style="flex:1" />
+          <button id="btn-nuevo-usuario" class="btn-search">+ Nuevo</button>
+        </div>
+        <div class="table-wrap">
+          <table class="clientes-table" id="users-table">
             <thead>
               <tr>
-                <th>Usuario</th>
-                <th>Rol</th>
+                <th data-sort="username" data-label="Usuario" style="cursor:pointer;user-select:none">Usuario ▲</th>
+                <th data-sort="rol" data-label="Rol" style="cursor:pointer;user-select:none">Rol</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="users-tbody"></tbody>
           </table>
         </div>
-        <div class="admin-section-title" style="margin-bottom:10px">Nuevo usuario</div>
-        <form id="nuevo-usuario-form">
-          <div class="form-group">
-            <label>Usuario</label>
-            <input type="text" id="nu-email" required autocomplete="off" />
-          </div>
-          <div class="form-group">
-            <label>Contraseña</label>
-            <input type="password" id="nu-password" required minlength="6" />
-          </div>
-          <div class="form-group">
-            <label>Rol</label>
-            <select id="nu-rol">
-              <option value="operario">Operario</option>
-              <option value="vendedor">Vendedor</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <button type="submit" class="btn-primary">Crear usuario</button>
-        </form>
       </div>
+
+      <!-- Panel: Roles -->
+      <div id="gest-panel-roles" class="usuarios-modal-body hidden">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <button class="btn-search" onclick="_openRolModal(null)">+ Nuevo rol</button>
+        </div>
+        <div class="table-wrap" style="overflow-x:auto">
+          <table class="clientes-table" id="roles-hub-table">
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th title="Pick" style="text-align:center;font-size:11px">Pick</th>
+                <th title="Sobrantes" style="text-align:center;font-size:11px">Sob.</th>
+                <th title="Novedades" style="text-align:center;font-size:11px">Nov.</th>
+                <th title="Yaguar" style="text-align:center;font-size:11px">Yag.</th>
+                <th title="DIARCO" style="text-align:center;font-size:11px">DRC</th>
+                <th title="Clientes" style="text-align:center;font-size:11px">Cli.</th>
+                <th title="Semanas" style="text-align:center;font-size:11px">Sem.</th>
+                <th title="Zonas" style="text-align:center;font-size:11px">Zon.</th>
+                <th title="Auditoría" style="text-align:center;font-size:11px">Aud.</th>
+                <th title="Artículos" style="text-align:center;font-size:11px">Art.</th>
+                <th title="Usuarios" style="text-align:center;font-size:11px">Usr.</th>
+                <th title="Roles" style="text-align:center;font-size:11px">Rol.</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="roles-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: crear nuevo usuario -->
+  <div id="nuevo-usuario-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width:360px">
+      <div class="modal-header">
+        <span>Nuevo usuario</span>
+        <button id="nuevo-usuario-modal-close" class="modal-close">✕</button>
+      </div>
+      <form id="nuevo-usuario-form" style="padding:16px">
+        <div class="form-group">
+          <label>Usuario</label>
+          <input type="text" id="nu-email" required autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="nu-password" required minlength="6" />
+        </div>
+        <div class="form-group">
+          <label>Rol</label>
+          <select id="nu-rol">
+            <option value="operario">Operario</option>
+            <option value="vendedor">Vendedor</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <button type="submit" class="btn-primary" style="width:100%;margin-top:8px">Crear usuario</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Modal: crear/editar rol (después de usuarios-modal para z-index correcto) ── -->
+  <div id="rol-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <span id="rol-modal-title">Nuevo rol</span>
+        <button id="rol-modal-cancel" class="modal-close">✕</button>
+      </div>
+      <form id="rol-form" style="padding:16px">
+        <div class="form-group" style="display:flex;gap:10px;align-items:flex-end">
+          <div style="flex:1">
+            <label>Nombre del rol *</label>
+            <input type="text" id="rol-nombre-input" class="clientes-search-input" style="width:100%" autocomplete="off" placeholder="Ej: supervisor" required />
+          </div>
+          <div>
+            <label style="display:block;margin-bottom:6px;font-size:12px">Color</label>
+            <input type="color" id="rol-color-input" value="#888888" style="width:38px;height:38px;border:none;border-radius:6px;cursor:pointer;padding:2px;background:none" />
+          </div>
+        </div>
+        <div style="margin-top:14px;display:flex;flex-direction:column;gap:12px">
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Herramientas operativas</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_pick" /> Pick</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_sobrantes" /> Sobrantes</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_novedades" /> Novedades</label>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Mayoristas</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_yaguar" /> Yaguar</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_diarco" /> DIARCO</label>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Panel admin</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_clientes" /> Ver clientes (editar básico)</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_clientes_full" /> Editar clientes completo</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_semanas" /> Importar semanas</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_zonas" /> Zonas y repartos</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_auditoria" /> Auditoría</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_articulos" /> Catálogo artículos</label>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Administración</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_usuarios" /> Gestionar usuarios</label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px"><input type="checkbox" id="rolperm-perm_admin_roles" /> Gestionar roles</label>
+            </div>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary" style="width:100%;margin-top:20px">Guardar</button>
+      </form>
     </div>
   </div>
 
@@ -1171,7 +1392,8 @@
   </div>
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
-  <script src="js/api.js?v=54"></script>
-  <script src="js/app.js?v=54"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script src="js/api.js?v=126"></script>
+  <script src="js/app.js?v=126"></script>
 </body>
 </html>
