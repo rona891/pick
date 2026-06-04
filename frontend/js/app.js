@@ -3341,7 +3341,7 @@ function renderHistorial() {
   const resumenWrap = document.getElementById('historial-resumen');
   const tablaWrap = document.getElementById('historial-tabla-wrap');
   const soloErrores = document.getElementById('historial-solo-errores')?.checked;
-  const filtroProd = (document.getElementById('hist-filter-producto')?.value || '').toLowerCase();
+  const filtroProd = (document.getElementById('hist-filter-producto')?.value || '').trim();
   const filtroUser = document.getElementById('hist-filter-usuario')?.value || '';
   const esc = (s) => (s || '—').replace(/</g, '&lt;');
 
@@ -3377,8 +3377,8 @@ function renderHistorial() {
     if (soloErrores && r.estado?.startsWith('completado')) return false;
     if (filtroUser && r.updated_by !== filtroUser) return false;
     if (filtroProd) {
-      const hayMatch = (r.cod_art || '').toLowerCase().includes(filtroProd) ||
-                       (r.descrip || '').toLowerCase().includes(filtroProd);
+      const hayMatch = _clienteMatch(filtroProd, r.cod_art ?? '') ||
+                       _clienteMatch(filtroProd, r.descrip ?? '');
       if (!hayMatch) return false;
     }
     return true;
