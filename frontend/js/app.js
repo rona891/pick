@@ -200,7 +200,11 @@ function showApp(initialTab = 'pick') {
   _hideAllViews();
   document.getElementById('app-view').classList.remove('hidden');
   const adminBtn = document.querySelector('.tab-btn[data-tab="admin"]');
-  adminBtn.classList.toggle('hidden', !esAdminOVendedor());
+  // Solo mostrar Panel si tiene permisos reales de panel (no basta usuarios/roles del hub)
+  const _panelPerms = ['admin_clientes','admin_clientes_full','admin_semanas',
+                       'admin_zonas','admin_auditoria','admin_articulos'];
+  const tienePanelReal = _panelPerms.some(p => hasPerm(p)) || esVendedor();
+  adminBtn.classList.toggle('hidden', !tienePanelReal);
   if (esVendedor()) document.getElementById('nav-admin-label').textContent = 'Gestión';
   else document.getElementById('nav-admin-label').textContent = 'Panel';
   const sinPick = !tienePick();
