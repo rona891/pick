@@ -115,6 +115,7 @@ class UserUpdate(BaseModel):
     acceso_sobrantes: Optional[bool] = None
     acceso_novedades: Optional[bool] = None
     acceso_pick: Optional[bool] = None
+    acceso_reparto: Optional[bool] = None
 
 
 class UserOut(BaseModel):
@@ -126,7 +127,7 @@ class UserOut(BaseModel):
     acceso_pick: bool = True
     created_at: Optional[datetime] = None
     perm_reparto: bool = False
-    reparto_forzado: bool = False
+    acceso_reparto: bool = False
 
 
 class ChangePasswordRequest(BaseModel):

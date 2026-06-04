@@ -138,7 +138,8 @@ def list_users(authorization: Optional[str] = Header(None)):
     with get_db() as cur:
         base_sql = """
             SELECT u.id, u.username, u.rol, u.acceso_sobrantes, u.acceso_novedades, u.acceso_pick,
-                   u.created_at, u.reparto_forzado,
+                   u.created_at,
+                   (u.acceso_reparto OR COALESCE(r.perm_reparto, false)) AS acceso_reparto,
                    COALESCE(r.perm_reparto, false) AS perm_reparto
             FROM users u LEFT JOIN roles r ON r.nombre = u.rol
         """
@@ -258,6 +259,8 @@ def update_user(id: int, data: UserUpdate, authorization: str = Header(...)):
         updates.append("acceso_novedades = %s"); values.append(data.acceso_novedades)
     if data.acceso_pick is not None:
         updates.append("acceso_pick = %s"); values.append(data.acceso_pick)
+    if data.acceso_reparto is not None:
+        updates.append("acceso_reparto = %s"); values.append(data.acceso_reparto)
     if not updates:
         raise HTTPException(400, "Nada que actualizar")
     with get_db() as cur:

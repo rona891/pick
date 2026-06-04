@@ -2295,7 +2295,7 @@ function renderUsers() {
     const rolColor = _rolesData.find(r => r.nombre === u.rol)?.color || ROL_COLORS[u.rol] || 'var(--muted)';
     const rolLabel = `<span style="color:${rolColor}">${ROL_LABELS[u.rol] || u.rol}</span>`;
     const deleteBtn = puedeTocar ? `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>` : '';
-    const clickAttr = puedeTocar ? `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"` : '';
+    const clickAttr = puedeTocar ? `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick}, ${u.acceso_reparto})" style="cursor:pointer"` : '';
     return `<tr ${clickAttr}>
       <td>${u.username}</td>
       <td>${rolLabel}</td>
@@ -2347,7 +2347,7 @@ document.getElementById('nuevo-usuario-modal')?.addEventListener('click', (e) =>
 });
 
 // ── Modal editar usuario ───────────────────────────────────────────────────
-function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades, accesosPick) {
+function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades, accesosPick, accesoReparto) {
   document.getElementById('edit-user-id').value = id;
   document.getElementById('edit-username').value = username;
   // Incluir superadmin en el select solo si el caller ES superadmin
@@ -2365,6 +2365,7 @@ function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades, acces
   document.getElementById('edit-sobrantes').checked = !!accesoSobrantes;
   document.getElementById('edit-novedades').checked = !!accesoNovedades;
   document.getElementById('edit-pick').checked = accesosPick === undefined ? true : !!accesosPick;
+  document.getElementById('edit-reparto').checked = !!accesoReparto;
   document.getElementById('edit-rol-group').classList.remove('hidden');
   document.getElementById('edit-user-modal').classList.remove('hidden');
 }
@@ -2384,6 +2385,7 @@ document.getElementById('edit-user-form').addEventListener('submit', async (e) =
     acceso_sobrantes: document.getElementById('edit-sobrantes').checked,
     acceso_novedades: document.getElementById('edit-novedades').checked,
     acceso_pick: document.getElementById('edit-pick').checked,
+    acceso_reparto: document.getElementById('edit-reparto').checked,
   };
   data.rol = document.getElementById('edit-rol').value;
   try {
@@ -3478,7 +3480,7 @@ async function renderAsignaciones(repartos, users, semana) {
               <td colspan="3" style="padding:0">
                 <div class="reparto-dropdown-panel" style="padding:12px 16px;background:var(--surface);border-top:1px solid var(--border)">
                   <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-                    ${users.filter(u => u.perm_reparto || u.reparto_forzado).map(u => {
+                    ${users.filter(u => u.acceso_reparto).map(u => {
                       const asig = asigs.find(a => a.user_id === u.id);
                       return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">
                         <input type="checkbox" class="reparto-user-cb"
