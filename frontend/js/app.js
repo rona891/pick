@@ -4,6 +4,7 @@ let scannerActive = false;
 let adminUnlocked = false;
 let editingClienteId = null;
 let semanaActual = '';
+let _pickDescripCache = []; // artículos del semana actual para búsqueda fuzzy
 let soloPendientes = false;
 let wakeLock = null;
 let resumenData = [];
@@ -40,6 +41,19 @@ const INACTIVIDAD_MS = 10 * 60 * 1000; // 10 minutos
 
 function _saveView(view) {
   localStorage.setItem('_last_view', view);
+  // Si es una vista de app, también guardarla como última vista de app
+  // (separada de _last_view que puede ser 'hub' al presionar Volver)
+  if (view === 'pick' || view === 'clientes' || view === 'admin') {
+    localStorage.setItem('_last_app_view', view);
+  }
+}
+
+function _saveAdminTab(adminTab) {
+  localStorage.setItem('_last_admin_tab', adminTab);
+}
+
+function _getAdminTab() {
+  return localStorage.getItem('_last_admin_tab') || null;
 }
 
 function _updateActivity() {
@@ -91,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.admin-tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.adminTab === target));
       document.querySelectorAll('.admin-tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.adminPanel !== target));
       _setTopbarSection(_ADMIN_TAB_LABELS[target] || target);
+      _saveAdminTab(target);
       if (target === 'usuarios') loadUsers();
       if (target === 'nueva-semana') loadSemanasAdmin();
       if (target === 'zonas') loadZonas();
@@ -301,10 +316,20 @@ document.querySelectorAll('.mayorista-card').forEach((btn) => {
       showSobrantes();
     } else if (destino === 'novedades') {
       showNovedades();
-    } else if (!tienePick()) {
-      showApp('admin');
     } else {
-      showApp('pick');
+      const _lastAppView = localStorage.getItem('_last_app_view') || 'pick';
+      const _panelApp = ['admin_clientes','admin_clientes_full','admin_semanas',
+                         'admin_zonas','admin_auditoria','admin_articulos'];
+      const _tienePanelReal = _panelApp.some(p => hasPerm(p)) || esVendedor();
+      if (_lastAppView === 'admin' && _tienePanelReal) {
+        showApp('admin');  // initAdmin restaurará el sub-tab guardado
+      } else if (_lastAppView === 'clientes' && tienePick()) {
+        showApp('clientes');
+      } else if (!tienePick()) {
+        showApp('admin');
+      } else {
+        showApp('pick');
+      }
     }
   });
 });
@@ -425,16 +450,25 @@ async function loadSemanas() {
     if (semanas.length === 0) {
       select.innerHTML = '<option value="">Sin semanas cargadas</option>';
       semanaActual = '';
+      _pickDescripCache = [];
     } else {
       select.innerHTML = semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('');
       semanaActual = semanas[0].nombre;
       select.value = semanaActual;
+      _cargarPickDescripCache(semanaActual);
     }
   } catch (_) {}
 }
 
+async function _cargarPickDescripCache(semana) {
+  try {
+    _pickDescripCache = semana ? await api.getTodosArticulosSemana(semana) : [];
+  } catch (_) { _pickDescripCache = []; }
+}
+
 document.getElementById('semana-select').addEventListener('change', (e) => {
   semanaActual = e.target.value;
+  _cargarPickDescripCache(semanaActual);
   document.getElementById('results').innerHTML = '';
   document.getElementById('barcode-input').value = '';
   document.getElementById('descrip-input').value = '';
@@ -1018,7 +1052,7 @@ document.getElementById('descrip-input').addEventListener('input', (e) => {
   clearTimeout(descripTimer);
   const q = e.target.value.trim();
   if (q.length < 2) { hideDescripResults(); return; }
-  descripTimer = setTimeout(() => buscarPorDescrip(q), 300);
+  descripTimer = setTimeout(() => buscarPorDescrip(_normQuery(q)), 300);
 });
 
 document.getElementById('descrip-input').addEventListener('keydown', (e) => {
@@ -1045,7 +1079,12 @@ document.addEventListener('click', (e) => {
 
 async function buscarPorDescrip(q) {
   try {
-    const items = await api.buscarPorDescrip(q, semanaActual);
+    // Si hay caché del semana, filtrar localmente con fuzzy; si no, usar API
+    const items = _pickDescripCache.length
+      ? _pickDescripCache.filter(item =>
+          _clienteMatch(q, item.descrip ?? '') || _clienteMatch(q, item.cod_art ?? ''))
+        .slice(0, 25)
+      : await api.buscarPorDescrip(q, semanaActual);
     const container = document.getElementById('descrip-results');
     if (!items.length) {
       container.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
@@ -1425,7 +1464,7 @@ document.querySelectorAll('#filtro-estado-dropdown .chip-reparto[data-filter]').
 
 
 document.getElementById('clientes-search').addEventListener('input', (e) => {
-  renderResumen(e.target.value.trim().toLowerCase());
+  renderResumen(e.target.value.trim());
 });
 
 function getPapelesKey() {
@@ -1450,7 +1489,7 @@ function renderResumen(searchQ = '') {
     : resumenData.filter((r) => r.estado_general === filtroActivo);
 
   if (searchQ) {
-    filtered = filtered.filter((r) => r.nombre.toLowerCase().includes(searchQ));
+    filtered = filtered.filter((r) => _clienteMatch(searchQ, r.nombre));
   }
 
   if (!filtered.length) {
@@ -1491,7 +1530,7 @@ function renderResumen(searchQ = '') {
       const nombre = decodeURIComponent(btn.dataset.papel);
       const marcado = !btn.classList.contains('marcado');
       savePapelSeparado(nombre, marcado);
-      renderResumen(document.getElementById('clientes-search').value.trim().toLowerCase());
+      renderResumen(document.getElementById('clientes-search').value.trim());
     });
   });
 
@@ -1624,16 +1663,24 @@ function initAdmin() {
     document.querySelector('.admin-tab-btn[data-admin-tab="historial"]').classList.toggle('hidden', !puedeVerAuditoria());
     document.querySelector('.admin-tab-btn[data-admin-tab="articulos"]').classList.toggle('hidden', !puedeVerArticulos());
 
-    // Ambas ramas (Yaguar y DIARCO) buscan el primer tab visible según permisos
+    // Buscar el tab a mostrar: el guardado (si existe y es visible) o el primero visible
     document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.add('hidden'));
-    const firstBtn = document.querySelector('.admin-tab-btn:not(.hidden)');
+    const savedAdminTab = _getAdminTab();
+    const savedBtn = savedAdminTab
+      ? document.querySelector(`.admin-tab-btn[data-admin-tab="${savedAdminTab}"]:not(.hidden)`)
+      : null;
+    const firstBtn = savedBtn || document.querySelector('.admin-tab-btn:not(.hidden)');
     if (firstBtn) {
       firstBtn.classList.add('active');
       const target = firstBtn.dataset.adminTab;
       document.querySelector(`.admin-tab-panel[data-admin-panel="${target}"]`)?.classList.remove('hidden');
       if (target === 'nueva-semana') loadSemanasAdmin();
       if (target === 'clientes') loadClientes();
+      if (target === 'historial') loadHistorial();
+      if (target === 'zonas') loadZonas();
+      if (target === 'reparto') loadAsignaciones();
+      if (target === 'articulos') loadArticulos();
       _setTopbarSection(_ADMIN_TAB_LABELS[target] || target);
     }
   } else {
@@ -1744,6 +1791,11 @@ let _clientesData = [];
 let _clientesSortCol = 'nombre';
 let _clientesSortDir = 1;  // 1 = asc, -1 = desc
 
+// Normaliza solo acentos (mantiene espacios) para enviar a búsquedas API
+function _normQuery(q) {
+  return (q || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
 function _norm(s) {
   return (s || '').toLowerCase()
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -1755,8 +1807,12 @@ function _lev(a, b) {
   const d = Array.from({length: m + 1}, (_, i) =>
     Array.from({length: n + 1}, (_, j) => i === 0 ? j : j === 0 ? i : 0));
   for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      d[i][j] = a[i-1] === b[j-1] ? d[i-1][j-1] : 1 + Math.min(d[i-1][j], d[i][j-1], d[i-1][j-1]);
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i-1] === b[j-1] ? 0 : 1;
+      d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + cost);
+      if (i > 1 && j > 1 && a[i-1] === b[j-2] && a[i-2] === b[j-1])
+        d[i][j] = Math.min(d[i][j], d[i-2][j-2] + cost);
+    }
   return d[m][n];
 }
 
@@ -1822,11 +1878,12 @@ function renderClientes() {
     const tipoCell = c.es_factura_a
       ? '<span class="badge-fa">A</span>'
       : '<span class="badge-cf">CF</span>';
-    const hidden = q && !_clienteMatch(q, c.nombre) && !_clienteMatch(q, c.id_yaguar ?? '') ? 'style="display:none"' : '';
+    const hidden = q && !_clienteMatch(q, c.nombre) && !_clienteMatch(q, c.id_yaguar ?? '') && !_clienteMatch(q, c.localidad ?? '') ? 'style="display:none"' : '';
     return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})" ${hidden}>
       <td class="td-full td-cod">${c.id_yaguar ?? '—'}</td>
       <td style="text-align:center;width:52px">${tipoCell}</td>
       <td class="td-full">${c.nombre ?? ''}</td>
+      <td>${c.localidad ?? '—'}</td>
       <td>${flete}</td>
       <td onclick="event.stopPropagation()"><div class="td-actions">
         <button class="btn-edit" onclick="openClienteForm(${c.id})">Editar</button>
@@ -2245,7 +2302,7 @@ function renderUsers() {
     const rolColor = _rolesData.find(r => r.nombre === u.rol)?.color || ROL_COLORS[u.rol] || 'var(--muted)';
     const rolLabel = `<span style="color:${rolColor}">${ROL_LABELS[u.rol] || u.rol}</span>`;
     const deleteBtn = puedeTocar ? `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>` : '';
-    const clickAttr = puedeTocar ? `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"` : '';
+    const clickAttr = puedeTocar ? `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick}, ${u.acceso_reparto})" style="cursor:pointer"` : '';
     return `<tr ${clickAttr}>
       <td>${u.username}</td>
       <td>${rolLabel}</td>
@@ -2297,7 +2354,7 @@ document.getElementById('nuevo-usuario-modal')?.addEventListener('click', (e) =>
 });
 
 // ── Modal editar usuario ───────────────────────────────────────────────────
-function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades, accesosPick) {
+function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades, accesosPick, accesoReparto) {
   document.getElementById('edit-user-id').value = id;
   document.getElementById('edit-username').value = username;
   // Incluir superadmin en el select solo si el caller ES superadmin
@@ -2315,6 +2372,7 @@ function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades, acces
   document.getElementById('edit-sobrantes').checked = !!accesoSobrantes;
   document.getElementById('edit-novedades').checked = !!accesoNovedades;
   document.getElementById('edit-pick').checked = accesosPick === undefined ? true : !!accesosPick;
+  document.getElementById('edit-reparto').checked = !!accesoReparto;
   document.getElementById('edit-rol-group').classList.remove('hidden');
   document.getElementById('edit-user-modal').classList.remove('hidden');
 }
@@ -2334,6 +2392,7 @@ document.getElementById('edit-user-form').addEventListener('submit', async (e) =
     acceso_sobrantes: document.getElementById('edit-sobrantes').checked,
     acceso_novedades: document.getElementById('edit-novedades').checked,
     acceso_pick: document.getElementById('edit-pick').checked,
+    acceso_reparto: document.getElementById('edit-reparto').checked,
   };
   data.rol = document.getElementById('edit-rol').value;
   try {
@@ -2798,6 +2857,7 @@ let _sobCameras = [];
 let _sobCamIdx = 0;
 
 async function initSobrantes() {
+  _ensureCatalogoCache(); // carga en background para búsqueda fuzzy
   await loadSobListas();
 }
 
@@ -2973,6 +3033,18 @@ document.getElementById('sob-barcode-input').addEventListener('keydown', (e) => 
 });
 
 // Búsqueda por descripción
+// Catálogo local para búsqueda fuzzy en sobrantes y novedades
+let _catalogoCache = [];
+let _catalogoCacheMayorista = '';
+async function _ensureCatalogoCache() {
+  const m = getMayorista();
+  if (_catalogoCache.length && _catalogoCacheMayorista === m) return;
+  try {
+    _catalogoCache = await api.getArticulos('', 20000);
+    _catalogoCacheMayorista = m;
+  } catch { _catalogoCache = []; }
+}
+
 let _sobDescripTimer = null;
 document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
   clearTimeout(_sobDescripTimer);
@@ -2981,7 +3053,13 @@ document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
   if (q.length < 2) { results.classList.add('hidden'); return; }
   _sobDescripTimer = setTimeout(async () => {
     try {
-      const items = await api.getArticulos(q, 50);
+      const items = _catalogoCache.length
+        ? _catalogoCache.filter(i =>
+            _clienteMatch(q, i.descrip ?? '') ||
+            _clienteMatch(q, i.cod_bar ?? '') ||
+            _clienteMatch(q, i.cod_bar_bulto ?? ''))
+          .slice(0, 50)
+        : await api.getArticulos(_normQuery(q), 50);
       if (!items.length) {
         results.innerHTML = '<div class="descrip-result-empty">Sin resultados</div>';
         results.classList.remove('hidden');
@@ -3262,6 +3340,7 @@ async function loadHistorial() {
   });
 
   document.getElementById('hist-filter-producto').oninput = renderHistorial;
+  document.getElementById('hist-filter-cliente').oninput = renderHistorial;
   usuSel.onchange = renderHistorial;
   document.getElementById('historial-solo-errores').onchange = renderHistorial;
 
@@ -3272,15 +3351,19 @@ function renderHistorial() {
   const resumenWrap = document.getElementById('historial-resumen');
   const tablaWrap = document.getElementById('historial-tabla-wrap');
   const soloErrores = document.getElementById('historial-solo-errores')?.checked;
-  const filtroProd = (document.getElementById('hist-filter-producto')?.value || '').toLowerCase();
-  const filtroUser = document.getElementById('hist-filter-usuario')?.value || '';
+  const filtroProd    = (document.getElementById('hist-filter-producto')?.value || '').trim();
+  const filtroCliente = (document.getElementById('hist-filter-cliente')?.value || '').trim();
+  const filtroUser    = document.getElementById('hist-filter-usuario')?.value || '';
   const esc = (s) => (s || '—').replace(/</g, '&lt;');
 
   // Resumen por usuario (sobre todos los datos, sin filtro)
   const porUsuario = {};
   _historialRows.forEach((r) => {
     const u = r.updated_by || '?';
-    if (!porUsuario[u]) porUsuario[u] = { completados: 0, incompletos: 0 };
+    if (!porUsuario[u]) porUsuario[u] = { completados: 0, incompletos: 0, bultos: 0 };
+    const uxb = r.uxb || 1;
+    const bul = uxb > 1 ? Math.floor((r.cantidad_entregada || 0) / uxb) : 0;
+    porUsuario[u].bultos += bul;
     if (r.estado?.startsWith('completado')) porUsuario[u].completados++;
     else porUsuario[u].incompletos++;
   });
@@ -3297,6 +3380,7 @@ function renderHistorial() {
         <div class="historial-user-chip">
           <span class="historial-user-name">${esc(u)}</span>
           <span class="historial-stat ok">${d.completados} ✓</span>
+          ${d.bultos > 0 ? `<span class="historial-stat">${d.bultos} bul</span>` : ''}
           ${d.incompletos ? `<span class="historial-stat err">${d.incompletos} incompletos</span>` : ''}
         </div>
       `).join('')}
@@ -3308,10 +3392,11 @@ function renderHistorial() {
     if (soloErrores && r.estado?.startsWith('completado')) return false;
     if (filtroUser && r.updated_by !== filtroUser) return false;
     if (filtroProd) {
-      const hayMatch = (r.cod_art || '').toLowerCase().includes(filtroProd) ||
-                       (r.descrip || '').toLowerCase().includes(filtroProd);
+      const hayMatch = _clienteMatch(filtroProd, r.cod_art ?? '') ||
+                       _clienteMatch(filtroProd, r.descrip ?? '');
       if (!hayMatch) return false;
     }
+    if (filtroCliente && !_clienteMatch(filtroCliente, r.nombre ?? '')) return false;
     return true;
   });
 
@@ -3363,12 +3448,12 @@ async function loadAsignaciones() {
   wrap.innerHTML = '<p class="loading">Cargando...</p>';
   try {
     const [semanas, repartos, users] = await Promise.all([
-      api.getSemanasAll(),
+      api.getSemanasAdmin(),  // solo semanas del mayorista activo
       api.getRepartos(),
       api.getUsers(),
     ]);
     sel.innerHTML = semanas.length
-      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}${s._m ? ' (' + s._m + ')' : ''}</option>`).join('')
+      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('')
       : '<option value="">Sin semanas cargadas</option>';
     if (semanaActual && semanas.find((s) => s.nombre === semanaActual)) sel.value = semanaActual;
     await renderAsignaciones(repartos, users, sel.value);
@@ -3398,7 +3483,7 @@ async function renderAsignaciones(repartos, users, semana) {
           ${repartos.map((r) => {
             const asigs = asigPorReparto[r.nombre] || [];
             const nombres = asigs.length ? asigs.map(a => esc(a.username)).join(', ') : '<span style="color:var(--muted)">Sin asignar</span>';
-            return `<tr data-reparto="${esc(r.nombre)}">
+            return `<tr data-reparto="${esc(r.nombre)}" style="cursor:pointer">
               <td><strong>${esc(r.nombre)}</strong></td>
               <td class="reparto-nombres-cell">${nombres}</td>
               <td style="white-space:nowrap">
@@ -3409,7 +3494,7 @@ async function renderAsignaciones(repartos, users, semana) {
               <td colspan="3" style="padding:0">
                 <div class="reparto-dropdown-panel" style="padding:12px 16px;background:var(--surface);border-top:1px solid var(--border)">
                   <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-                    ${users.map(u => {
+                    ${users.filter(u => u.acceso_reparto).map(u => {
                       const asig = asigs.find(a => a.user_id === u.id);
                       return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">
                         <input type="checkbox" class="reparto-user-cb"
@@ -3434,13 +3519,19 @@ async function renderAsignaciones(repartos, users, semana) {
     `;
 
     // Abrir/cerrar dropdown por reparto
-    wrap.addEventListener('click', async (e) => {
+    wrap.onclick = async (e) => {
       const editBtn = e.target.closest('.reparto-editar-btn');
       const cancelBtn = e.target.closest('.reparto-cancelar-btn');
       const guardarBtn = e.target.closest('.reparto-guardar-btn');
 
-      if (editBtn) {
-        const reparto = editBtn.dataset.reparto;
+      // Click en la fila principal (no en el dropdown ni en sus botones)
+      const mainRow = !editBtn && !cancelBtn && !guardarBtn
+        && e.target.closest('tr[data-reparto]:not(.reparto-dropdown-row)');
+
+      const trigger = editBtn || mainRow;
+      if (trigger) {
+        const reparto = trigger.dataset?.reparto || trigger.closest('tr')?.dataset?.reparto;
+        if (!reparto) return;
         // Cerrar otros dropdowns abiertos
         wrap.querySelectorAll('.reparto-dropdown-row').forEach(row => {
           if (row.dataset.reparto !== reparto) row.classList.add('hidden');
@@ -3490,7 +3581,7 @@ async function renderAsignaciones(repartos, users, semana) {
           guardarBtn.textContent = 'Guardar';
         }
       }
-    });
+    };
   } catch (err) {
     wrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
   }
@@ -3514,6 +3605,7 @@ let _novDescripTimer = null;
 let _novMaxUni = null;  // máximo de unidades según lo pedido por el cliente
 
 async function initNovedades() {
+  _ensureCatalogoCache(); // carga en background para búsqueda fuzzy
   const btn = document.getElementById('nov-semana-btn');
   const optionsContainer = document.getElementById('nov-semana-options');
   try {
@@ -3639,7 +3731,11 @@ document.getElementById('nov-descrip-input').addEventListener('input', (e) => {
   if (q.length < 2) { results.classList.add('hidden'); return; }
   _novDescripTimer = setTimeout(async () => {
     try {
-      const items = await api.novSearch(q, _novSemana);
+      const items = _pickDescripCache.length
+        ? _pickDescripCache.filter(i =>
+            _clienteMatch(q, i.descrip ?? '') || _clienteMatch(q, i.cod_art ?? ''))
+          .slice(0, 25)
+        : await api.novSearch(_normQuery(q), _novSemana);
       if (!items.length) {
         results.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
       } else {
@@ -3832,7 +3928,13 @@ document.getElementById('nov-manual-search').addEventListener('input', (e) => {
   if (q.length < 2) { results.innerHTML = ''; return; }
   _novManualTimer = setTimeout(async () => {
     try {
-      const items = await api.getArticulos(q, 50);
+      const items = _catalogoCache.length
+        ? _catalogoCache.filter(i =>
+            _clienteMatch(q, i.descrip ?? '') ||
+            _clienteMatch(q, i.cod_bar ?? '') ||
+            _clienteMatch(q, i.cod_art ?? ''))
+          .slice(0, 50)
+        : await api.getArticulos(_normQuery(q), 50);
       _novManualItems = items;
       if (!items.length) {
         results.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
@@ -4222,8 +4324,17 @@ function renderArticulos() {
 
   const fmt = (v) => v != null ? Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 
+  // Filtrar con fuzzy si hay búsqueda
+  const qArts = (document.getElementById('admin-articulos-search')?.value || '').trim();
+  const baseData = qArts
+    ? _articulosData.filter(item =>
+        _clienteMatch(qArts, item.descrip ?? '') ||
+        _clienteMatch(qArts, item.cod_art ?? '') ||
+        _clienteMatch(qArts, item.cod_bar ?? ''))
+    : _articulosData;
+
   // Ordenar
-  const data = [..._articulosData].sort((a, b) => {
+  const data = [...baseData].sort((a, b) => {
     let va = a[_articulosSortCol], vb = b[_articulosSortCol];
     const na = parseFloat(va), nb = parseFloat(vb);
     if (!isNaN(na) && !isNaN(nb)) {
@@ -4245,31 +4356,34 @@ function renderArticulos() {
       <td style="text-align:right">${item.precio_con_iva != null ? '$' + fmt(item.precio_con_iva) : '—'}</td>
     </tr>
   `).join('');
+
+  const countEl = document.getElementById('articulos-count');
+  if (countEl) {
+    const n = data.length;
+    countEl.textContent = `${n} artículo${n !== 1 ? 's' : ''}${qArts ? ` para "${qArts}"` : ''}`;
+  }
 }
 
-async function loadArticulos(q) {
+async function loadArticulos() {
   const tbody = document.getElementById('articulos-tbody');
-  const thead = document.getElementById('articulos-thead');
   const count = document.getElementById('articulos-count');
   const exportBtn = document.getElementById('btn-exportar-articulos');
 
   tbody.innerHTML = '<tr><td colspan="4" class="loading">Cargando...</td></tr>';
-  thead.innerHTML = '';
 
   try {
-    const items = await api.getArticulos(q || '', 20000);
+    // Cargar catálogo completo si no está disponible; filtrado fuzzy es client-side
+    const items = await api.getArticulos('', 20000);
     _articulosData = items;
 
-    if (!items.length) {
-      thead.innerHTML = '';
-      tbody.innerHTML = `<tr><td colspan="4" class="muted-text" style="text-align:center;padding:16px">${q ? 'Sin resultados para "' + q + '"' : 'Sin artículos cargados. Importá una semana primero.'}</td></tr>`;
+    if (!_articulosData.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="muted-text" style="text-align:center;padding:16px">Sin artículos cargados. Importá una semana primero.</td></tr>';
       count.textContent = '';
       exportBtn.classList.add('hidden');
       return;
     }
 
     renderArticulos();
-    count.textContent = `${items.length} artículo${items.length !== 1 ? 's' : ''}${q ? ` para "${q}"` : ''}`;
     exportBtn.classList.remove('hidden');
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="4" class="error-msg">${err.message}</td></tr>`;
@@ -4306,9 +4420,9 @@ document.addEventListener('click', (e) => {
   renderArticulos();
 });
 
-document.getElementById('admin-articulos-search').addEventListener('input', (e) => {
+document.getElementById('admin-articulos-search').addEventListener('input', () => {
   clearTimeout(_articulosTimer);
-  _articulosTimer = setTimeout(() => loadArticulos(e.target.value.trim()), 300);
+  _articulosTimer = setTimeout(() => renderArticulos(), 200);
 });
 
 document.getElementById('btn-exportar-articulos')?.addEventListener('click', () => {
@@ -4323,6 +4437,7 @@ const _PERMS_UI = [
   { key: 'perm_pick',               label: 'Pick',                  group: 'Herramientas' },
   { key: 'perm_sobrantes',          label: 'Sobrantes',             group: 'Herramientas' },
   { key: 'perm_novedades',          label: 'Novedades',             group: 'Herramientas' },
+  { key: 'perm_reparto',            label: 'Repartidor',            group: 'Herramientas' },
   { key: 'perm_yaguar',             label: 'Yaguar',                group: 'Mayoristas' },
   { key: 'perm_diarco',             label: 'DIARCO',                group: 'Mayoristas' },
   { key: 'perm_admin_clientes',      label: 'Ver clientes (editar básico)',  group: 'Panel Admin' },
@@ -4381,7 +4496,7 @@ function renderRoles() {
     const handle = r.es_protegido ? '' :
       `<span class="rol-drag-handle" title="Arrastrar para reordenar" style="cursor:grab;font-size:16px;color:var(--muted);margin-right:6px;user-select:none">⠿</span>`;
     // Superadmin protegido: solo el caller superadmin puede editar (solo color)
-    const btnEditarProtegido = (r.es_protegido && esSuperadmin())
+    const btnEditarProtegido = (r.es_protegido && esRolProtegido())
       ? `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>` : '';
     const acciones = r.es_protegido
       ? btnEditarProtegido
@@ -4439,7 +4554,8 @@ function _openRolModal(nombre) {
   const rol = nombre ? _rolesData.find(r => r.nombre === nombre) : null;
   document.getElementById('rol-modal-title').textContent = nombre ? `Editar rol: ${nombre}` : 'Nuevo rol';
   document.getElementById('rol-nombre-input').value = rol ? rol.nombre : '';
-  document.getElementById('rol-nombre-input').readOnly = !!(rol && rol.es_protegido);
+  // Protegido: nombre editable solo si el caller tiene el rol protegido
+  document.getElementById('rol-nombre-input').readOnly = !!(rol && rol.es_protegido && !esRolProtegido());
   document.getElementById('rol-color-input').value = rol?.color || '#888888';
   _PERMS_UI.forEach(p => {
     const cb = document.getElementById(`rolperm-${p.key}`);

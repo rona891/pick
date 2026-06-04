@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Header
 from app.models.schemas import LoginRequest, LoginResponse, ChangePasswordRequest, ChangeUsernameRequest, UserCreate, UserOut, UserUpdate
 from app.db.database import get_db
 from app.auth.jwt import verify_password, create_access_token, hash_password, verify_token
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -13,7 +13,8 @@ _PERM_COLS = (
     "perm_admin_semanas", "perm_admin_zonas",
     "perm_admin_auditoria", "perm_admin_articulos", "perm_admin_usuarios", "perm_admin_roles",
 )
-_PERM_SEL = ", ".join(f"COALESCE(r.{p}, false) AS {p}" for p in _PERM_COLS)
+_PERM_SEL = ", ".join(f"COALESCE(r.{p}, false) AS {p}" for p in _PERM_COLS) + \
+            ", COALESCE(r.es_protegido, false) AS es_rol_protegido"
 
 
 def _get_perms(user_id: int) -> dict:
@@ -52,6 +53,7 @@ def login(request: LoginRequest):
     result = {
         "access_token": create_access_token(user["id"], user["username"]),
         "rol": user["rol"],
+        "es_rol_protegido": bool(user["es_rol_protegido"]),
     }
     for p in _PERM_COLS:
         result[p] = bool(user[p])
@@ -69,7 +71,10 @@ def get_me(authorization: str = Header(...)):
     perms = _get_perms(payload.get("sub"))
     if not perms:
         raise HTTPException(404, "Usuario no encontrado")
-    result = {"rol": perms["rol"]}
+    result = {
+        "rol": perms["rol"],
+        "es_rol_protegido": bool(perms.get("es_rol_protegido", False)),
+    }
     for p in _PERM_COLS:
         result[p] = bool(perms.get(p, False))
     return result
@@ -115,12 +120,34 @@ def change_username(request: ChangeUsernameRequest, authorization: str = Header(
 
 
 @router.get("/users", response_model=List[UserOut])
-def list_users():
+def list_users(authorization: Optional[str] = Header(None)):
+    caller_id = None
+    caller_is_protected = False
+    if authorization:
+        try:
+            payload = verify_token(authorization)
+            caller_id = payload.get("sub")
+            with get_db() as cur2:
+                cur2.execute("""SELECT r.es_protegido FROM users u
+                    LEFT JOIN roles r ON r.nombre = u.rol WHERE u.id = %s""", (caller_id,))
+                row = cur2.fetchone()
+                caller_is_protected = bool(row and row["es_protegido"])
+        except Exception:
+            pass
+
     with get_db() as cur:
-        cur.execute("""
-            SELECT id, username, rol, acceso_sobrantes, acceso_novedades, acceso_pick, created_at FROM users
-            ORDER BY username
-        """)
+        base_sql = """
+            SELECT u.id, u.username, u.rol, u.acceso_sobrantes, u.acceso_novedades, u.acceso_pick,
+                   u.created_at,
+                   COALESCE(u.acceso_reparto, r.perm_reparto, false) AS acceso_reparto,
+                   COALESCE(r.perm_reparto, false) AS perm_reparto
+            FROM users u LEFT JOIN roles r ON r.nombre = u.rol
+        """
+        if caller_is_protected:
+            cur.execute(base_sql + " ORDER BY u.username")
+        else:
+            cur.execute(base_sql + " WHERE u.es_oculto = false OR u.id = %s ORDER BY u.username",
+                        (caller_id,))
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -232,6 +259,8 @@ def update_user(id: int, data: UserUpdate, authorization: str = Header(...)):
         updates.append("acceso_novedades = %s"); values.append(data.acceso_novedades)
     if data.acceso_pick is not None:
         updates.append("acceso_pick = %s"); values.append(data.acceso_pick)
+    if data.acceso_reparto is not None:
+        updates.append("acceso_reparto = %s"); values.append(data.acceso_reparto)
     if not updates:
         raise HTTPException(400, "Nada que actualizar")
     with get_db() as cur:

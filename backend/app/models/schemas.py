@@ -32,6 +32,7 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     rol: str
+    es_rol_protegido: bool = False
     # Herramientas operativas
     perm_pick: bool = True
     perm_sobrantes: bool = False
@@ -114,6 +115,7 @@ class UserUpdate(BaseModel):
     acceso_sobrantes: Optional[bool] = None
     acceso_novedades: Optional[bool] = None
     acceso_pick: Optional[bool] = None
+    acceso_reparto: Optional[bool] = None
 
 
 class UserOut(BaseModel):
@@ -124,6 +126,8 @@ class UserOut(BaseModel):
     acceso_novedades: bool = False
     acceso_pick: bool = True
     created_at: Optional[datetime] = None
+    perm_reparto: bool = False
+    acceso_reparto: Optional[bool] = None
 
 
 class ChangePasswordRequest(BaseModel):
