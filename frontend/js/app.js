@@ -4331,8 +4331,8 @@ const _PERMS_UI = [
   { key: 'perm_admin_zonas',        label: 'Zonas y repartos',      group: 'Panel Admin' },
   { key: 'perm_admin_auditoria',    label: 'Auditoría',             group: 'Panel Admin' },
   { key: 'perm_admin_articulos',    label: 'Catálogo de artículos', group: 'Panel Admin' },
-  { key: 'perm_admin_usuarios',     label: 'Gestionar usuarios',    group: 'Panel Admin' },
-  { key: 'perm_admin_roles',        label: 'Gestionar roles',       group: 'Panel Admin' },
+  { key: 'perm_admin_usuarios',     label: 'Gestionar usuarios',    group: 'Administración' },
+  { key: 'perm_admin_roles',        label: 'Gestionar roles',       group: 'Administración' },
 ];
 
 let _rolesData = [];
@@ -4360,7 +4360,8 @@ function renderRoles() {
   const groups = [
     { label: 'Herramientas', perms: ['perm_pick','perm_sobrantes','perm_novedades'] },
     { label: 'Mayoristas',   perms: ['perm_yaguar','perm_diarco'] },
-    { label: 'Panel admin',  perms: ['perm_admin_clientes','perm_admin_clientes_full','perm_admin_semanas','perm_admin_zonas','perm_admin_auditoria','perm_admin_articulos','perm_admin_usuarios','perm_admin_roles'] },
+    { label: 'Panel admin',   perms: ['perm_admin_clientes','perm_admin_clientes_full','perm_admin_semanas','perm_admin_zonas','perm_admin_auditoria','perm_admin_articulos'] },
+    { label: 'Administración', perms: ['perm_admin_usuarios','perm_admin_roles'] },
   ];
   const permLabel = {};
   _PERMS_UI.forEach(p => { permLabel[p.key] = p.label; });
