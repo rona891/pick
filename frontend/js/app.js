@@ -1035,7 +1035,7 @@ document.getElementById('descrip-input').addEventListener('input', (e) => {
   clearTimeout(descripTimer);
   const q = e.target.value.trim();
   if (q.length < 2) { hideDescripResults(); return; }
-  descripTimer = setTimeout(() => buscarPorDescrip(q), 300);
+  descripTimer = setTimeout(() => buscarPorDescrip(_normQuery(q)), 300);
 });
 
 document.getElementById('descrip-input').addEventListener('keydown', (e) => {
@@ -1442,7 +1442,7 @@ document.querySelectorAll('#filtro-estado-dropdown .chip-reparto[data-filter]').
 
 
 document.getElementById('clientes-search').addEventListener('input', (e) => {
-  renderResumen(e.target.value.trim().toLowerCase());
+  renderResumen(e.target.value.trim());
 });
 
 function getPapelesKey() {
@@ -1467,7 +1467,7 @@ function renderResumen(searchQ = '') {
     : resumenData.filter((r) => r.estado_general === filtroActivo);
 
   if (searchQ) {
-    filtered = filtered.filter((r) => r.nombre.toLowerCase().includes(searchQ));
+    filtered = filtered.filter((r) => _clienteMatch(searchQ, r.nombre));
   }
 
   if (!filtered.length) {
@@ -1508,7 +1508,7 @@ function renderResumen(searchQ = '') {
       const nombre = decodeURIComponent(btn.dataset.papel);
       const marcado = !btn.classList.contains('marcado');
       savePapelSeparado(nombre, marcado);
-      renderResumen(document.getElementById('clientes-search').value.trim().toLowerCase());
+      renderResumen(document.getElementById('clientes-search').value.trim());
     });
   });
 
@@ -1768,6 +1768,11 @@ document.getElementById('admin-clientes-search').addEventListener('input', () =>
 let _clientesData = [];
 let _clientesSortCol = 'nombre';
 let _clientesSortDir = 1;  // 1 = asc, -1 = desc
+
+// Normaliza solo acentos (mantiene espacios) para enviar a búsquedas API
+function _normQuery(q) {
+  return (q || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
 
 function _norm(s) {
   return (s || '').toLowerCase()
@@ -3007,7 +3012,7 @@ document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
   if (q.length < 2) { results.classList.add('hidden'); return; }
   _sobDescripTimer = setTimeout(async () => {
     try {
-      const items = await api.getArticulos(q, 50);
+      const items = await api.getArticulos(_normQuery(q), 50);
       if (!items.length) {
         results.innerHTML = '<div class="descrip-result-empty">Sin resultados</div>';
         results.classList.remove('hidden');
@@ -3671,7 +3676,7 @@ document.getElementById('nov-descrip-input').addEventListener('input', (e) => {
   if (q.length < 2) { results.classList.add('hidden'); return; }
   _novDescripTimer = setTimeout(async () => {
     try {
-      const items = await api.novSearch(q, _novSemana);
+      const items = await api.novSearch(_normQuery(q), _novSemana);
       if (!items.length) {
         results.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
       } else {
@@ -3864,7 +3869,7 @@ document.getElementById('nov-manual-search').addEventListener('input', (e) => {
   if (q.length < 2) { results.innerHTML = ''; return; }
   _novManualTimer = setTimeout(async () => {
     try {
-      const items = await api.getArticulos(q, 50);
+      const items = await api.getArticulos(_normQuery(q), 50);
       _novManualItems = items;
       if (!items.length) {
         results.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
@@ -4254,8 +4259,17 @@ function renderArticulos() {
 
   const fmt = (v) => v != null ? Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 
+  // Filtrar con fuzzy si hay búsqueda
+  const qArts = (document.getElementById('admin-articulos-search')?.value || '').trim();
+  const baseData = qArts
+    ? _articulosData.filter(item =>
+        _clienteMatch(qArts, item.descrip ?? '') ||
+        _clienteMatch(qArts, item.cod_art ?? '') ||
+        _clienteMatch(qArts, item.cod_bar ?? ''))
+    : _articulosData;
+
   // Ordenar
-  const data = [..._articulosData].sort((a, b) => {
+  const data = [...baseData].sort((a, b) => {
     let va = a[_articulosSortCol], vb = b[_articulosSortCol];
     const na = parseFloat(va), nb = parseFloat(vb);
     if (!isNaN(na) && !isNaN(nb)) {
@@ -4277,31 +4291,34 @@ function renderArticulos() {
       <td style="text-align:right">${item.precio_con_iva != null ? '$' + fmt(item.precio_con_iva) : '—'}</td>
     </tr>
   `).join('');
+
+  const countEl = document.getElementById('articulos-count');
+  if (countEl) {
+    const n = data.length;
+    countEl.textContent = `${n} artículo${n !== 1 ? 's' : ''}${qArts ? ` para "${qArts}"` : ''}`;
+  }
 }
 
-async function loadArticulos(q) {
+async function loadArticulos() {
   const tbody = document.getElementById('articulos-tbody');
-  const thead = document.getElementById('articulos-thead');
   const count = document.getElementById('articulos-count');
   const exportBtn = document.getElementById('btn-exportar-articulos');
 
   tbody.innerHTML = '<tr><td colspan="4" class="loading">Cargando...</td></tr>';
-  thead.innerHTML = '';
 
   try {
-    const items = await api.getArticulos(q || '', 20000);
+    // Cargar catálogo completo si no está disponible; filtrado fuzzy es client-side
+    const items = await api.getArticulos('', 20000);
     _articulosData = items;
 
-    if (!items.length) {
-      thead.innerHTML = '';
-      tbody.innerHTML = `<tr><td colspan="4" class="muted-text" style="text-align:center;padding:16px">${q ? 'Sin resultados para "' + q + '"' : 'Sin artículos cargados. Importá una semana primero.'}</td></tr>`;
+    if (!_articulosData.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="muted-text" style="text-align:center;padding:16px">Sin artículos cargados. Importá una semana primero.</td></tr>';
       count.textContent = '';
       exportBtn.classList.add('hidden');
       return;
     }
 
     renderArticulos();
-    count.textContent = `${items.length} artículo${items.length !== 1 ? 's' : ''}${q ? ` para "${q}"` : ''}`;
     exportBtn.classList.remove('hidden');
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="4" class="error-msg">${err.message}</td></tr>`;
@@ -4338,9 +4355,9 @@ document.addEventListener('click', (e) => {
   renderArticulos();
 });
 
-document.getElementById('admin-articulos-search').addEventListener('input', (e) => {
+document.getElementById('admin-articulos-search').addEventListener('input', () => {
   clearTimeout(_articulosTimer);
-  _articulosTimer = setTimeout(() => loadArticulos(e.target.value.trim()), 300);
+  _articulosTimer = setTimeout(() => renderArticulos(), 200);
 });
 
 document.getElementById('btn-exportar-articulos')?.addEventListener('click', () => {
