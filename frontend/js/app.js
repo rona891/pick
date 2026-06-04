@@ -3340,6 +3340,7 @@ async function loadHistorial() {
   });
 
   document.getElementById('hist-filter-producto').oninput = renderHistorial;
+  document.getElementById('hist-filter-cliente').oninput = renderHistorial;
   usuSel.onchange = renderHistorial;
   document.getElementById('historial-solo-errores').onchange = renderHistorial;
 
@@ -3350,15 +3351,19 @@ function renderHistorial() {
   const resumenWrap = document.getElementById('historial-resumen');
   const tablaWrap = document.getElementById('historial-tabla-wrap');
   const soloErrores = document.getElementById('historial-solo-errores')?.checked;
-  const filtroProd = (document.getElementById('hist-filter-producto')?.value || '').trim();
-  const filtroUser = document.getElementById('hist-filter-usuario')?.value || '';
+  const filtroProd    = (document.getElementById('hist-filter-producto')?.value || '').trim();
+  const filtroCliente = (document.getElementById('hist-filter-cliente')?.value || '').trim();
+  const filtroUser    = document.getElementById('hist-filter-usuario')?.value || '';
   const esc = (s) => (s || '—').replace(/</g, '&lt;');
 
   // Resumen por usuario (sobre todos los datos, sin filtro)
   const porUsuario = {};
   _historialRows.forEach((r) => {
     const u = r.updated_by || '?';
-    if (!porUsuario[u]) porUsuario[u] = { completados: 0, incompletos: 0 };
+    if (!porUsuario[u]) porUsuario[u] = { completados: 0, incompletos: 0, bultos: 0 };
+    const uxb = r.uxb || 1;
+    const bul = uxb > 1 ? Math.floor((r.cantidad_entregada || 0) / uxb) : 0;
+    porUsuario[u].bultos += bul;
     if (r.estado?.startsWith('completado')) porUsuario[u].completados++;
     else porUsuario[u].incompletos++;
   });
@@ -3375,6 +3380,7 @@ function renderHistorial() {
         <div class="historial-user-chip">
           <span class="historial-user-name">${esc(u)}</span>
           <span class="historial-stat ok">${d.completados} ✓</span>
+          ${d.bultos > 0 ? `<span class="historial-stat">${d.bultos} bul</span>` : ''}
           ${d.incompletos ? `<span class="historial-stat err">${d.incompletos} incompletos</span>` : ''}
         </div>
       `).join('')}
@@ -3390,6 +3396,7 @@ function renderHistorial() {
                        _clienteMatch(filtroProd, r.descrip ?? '');
       if (!hayMatch) return false;
     }
+    if (filtroCliente && !_clienteMatch(filtroCliente, r.nombre ?? '')) return false;
     return true;
   });
 

@@ -245,19 +245,25 @@ def _historial(mayorista: str, semana: Optional[str]):
     with get_db() as cur:
         if semana:
             cur.execute("""
-                SELECT cod_art, descrip, nombre, uni, cantidad_entregada, estado, updated_by,
-                       created_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at
-                FROM pick_auditoria
-                WHERE semana = %s AND mayorista = %s
-                ORDER BY created_at DESC
+                SELECT pa.cod_art, pa.descrip, pa.nombre, pa.uni, pa.cantidad_entregada,
+                       pa.estado, pa.updated_by,
+                       pa.created_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at,
+                       COALESCE(p.uxb, 1) AS uxb
+                FROM pick_auditoria pa
+                LEFT JOIN pick p ON p.id = pa.pick_id
+                WHERE pa.semana = %s AND pa.mayorista = %s
+                ORDER BY pa.created_at DESC
             """, (semana, mayorista))
         else:
             cur.execute("""
-                SELECT cod_art, descrip, nombre, uni, cantidad_entregada, estado, updated_by,
-                       created_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at
-                FROM pick_auditoria
-                WHERE mayorista = %s
-                ORDER BY created_at DESC
+                SELECT pa.cod_art, pa.descrip, pa.nombre, pa.uni, pa.cantidad_entregada,
+                       pa.estado, pa.updated_by,
+                       pa.created_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at,
+                       COALESCE(p.uxb, 1) AS uxb
+                FROM pick_auditoria pa
+                LEFT JOIN pick p ON p.id = pa.pick_id
+                WHERE pa.mayorista = %s
+                ORDER BY pa.created_at DESC
                 LIMIT 500
             """, (mayorista,))
         rows = cur.fetchall()
