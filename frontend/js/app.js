@@ -310,10 +310,18 @@ document.querySelectorAll('.mayorista-card').forEach((btn) => {
       showSobrantes();
     } else if (destino === 'novedades') {
       showNovedades();
-    } else if (!tienePick()) {
-      showApp('admin');
     } else {
-      showApp('pick');
+      const _lastView = localStorage.getItem('_last_view');
+      const _panelApp = ['admin_clientes','admin_clientes_full','admin_semanas',
+                         'admin_zonas','admin_auditoria','admin_articulos'];
+      const _tienePanelReal = _panelApp.some(p => hasPerm(p)) || esVendedor();
+      if (_lastView === 'admin' && _tienePanelReal) {
+        showApp('admin');  // initAdmin restaurará el sub-tab guardado
+      } else if (!tienePick()) {
+        showApp('admin');
+      } else {
+        showApp('pick');
+      }
     }
   });
 });
