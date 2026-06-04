@@ -4423,7 +4423,7 @@ const _PERMS_UI = [
   { key: 'perm_pick',               label: 'Pick',                  group: 'Herramientas' },
   { key: 'perm_sobrantes',          label: 'Sobrantes',             group: 'Herramientas' },
   { key: 'perm_novedades',          label: 'Novedades',             group: 'Herramientas' },
-  { key: 'perm_reparto',            label: 'Elegible en reparto',   group: 'Herramientas' },
+  { key: 'perm_reparto',            label: 'Repartidor',            group: 'Herramientas' },
   { key: 'perm_yaguar',             label: 'Yaguar',                group: 'Mayoristas' },
   { key: 'perm_diarco',             label: 'DIARCO',                group: 'Mayoristas' },
   { key: 'perm_admin_clientes',      label: 'Ver clientes (editar básico)',  group: 'Panel Admin' },

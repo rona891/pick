@@ -139,7 +139,7 @@ def list_users(authorization: Optional[str] = Header(None)):
         base_sql = """
             SELECT u.id, u.username, u.rol, u.acceso_sobrantes, u.acceso_novedades, u.acceso_pick,
                    u.created_at,
-                   (u.acceso_reparto OR COALESCE(r.perm_reparto, false)) AS acceso_reparto,
+                   COALESCE(u.acceso_reparto, r.perm_reparto, false) AS acceso_reparto,
                    COALESCE(r.perm_reparto, false) AS perm_reparto
             FROM users u LEFT JOIN roles r ON r.nombre = u.rol
         """
