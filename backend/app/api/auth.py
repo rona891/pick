@@ -208,6 +208,11 @@ def update_user(id: int, data: UserUpdate, authorization: str = Header(...)):
         caller_perms = _get_perms(verify_token(authorization).get("sub"))
         if caller_perms.get("rol") != "superadmin":
             raise HTTPException(403, "Solo el superadmin puede editar a otro superadmin")
+        # El último superadmin no se puede editar
+        with get_db() as cur2:
+            cur2.execute("SELECT COUNT(*) AS n FROM users WHERE rol = 'superadmin'")
+            if cur2.fetchone()["n"] <= 1:
+                raise HTTPException(400, "No se puede editar al último superadmin")
     if data.rol is not None:
         with get_db() as cur:
             cur.execute("SELECT nombre FROM roles WHERE nombre = %s", (data.rol,))
