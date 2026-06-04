@@ -4437,6 +4437,7 @@ function _openRolModal(nombre) {
     if (cb) cb.checked = rol ? !!rol[p.key] : false;
   });
   document.getElementById('rol-modal').classList.remove('hidden');
+  _syncClientePerms();
 }
 
 function _closeRolModal() {
@@ -4445,6 +4446,18 @@ function _closeRolModal() {
 }
 
 document.getElementById('rol-modal-cancel')?.addEventListener('click', _closeRolModal);
+
+// Dependencia: "editar completo" requiere "editar básico"
+function _syncClientePerms() {
+  const basico = document.getElementById('rolperm-perm_admin_clientes');
+  const full   = document.getElementById('rolperm-perm_admin_clientes_full');
+  if (!basico || !full) return;
+  full.disabled = !basico.checked;
+  if (!basico.checked) full.checked = false;
+  full.closest('label').style.opacity = basico.checked ? '' : '0.4';
+}
+document.getElementById('rolperm-perm_admin_clientes')?.addEventListener('change', _syncClientePerms);
+document.getElementById('rolperm-perm_admin_clientes_full')?.addEventListener('change', _syncClientePerms);
 document.getElementById('rol-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _closeRolModal(); });
 
 document.getElementById('rol-form')?.addEventListener('submit', async e => {
