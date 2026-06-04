@@ -393,11 +393,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     setRol(res.rol);
     _savePerms(res);
     localStorage.setItem('username', username);
-    if (mayoristaCaducado()) {
-      showMayoristaSelector();
-    } else {
-      showApp();
-    }
+    showHub(); // siempre mostrar el hub al iniciar sesión
     setTimeout(() => { if (!isFullscreen()) enterFullscreen(); }, 300);
   } catch (err) {
     errorDiv.textContent = err.message || 'Usuario o contraseña incorrectos';
