@@ -2848,6 +2848,7 @@ let _sobCameras = [];
 let _sobCamIdx = 0;
 
 async function initSobrantes() {
+  _ensureCatalogoCache(); // carga en background para búsqueda fuzzy
   await loadSobListas();
 }
 
@@ -3023,6 +3024,18 @@ document.getElementById('sob-barcode-input').addEventListener('keydown', (e) => 
 });
 
 // Búsqueda por descripción
+// Catálogo local para búsqueda fuzzy en sobrantes y novedades
+let _catalogoCache = [];
+let _catalogoCacheMayorista = '';
+async function _ensureCatalogoCache() {
+  const m = getMayorista();
+  if (_catalogoCache.length && _catalogoCacheMayorista === m) return;
+  try {
+    _catalogoCache = await api.getArticulos('', 20000);
+    _catalogoCacheMayorista = m;
+  } catch { _catalogoCache = []; }
+}
+
 let _sobDescripTimer = null;
 document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
   clearTimeout(_sobDescripTimer);
@@ -3031,7 +3044,13 @@ document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
   if (q.length < 2) { results.classList.add('hidden'); return; }
   _sobDescripTimer = setTimeout(async () => {
     try {
-      const items = await api.getArticulos(_normQuery(q), 50);
+      const items = _catalogoCache.length
+        ? _catalogoCache.filter(i =>
+            _clienteMatch(q, i.descrip ?? '') ||
+            _clienteMatch(q, i.cod_bar ?? '') ||
+            _clienteMatch(q, i.cod_bar_bulto ?? ''))
+          .slice(0, 50)
+        : await api.getArticulos(_normQuery(q), 50);
       if (!items.length) {
         results.innerHTML = '<div class="descrip-result-empty">Sin resultados</div>';
         results.classList.remove('hidden');
@@ -3570,6 +3589,7 @@ let _novDescripTimer = null;
 let _novMaxUni = null;  // máximo de unidades según lo pedido por el cliente
 
 async function initNovedades() {
+  _ensureCatalogoCache(); // carga en background para búsqueda fuzzy
   const btn = document.getElementById('nov-semana-btn');
   const optionsContainer = document.getElementById('nov-semana-options');
   try {
@@ -3695,7 +3715,11 @@ document.getElementById('nov-descrip-input').addEventListener('input', (e) => {
   if (q.length < 2) { results.classList.add('hidden'); return; }
   _novDescripTimer = setTimeout(async () => {
     try {
-      const items = await api.novSearch(_normQuery(q), _novSemana);
+      const items = _pickDescripCache.length
+        ? _pickDescripCache.filter(i =>
+            _clienteMatch(q, i.descrip ?? '') || _clienteMatch(q, i.cod_art ?? ''))
+          .slice(0, 25)
+        : await api.novSearch(_normQuery(q), _novSemana);
       if (!items.length) {
         results.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
       } else {
@@ -3888,7 +3912,13 @@ document.getElementById('nov-manual-search').addEventListener('input', (e) => {
   if (q.length < 2) { results.innerHTML = ''; return; }
   _novManualTimer = setTimeout(async () => {
     try {
-      const items = await api.getArticulos(_normQuery(q), 50);
+      const items = _catalogoCache.length
+        ? _catalogoCache.filter(i =>
+            _clienteMatch(q, i.descrip ?? '') ||
+            _clienteMatch(q, i.cod_bar ?? '') ||
+            _clienteMatch(q, i.cod_art ?? ''))
+          .slice(0, 50)
+        : await api.getArticulos(_normQuery(q), 50);
       _novManualItems = items;
       if (!items.length) {
         results.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
