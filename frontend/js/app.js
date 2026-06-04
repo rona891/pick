@@ -3399,7 +3399,7 @@ async function renderAsignaciones(repartos, users, semana) {
           ${repartos.map((r) => {
             const asigs = asigPorReparto[r.nombre] || [];
             const nombres = asigs.length ? asigs.map(a => esc(a.username)).join(', ') : '<span style="color:var(--muted)">Sin asignar</span>';
-            return `<tr data-reparto="${esc(r.nombre)}">
+            return `<tr data-reparto="${esc(r.nombre)}" style="cursor:pointer">
               <td><strong>${esc(r.nombre)}</strong></td>
               <td class="reparto-nombres-cell">${nombres}</td>
               <td style="white-space:nowrap">
@@ -3440,8 +3440,14 @@ async function renderAsignaciones(repartos, users, semana) {
       const cancelBtn = e.target.closest('.reparto-cancelar-btn');
       const guardarBtn = e.target.closest('.reparto-guardar-btn');
 
-      if (editBtn) {
-        const reparto = editBtn.dataset.reparto;
+      // Click en la fila principal (no en el dropdown ni en sus botones)
+      const mainRow = !editBtn && !cancelBtn && !guardarBtn
+        && e.target.closest('tr[data-reparto]:not(.reparto-dropdown-row)');
+
+      const trigger = editBtn || mainRow;
+      if (trigger) {
+        const reparto = trigger.dataset?.reparto || trigger.closest('tr')?.dataset?.reparto;
+        if (!reparto) return;
         // Cerrar otros dropdowns abiertos
         wrap.querySelectorAll('.reparto-dropdown-row').forEach(row => {
           if (row.dataset.reparto !== reparto) row.classList.add('hidden');
