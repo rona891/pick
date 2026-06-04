@@ -72,11 +72,15 @@ function _restoreView() {
 document.addEventListener('DOMContentLoaded', () => {
   aplicarModo();
   if (getToken()) {
-    if (mayoristaCaducado() || !_actividadReciente()) {
-      showHub();
-    } else {
-      _restoreView();
-    }
+    // Refrescar permisos desde el servidor antes de mostrar la vista,
+    // para evitar usar datos stale de una sesión anterior con distinto rol
+    checkPermissions().finally(() => {
+      if (mayoristaCaducado() || !_actividadReciente()) {
+        showHub();
+      } else {
+        _restoreView();
+      }
+    });
   } else {
     showLogin();
   }
@@ -152,6 +156,11 @@ function showHub() {
     else                           tieneDest = tienePick() || esAdmin();
     c.classList.toggle('hidden', !tieneM || !tieneDest);
   });
+
+  // Ocultar la sección Picking entera si no quedan cards visibles
+  const hayCardsPick = [...document.querySelectorAll('.mayorista-card[data-destino="pick"]')]
+    .some(c => !c.classList.contains('hidden'));
+  document.getElementById('hub-picking-section').classList.toggle('hidden', !hayCardsPick);
 
   // Si el mayorista activo ya no es accesible, cambiar al que sí está disponible
   const actual = getMayorista();
