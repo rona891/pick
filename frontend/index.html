@@ -128,14 +128,15 @@
         <div class="info-block">
           <button class="info-btn">Ayuda</button>
           <div class="info-content">
-            <p><strong>¿Para qué sirve?</strong> Para registrar los artículos que sobran al final del picking. Al exportar, el Excel incluye el precio con IVA de cada artículo para facilitar la liquidación.</p>
-            <p><strong>¿Cómo se usa?</strong><br>
-            1. Elegí una lista existente o creá una nueva con <strong>+ Nueva</strong><br>
-            2. Escaneá el código de barras del producto sobrante o buscalo por descripción<br>
-            3. Ajustá las <strong>unidades</strong> y los <strong>bultos</strong> con los botones − y +<br>
-            4. Cuando terminés, tocá <strong>↓ Exportar Excel</strong> para descargar la lista con precios</p>
-            <p>Si escaneás un producto que ya está en la lista, la app lo resalta en lugar de duplicarlo.</p>
-            <p>Las listas son independientes por mayorista (las de Yaguar no mezclan con las de DIARCO). Para acceder a sobrantes del otro mayorista, volvé al hub con <strong>← Volver</strong> y elegí de nuevo.</p>
+            <p>Registrá los artículos que sobran al terminar el picking y exportalos con precio c/IVA.</p>
+            <p><strong>Cómo usar:</strong><br>
+            — Elegí una lista existente o creá una nueva con <strong>+ Nueva</strong><br>
+            — Escaneá el barcode o buscá por descripción/código<br>
+            — Ajustá unidades/bultos con − y +<br>
+            — Cuando terminés, tocá <strong>↓ Exportar Excel</strong></p>
+            <p><strong>A tener en cuenta:</strong><br>
+            — Si escaneás algo que ya está en la lista, lo resalta (no duplica)<br>
+            — Yaguar y DIARCO tienen listas separadas — usá ← Volver para cambiar</p>
           </div>
         </div>
       </div>
@@ -212,17 +213,17 @@
         <div class="info-block">
           <button class="info-btn">Ayuda</button>
           <div class="info-content">
-            <p><strong>¿Qué son las novedades?</strong> Son eventos que ocurren durante el reparto: artículos que faltaron, devoluciones de clientes, o cambios (el cliente devuelve el ítem para recibir uno nuevo).</p>
-            <p><strong>¿Cómo se registra una novedad?</strong><br>
-            1. Seleccioná la semana del reparto en el selector de arriba<br>
-            2. Escaneá el artículo o buscalo por descripción<br>
-            3. Elegí el cliente — solo aparecen los que pidieron ese artículo en la semana seleccionada<br>
-            4. Seleccioná el tipo: <strong>Devolución</strong>, <strong>Faltante</strong> o <strong>Cambio</strong> (obligatorio)<br>
-            5. Ingresá los bultos y unidades sueltas. Los botones − y + suman o restan de a uno; <strong>manteniéndolos apretados</strong> van al máximo o al mínimo automáticamente. La cantidad no puede superar lo que pidió el cliente<br>
-            6. Opcionalmente, escribí una observación (ej: "rotura de envase")<br>
-            7. Tocá <strong>+ Agregar novedad</strong></p>
-            <p><strong>Orden obligatorio:</strong> primero el artículo, luego el cliente. Los campos de cantidad quedan bloqueados hasta que se elige el cliente. El tipo de novedad tampoco tiene selección por defecto para evitar errores.</p>
-            <p><strong>Exportar:</strong> el botón <strong>↓ Exportar Excel</strong> (al final de la lista) descarga todas las novedades de la semana activa con precio unitario c/IVA y total por ítem.</p>
+            <p>Registrá lo que pasó durante el reparto: faltantes, devoluciones o cambios.</p>
+            <p><strong>Cómo cargar una novedad:</strong><br>
+            — Escaneá el artículo o buscalo por descripción/código<br>
+            — Elegí el cliente (solo aparecen los que pidieron ese artículo)<br>
+            — Seleccioná el tipo: Faltante, Devolución o Cambio<br>
+            — Ajustá la cantidad (no puede superar lo pedido por el cliente)<br>
+            — Opcional: escribí una observación<br>
+            — Tocá <strong>+ Agregar novedad</strong></p>
+            <p><strong>A tener en cuenta:</strong><br>
+            — Orden obligatorio: primero el artículo, luego el cliente<br>
+            — Mantener apretado − o + va hasta el mínimo/máximo automáticamente</p>
           </div>
         </div>
       </div>
@@ -456,21 +457,19 @@
         <div class="info-block">
           <button class="info-btn">Ayuda</button>
           <div class="info-content">
-            <p><strong>¿Qué es el picking?</strong> Es separar la mercadería del depósito en bultos para cada cliente. Esta pantalla te muestra qué hay que juntar.</p>
-            <p><strong>¿Cómo busco un artículo?</strong><br>
-            — Tocá <strong>Escanear</strong> y apuntá la cámara al código de barras del producto<br>
-            — O escribí parte del nombre en <strong>"Buscar por descripción..."</strong></p>
-            <p><strong>¿Qué hago con cada tarjeta?</strong> Cada tarjeta es un artículo para un cliente. La cantidad que se muestra es lo que <em>queda por entregar</em>, expresada en bultos y unidades sueltas.<br>
-            — <strong>✓ ENTREGADO COMPLETO</strong>: marcá todo el pedido de ese artículo como entregado de una sola vez<br>
-            — <strong>Entregar parcial...</strong>: abrí un menú para indicar cuántos bultos y unidades sueltas entregaste. Si ya ingresaste algo y querés corregirlo, podés ingresar un valor negativo para revertirlo.</p>
-            <p><strong>¿Qué significa el estado?</strong><br>
-            — <strong>Pendiente</strong>: todavía no separaste nada<br>
-            — <strong>Entregado parcial</strong> (tarjeta naranja): separaste menos de lo que pedía el cliente<br>
-            — <strong>Completado</strong>: separaste todo lo que pidió el cliente</p>
-            <p><strong>"Solo pendientes":</strong> oculta las tarjetas ya completadas para que veas solo lo que falta.</p>
-            <p><strong>"Recientes":</strong> los últimos artículos buscados aparecen como chips para relanzar la búsqueda rápido.</p>
-            <p><strong>Filtro por reparto:</strong> el botón <strong>"Reparto: Todos ▾"</strong> te permite filtrar los resultados para ver solo los artículos de ciertos repartos (útil para separar el trabajo del viernes y el lunes en DIARCO). Si el filtro está activo, al cambiar los repartos los resultados se actualizan solos.</p>
-            <p><strong>La barra de arriba</strong> muestra el % del pick total completado entre todos los operarios.</p>
+            <p>Separá la mercadería por cliente para preparar la entrega.</p>
+            <p><strong>Cómo buscar:</strong><br>
+            — Tocá <strong>Escanear</strong> y apuntá al código de barras<br>
+            — O escribí en el buscador — por descripción o por código de artículo</p>
+            <p><strong>Cómo registrar:</strong><br>
+            — <strong>✓ Entregado completo</strong>: marcá todo de una sola vez<br>
+            — <strong>Entregar parcial...</strong>: indicá los bultos y unidades que separaste<br>
+            — Para corregir, ingresá valores negativos</p>
+            <p><strong>A tener en cuenta:</strong><br>
+            — Naranja = entregado parcial (falta completar)<br>
+            — "Solo pendientes" oculta lo ya completado<br>
+            — "Reparto: Todos ▾" filtra por zona<br>
+            — La barra de arriba muestra el % entre todos los operarios</p>
           </div>
         </div>
       </div>
@@ -509,18 +508,16 @@
         <div class="info-block">
           <button class="info-btn">Ayuda</button>
           <div class="info-content">
-            <p><strong>¿Para qué sirve esta pestaña?</strong> Muestra el resumen del pick agrupado por cliente: cuántos ítems tiene cada uno y cuánto lleva separado.</p>
-            <p><strong>Los filtros de estado:</strong><br>
-            — <strong>Todos</strong>: todos los clientes de la semana<br>
-            — <strong>Completo</strong>: solo los que tienen todo separado<br>
-            — <strong>Incompleto</strong>: los que tienen algo separado pero no todo<br>
-            — <strong>Pendiente</strong>: los que todavía no tienen nada</p>
-            <p><strong>Filtro por reparto:</strong> el botón <strong>"Reparto: Todos ▾"</strong> filtra la lista para mostrar solo los clientes de ciertos repartos. Muy útil para DIARCO: el viernes podés filtrar solo "Sur Arriba" y "Merlo" para trabajar únicamente con esos clientes.</p>
-            <p><strong>¿Para qué toco un cliente?</strong> Al tocarlo se abre un panel con todos sus artículos. Desde ese panel podés:<br>
-            — Ver qué se separó y qué falta<br>
-            — Tocar <strong>Escanear</strong> para escanear artículos de ese cliente: si el artículo le pertenece, se resalta automáticamente; si no pertenece, aparece un aviso. El resaltado queda hasta que entregues el ítem, cerrés el panel, o escanees otro.</p>
-            <p><strong>El buscador</strong> filtra por nombre de cliente. Los clientes están ordenados por importe de mayor a menor.</p>
-            <p><strong>El ✓ a la izquierda</strong> de cada cliente marca que su papel/remito ya fue separado (se guarda en el dispositivo).</p>
+            <p>Resumen del pick agrupado por cliente: cuántos ítems tiene y cuánto lleva separado.</p>
+            <p><strong>Filtros:</strong><br>
+            — Completo / Incompleto / Pendiente: por estado de separación<br>
+            — Reparto: Todos ▾: filtrá por zona (útil en DIARCO para separar viernes/lunes)</p>
+            <p><strong>Al tocar un cliente:</strong><br>
+            — Ves todos sus artículos y el estado de cada uno<br>
+            — Podés escanear desde ese panel — si el artículo le pertenece, se resalta</p>
+            <p><strong>A tener en cuenta:</strong><br>
+            — El ✓ izquierdo marca que el papel/remito ya fue separado (se guarda en el dispositivo)<br>
+            — Ordenados por importe de mayor a menor</p>
           </div>
         </div>
       </div>
@@ -585,12 +582,13 @@
           <div class="info-block">
             <button class="info-btn">Ayuda</button>
             <div class="info-content">
-              <p>La tabla muestra el <strong>código</strong>, el <strong>nombre del negocio</strong> y el <strong>flete</strong> de cada cliente. Tocá cualquier fila para ver y editar todos los datos (localidad, teléfono, contacto, vendedor). Si modificás el nombre o la zona, los picks de ese cliente se actualizan automáticamente.</p>
-              <p><strong>+ Nuevo (Yaguar):</strong> al crear un cliente nuevo primero elegís el tipo:<br>
-              — <strong>Consumidor Final</strong>: el sistema asigna automáticamente el próximo código libre (no se puede editar). Si ese código no pertenece a tu zona en Yaguar, tocá <strong>"No existe en mi zona"</strong> para descartarlo y pasar al siguiente.<br>
-              — <strong>Factura A</strong>: ingresás el código manualmente.</p>
-              <p><strong>+ Nuevo (DIARCO):</strong> el formulario se abre directo con el código editable.</p>
-              <p><strong>Sin registrar:</strong> si aparece esta sección arriba de la tabla, son clientes que aparecieron en picks importados pero todavía no tienen datos cargados. Tocá "Registrar" para completarlos.</p>
+              <p>Listado de clientes con código, zona y flete. Tocá cualquier fila para editar.</p>
+              <p><strong>Crear nuevo:</strong><br>
+              — Consumidor Final: el sistema asigna el próximo código libre automáticamente<br>
+              — Factura A: ingresás el código manualmente</p>
+              <p><strong>A tener en cuenta:</strong><br>
+              — Al editar nombre o zona, los picks existentes se actualizan solos<br>
+              — <strong>Sin registrar:</strong> clientes que aparecieron en un import sin datos — tocá Registrar para completarlos</p>
             </div>
           </div>
           <div class="admin-header">
@@ -649,11 +647,18 @@
             <div class="info-block">
               <button class="info-btn">Ayuda</button>
               <div class="info-content">
-                <p><strong>¿De dónde sale el archivo?</strong> Conectá el celular del vendedor a la PC por USB y copiá el archivo desde la siguiente ruta. Cada vendedor tiene su propio archivo — subí uno por cada vendedor que haya tomado pedidos en ese rango de fechas.</p>
-                <p><strong>Ubicación del archivo en la PC:</strong><br><code>Este equipo › Dispositivo MTP USB › Almacenamiento interno compartido › Android › data › com.mobilenik.svm › files › svm.db</code></p>
-                <p><strong>¿Qué importa el sistema?</strong> Busca todos los pedidos cuya fecha cae entre "Fecha desde" y "Fecha hasta" y crea una tarjeta de pick por cada artículo de cada cliente. Si un cliente no está registrado en la app, se abrirá un formulario para cargarlo después de la importación.</p>
-                <p><strong>Nombre del pick:</strong> es el nombre que van a ver los operarios en el selector. Usá algo claro como "PICK 30-04-2026". Si ya existe una semana con ese nombre, se reemplazan todos sus picks anteriores.</p>
-                <p><strong>Visible / Oculta:</strong> en la lista de semanas cargadas podés ocultar semanas viejas con el botón "Oculta". Los operarios no las verán en el selector, pero los datos siguen guardados.</p>
+                <p>Importá los pedidos del celular del vendedor para crear las tarjetas de pick.</p>
+                <p><strong>Dónde está el archivo:</strong><br>
+                Conectá el celular por USB →<br>
+                <code>Este equipo › MTP USB › Almacenamiento interno › Android › data › com.mobilenik.svm › files › svm.db</code></p>
+                <p><strong>Cómo importar:</strong><br>
+                — Seleccioná <strong>todos los .db a la vez</strong> (uno por vendedor) — si los subís de a uno el anterior se borra<br>
+                — Ingresá el rango de fechas y el nombre del pick<br>
+                — Se crea una tarjeta por cada artículo de cada cliente en ese período<br>
+                — Si hay clientes sin datos, aparece un formulario para cargarlos después</p>
+                <p><strong>A tener en cuenta:</strong><br>
+                — Si el nombre de pick ya existe, se reemplazan sus picks anteriores<br>
+                — Podés ocultar semanas viejas para que los operarios no las vean</p>
               </div>
             </div>
             <input type="file" id="db-file-input" accept=".db" multiple class="hidden" />
@@ -668,10 +673,11 @@
             <div class="info-block" style="margin-bottom:16px">
               <button class="info-btn">Ayuda</button>
               <div class="info-content">
-                <p><strong>¿Qué importa el sistema?</strong> Busca todos los pedidos dentro del rango de fechas y crea una tarjeta de pick por cada artículo de cada cliente. Se excluyen automáticamente los ítems de sistema que no se pickean (heladeras exhibidoras, artículos sin código numérico).</p>
-                <p><strong>Importes:</strong> los valores que muestra la app incluyen IVA y se calculan proporcionalmente sobre los artículos que sí se pickean.</p>
-                <p><strong>Nombre del pick:</strong> es el nombre que verán los operarios. Si ya existe una semana con ese nombre, se reemplazan todos sus picks anteriores.</p>
-                <p><strong>Visible / Oculta:</strong> en la lista de semanas cargadas podés ocultar semanas viejas. Los operarios no las verán en el selector pero los datos quedan guardados.</p>
+                <p>Importá los pedidos del celular del vendedor para crear las tarjetas de pick.</p>
+                <p><strong>A tener en cuenta:</strong><br>
+                — Los importes incluyen IVA, calculados sobre los artículos que sí se pickean<br>
+                — Si el nombre de pick ya existe, se reemplazan sus picks anteriores<br>
+                — Podés ocultar semanas viejas para que los operarios no las vean</p>
               </div>
             </div>
             <div class="form-group">
@@ -691,10 +697,15 @@
             <div class="info-block">
               <button class="info-btn">Ayuda</button>
               <div class="info-content">
-                <p><strong>¿De dónde sale el archivo?</strong> Conectá el celular del vendedor a la PC por USB y copiá el archivo desde la siguiente ruta. Si hay varios vendedores, podés subir varios archivos a la vez — el sistema los combina automáticamente.</p>
-                <p><strong>Ubicación del archivo en la PC:</strong><br><code>Este equipo › Dispositivo MTP USB › Almacenamiento interno compartido › Android › data › com.inalambrik.android.drco › files › MobileAssistant › Users › VEN_52 › Backups › MobileAssistantBU.db</code><br>La carpeta dentro de <em>Users</em> puede ser <strong>VEN_52</strong> o <strong>VEN_53</strong> según el vendedor.</p>
-                <p><strong>Fechas:</strong> el sistema filtra los pedidos del DB que caigan dentro del rango "Fecha desde / Fecha hasta". Asegurate de que las fechas coincidan con el período de pedidos que querés importar.</p>
-                <p>Si un cliente del archivo no está registrado en la app, aparecerá un formulario para cargarlo luego de la importación.</p>
+                <p><strong>Dónde está el archivo:</strong><br>
+                Conectá el celular por USB →<br>
+                <code>Este equipo › MTP USB › Almacenamiento interno › Android › data › com.inalambrik.android.drco › files › MobileAssistant › Users › VEN_52 › Backups › MobileAssistantBU.db</code><br>
+                (La carpeta puede ser VEN_52 o VEN_53 según el vendedor)</p>
+                <p><strong>Cómo importar:</strong><br>
+                — Seleccioná <strong>todos los .db a la vez</strong> — si los subís de a uno el anterior se borra<br>
+                — Ingresá el rango de fechas y el nombre del pick<br>
+                — Se excluyen solos los ítems que no se pickean (heladeras, sin código numérico)<br>
+                — Si hay clientes sin datos, aparece un formulario para cargarlos después</p>
               </div>
             </div>
             <input type="file" id="diarco-file-input" accept=".db" multiple class="hidden" />
@@ -714,10 +725,14 @@
           <div class="info-block">
             <button class="info-btn">Ayuda</button>
             <div class="info-content">
-              <p>Las <strong>zonas</strong> son las localidades de los clientes (MERLO, VILLA LARCA, etc.). Cada zona debe estar asignada a un reparto.</p>
-              <p>Los <strong>repartos</strong> agrupan zonas que salen en el mismo vehículo (Sur Abajo, Sur Arriba, Merlo, etc.). El orden de los repartos determina cómo se ordenan las tarjetas en el pick — usá las flechas <strong>▲▼</strong> para cambiarlo.</p>
-              <p>Los repartos también se usan como filtro en las pestañas Pick y Clientes: el botón <strong>"Reparto: Todos ▾"</strong> te permite ver solo los clientes de los repartos que elegís. Para que el filtro funcione bien, todas las zonas deben tener un reparto asignado.</p>
-              <p>Cuando se importa una semana, las zonas nuevas se crean automáticamente. Asignales un reparto acá.</p>
+              <p>Cada cliente tiene una zona asignada (localidad). Las zonas se agrupan en repartos.</p>
+              <p><strong>Repartos:</strong><br>
+              — Agrupan zonas que salen en el mismo vehículo (Sur Abajo, Merlo, etc.)<br>
+              — El orden determina cómo se ordenan las tarjetas en el pick — arrastrá para cambiarlo<br>
+              — Se usan como filtro en Pick y Clientes ("Reparto: Todos ▾")</p>
+              <p><strong>A tener en cuenta:</strong><br>
+              — Todas las zonas deben tener reparto asignado para que el filtro funcione<br>
+              — Al importar una semana, las zonas nuevas se crean acá automáticamente</p>
             </div>
           </div>
           <div class="admin-section-title" style="margin-bottom:12px">Orden de repartos</div>
@@ -758,13 +773,12 @@
           <div class="info-block" style="margin-bottom:12px">
             <button class="info-btn">Ayuda</button>
             <div class="info-content">
-              <p>La auditoría registra cada vez que un operario entrega (total o parcialmente) un artículo. Usala para ver qué hizo cada uno, cuándo, y si las cantidades quedaron completas o parciales.</p>
-              <p><strong>Filtros disponibles:</strong><br>
-              — <strong>Semana</strong>: seleccioná la sesión de pick que querés revisar<br>
-              — <strong>Usuario</strong>: filtrá por operario para ver solo su actividad<br>
-              — <strong>Artículo</strong>: escribí el código o descripción, o escaneá el código de barras<br>
-              — <strong>Solo incompletos</strong>: muestra solo los artículos que se entregaron parcialmente (menos de lo pedido)</p>
-              <p>El resumen arriba muestra cuántos artículos completó e hizo incompletos cada operario en esa sesión.</p>
+              <p>Registro de toda la actividad de los operarios: qué separaron, cuándo y si quedó completo.</p>
+              <p><strong>Filtros:</strong><br>
+              — Semana, Usuario, Artículo (código, descripción o scanner)<br>
+              — Solo incompletos: muestra solo lo que se entregó parcialmente</p>
+              <p><strong>A tener en cuenta:</strong><br>
+              — El resumen arriba muestra los totales por operario en esa sesión</p>
             </div>
           </div>
           <div class="admin-section-title" style="margin-bottom:12px">Auditoría de actividad</div>
@@ -868,9 +882,14 @@
           <div class="info-block" style="margin-bottom:12px">
             <button class="info-btn">Ayuda</button>
             <div class="info-content">
-              <p>Las asignaciones de reparto indican qué operarios se encargan de <strong>repartir</strong> (entregar la mercadería) en cada zona para una semana. Podés asignar uno o más operarios por reparto. Esta sección es universal — aplica a ambos mayoristas.</p>
-              <p>Seleccioná la semana con el selector de arriba, marcá con el checkbox los operarios responsables de cada reparto, y tocá <strong>Guardar</strong>.</p>
-              <p>Los repartos se configuran desde <strong>Panel → Zonas</strong>.</p>
+              <p>Asigná qué operarios se encargan de repartir en cada zona para la semana.</p>
+              <p><strong>Cómo usar:</strong><br>
+              — Seleccioná la semana en el selector de arriba<br>
+              — Tocá un reparto para ver los operarios elegibles<br>
+              — Marcá los responsables y tocá <strong>Guardar</strong></p>
+              <p><strong>A tener en cuenta:</strong><br>
+              — Se pueden asignar varios operarios por reparto<br>
+              — Los repartos se configuran desde Panel → Zonas</p>
             </div>
           </div>
           <div class="admin-section-title" style="margin-bottom:12px">Asignaciones de reparto</div>
@@ -1399,7 +1418,7 @@
 
   <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-  <script src="js/api.js?v=142"></script>
-  <script src="js/app.js?v=142"></script>
+  <script src="js/api.js?v=143"></script>
+  <script src="js/app.js?v=143"></script>
 </body>
 </html>
