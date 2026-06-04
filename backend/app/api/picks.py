@@ -142,6 +142,18 @@ def _buscar(mayorista: str, q: str, semana: Optional[str]):
         return [dict(r) for r in cur.fetchall()]
 
 
+def _todos_articulos(mayorista: str, semana: str):
+    """Devuelve todos los artículos distintos de un semana para búsqueda fuzzy client-side."""
+    with get_db() as cur:
+        cur.execute("""
+            SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip
+            FROM pick
+            WHERE semana = %s AND mayorista = %s
+            ORDER BY cod_art, descrip
+        """, (semana, mayorista))
+        return [dict(r) for r in cur.fetchall()]
+
+
 def _by_art(mayorista: str, cod_art: str, semana: Optional[str]):
     """Búsqueda por código de artículo — usado por DIARCO (sin barcodes)."""
     with get_db() as cur:
@@ -270,6 +282,10 @@ def yaguar_por_cliente(nombre: str = Query(...), semana: Optional[str] = Query(N
 def yaguar_buscar(q: str = Query(..., min_length=2), semana: Optional[str] = Query(None)):
     return _buscar("yaguar", q, semana)
 
+@router_yaguar.get("/todos-articulos")
+def yaguar_todos_articulos(semana: str = Query(...)):
+    return _todos_articulos("yaguar", semana)
+
 @router_yaguar.get("/barcode/{cod_bar}", response_model=List[Pick])
 def yaguar_by_barcode(cod_bar: str, semana: Optional[str] = Query(None)):
     return _by_barcode("yaguar", cod_bar, semana)
@@ -310,6 +326,10 @@ def diarco_por_cliente(nombre: str = Query(...), semana: Optional[str] = Query(N
 @router_diarco.get("/buscar")
 def diarco_buscar(q: str = Query(..., min_length=2), semana: Optional[str] = Query(None)):
     return _buscar("diarco", q, semana)
+
+@router_diarco.get("/todos-articulos")
+def diarco_todos_articulos(semana: str = Query(...)):
+    return _todos_articulos("diarco", semana)
 
 @router_diarco.get("/barcode/{cod_bar}", response_model=List[Pick])
 def diarco_by_barcode(cod_bar: str, semana: Optional[str] = Query(None)):

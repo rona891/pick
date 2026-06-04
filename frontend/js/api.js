@@ -202,6 +202,7 @@ const api = {
   getByBarcode: (cod_bar, semana) => request('GET', `/api/${getMayorista()}/picks/barcode/${encodeURIComponent(cod_bar)}${semanaParam(semana)}`),
   getByCodArt: (cod_art, semana) => request('GET', `/api/${getMayorista()}/picks/art/${encodeURIComponent(cod_art)}${semanaParam(semana)}`),
   buscarPorDescrip: (q, semana) => request('GET', `/api/${getMayorista()}/picks/buscar?q=${encodeURIComponent(q)}${semana ? `&semana=${encodeURIComponent(semana)}` : ''}`),
+  getTodosArticulosSemana: (semana) => request('GET', `/api/${getMayorista()}/picks/todos-articulos?semana=${encodeURIComponent(semana)}`),
   getPicksPorCliente: (nombre, semana) => request('GET', `/api/${getMayorista()}/picks/por-cliente?nombre=${encodeURIComponent(nombre)}${semana ? `&semana=${encodeURIComponent(semana)}` : ''}`),
   updateQuantity: (id, cantidad_pickeada) => request('PUT', `/api/${getMayorista()}/picks/${id}/quantity`, { cantidad_pickeada }),
 

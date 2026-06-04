@@ -4,6 +4,7 @@ let scannerActive = false;
 let adminUnlocked = false;
 let editingClienteId = null;
 let semanaActual = '';
+let _pickDescripCache = []; // artículos del semana actual para búsqueda fuzzy
 let soloPendientes = false;
 let wakeLock = null;
 let resumenData = [];
@@ -442,16 +443,25 @@ async function loadSemanas() {
     if (semanas.length === 0) {
       select.innerHTML = '<option value="">Sin semanas cargadas</option>';
       semanaActual = '';
+      _pickDescripCache = [];
     } else {
       select.innerHTML = semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('');
       semanaActual = semanas[0].nombre;
       select.value = semanaActual;
+      _cargarPickDescripCache(semanaActual);
     }
   } catch (_) {}
 }
 
+async function _cargarPickDescripCache(semana) {
+  try {
+    _pickDescripCache = semana ? await api.getTodosArticulosSemana(semana) : [];
+  } catch (_) { _pickDescripCache = []; }
+}
+
 document.getElementById('semana-select').addEventListener('change', (e) => {
   semanaActual = e.target.value;
+  _cargarPickDescripCache(semanaActual);
   document.getElementById('results').innerHTML = '';
   document.getElementById('barcode-input').value = '';
   document.getElementById('descrip-input').value = '';
@@ -1062,7 +1072,12 @@ document.addEventListener('click', (e) => {
 
 async function buscarPorDescrip(q) {
   try {
-    const items = await api.buscarPorDescrip(q, semanaActual);
+    // Si hay caché del semana, filtrar localmente con fuzzy; si no, usar API
+    const items = _pickDescripCache.length
+      ? _pickDescripCache.filter(item =>
+          _clienteMatch(q, item.descrip ?? '') || _clienteMatch(q, item.cod_art ?? ''))
+        .slice(0, 25)
+      : await api.buscarPorDescrip(q, semanaActual);
     const container = document.getElementById('descrip-results');
     if (!items.length) {
       container.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
