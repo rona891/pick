@@ -272,6 +272,15 @@ document.querySelectorAll('.mayorista-card').forEach((btn) => {
   btn.addEventListener('click', () => {
     const m = btn.dataset.mayorista;
     const destino = btn.dataset.destino || 'pick';
+
+    // Verificar permisos en tiempo de click (doble protección además de la ocultación visual)
+    const tieneM = m === 'yaguar' ? tieneYaguar() : tieneDiarco();
+    let tieneDest;
+    if      (destino === 'sobrantes') tieneDest = tieneSobrantes();
+    else if (destino === 'novedades') tieneDest = tieneNovedades();
+    else                              tieneDest = tienePick() || esAdmin();
+    if (!tieneM || !tieneDest) return; // bloquear si no tiene permiso
+
     setMayorista(m);
     aplicarTema(m);
     if (destino === 'sobrantes') {
