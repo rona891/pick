@@ -4407,6 +4407,7 @@ document.getElementById('rol-form')?.addEventListener('submit', async e => {
     _closeRolModal();
     await loadRoles();
     await _recargarSelectsRoles();
+    showHub(); // refrescar cards de mayoristas inmediatamente
   } catch (err) { showToast(err.message, 'error'); }
 });
 
@@ -4417,6 +4418,7 @@ async function _deleteRol(nombre) {
     showToast('Rol eliminado', 'success');
     await loadRoles();
     await _recargarSelectsRoles();
+    showHub();
   } catch (err) { showToast(err.message, 'error'); }
 }
 
