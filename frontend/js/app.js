@@ -2233,10 +2233,14 @@ function renderUsers() {
     if (q && !u.username.toLowerCase().includes(q) && !(ROL_LABELS[u.rol] || u.rol).toLowerCase().includes(q)) {
       return '';
     }
-    const esSuperadmin = u.rol === 'superadmin';
+    const esEsteSuperadmin = u.rol === 'superadmin';
+    const superadminCount = data.filter(x => x.rol === 'superadmin').length;
+    // Eliminar: cualquier usuario excepto el último superadmin
+    const puedeEliminar = !esEsteSuperadmin || superadminCount > 1;
     const rolLabel = `<span style="color:${ROL_COLORS[u.rol] || 'var(--muted)'}">${ROL_LABELS[u.rol] || u.rol}</span>`;
-    const deleteBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
-    const clickAttr = esSuperadmin ? '' : `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"`;
+    const deleteBtn = puedeEliminar ? `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>` : '';
+    // Editar: siempre (el backend rechaza cambios inválidos)
+    const clickAttr = `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"`;
     return `<tr ${clickAttr}>
       <td>${u.username}</td>
       <td>${rolLabel}</td>
@@ -2291,7 +2295,18 @@ document.getElementById('nuevo-usuario-modal')?.addEventListener('click', (e) =>
 function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades, accesosPick) {
   document.getElementById('edit-user-id').value = id;
   document.getElementById('edit-username').value = username;
-  document.getElementById('edit-rol').value = rol;
+  // Incluir superadmin en el select solo si el caller ES superadmin
+  const selRol = document.getElementById('edit-rol');
+  if (esSuperadmin()) {
+    if (!selRol.querySelector('option[value="superadmin"]')) {
+      const opt = document.createElement('option');
+      opt.value = 'superadmin'; opt.textContent = 'Superadmin';
+      selRol.insertBefore(opt, selRol.firstChild);
+    }
+  } else {
+    selRol.querySelector('option[value="superadmin"]')?.remove();
+  }
+  selRol.value = rol;
   document.getElementById('edit-sobrantes').checked = !!accesoSobrantes;
   document.getElementById('edit-novedades').checked = !!accesoNovedades;
   document.getElementById('edit-pick').checked = accesosPick === undefined ? true : !!accesosPick;

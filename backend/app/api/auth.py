@@ -161,8 +161,11 @@ def update_rol(id: int, data: RolUpdate, authorization: str = Header(...)):
         user = cur.fetchone()
         if not user:
             raise HTTPException(404, "Usuario no encontrado")
-        if user["rol"] == "superadmin":
-            raise HTTPException(403, "No se puede modificar el rol del superadmin")
+        # Si se está quitando el rol de superadmin, verificar que queda al menos uno
+        if user["rol"] == "superadmin" and data.rol != "superadmin":
+            cur.execute("SELECT COUNT(*) AS n FROM users WHERE rol = 'superadmin'")
+            if cur.fetchone()["n"] <= 1:
+                raise HTTPException(400, "No se puede cambiar el rol del último superadmin")
         cur.execute("UPDATE users SET rol = %s WHERE id = %s RETURNING id, username, rol, created_at", (data.rol, id))
         return dict(cur.fetchone())
 
@@ -177,7 +180,9 @@ def delete_user(id: int, authorization: str = Header(...)):
         if not user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
         if user["rol"] == "superadmin":
-            raise HTTPException(status_code=403, detail="No se puede eliminar al superadmin")
+            cur.execute("SELECT COUNT(*) AS n FROM users WHERE rol = 'superadmin'")
+            if cur.fetchone()["n"] <= 1:
+                raise HTTPException(status_code=403, detail="No se puede eliminar al último superadmin")
         cur.execute("SELECT COUNT(*) AS n FROM users")
         if cur.fetchone()["n"] <= 1:
             raise HTTPException(status_code=400, detail="No se puede eliminar el único usuario")
