@@ -114,13 +114,17 @@ def update_rol_perms(nombre: str, data: RolIn, authorization: str = Header(...))
                 raise HTTPException(400, f"Ya existe un rol con el nombre '{nuevo_nombre}'")
             # Actualizar referencias en users
             cur.execute("UPDATE users SET rol = %s WHERE rol = %s", (nuevo_nombre, nombre))
-        sets = ", ".join([f"{p} = %s" for p in ALL_PERMS]) + ", color = %s"
-        if nuevo_nombre != nombre:
-            sets = f"nombre = %s, {sets}"
-            vals = [nuevo_nombre] + [getattr(data, p) for p in ALL_PERMS] + [data.color]
+        if rol["es_protegido"]:
+            # Rol protegido: solo se puede cambiar el color
+            cur.execute("UPDATE roles SET color = %s WHERE nombre = %s", (data.color, nombre))
         else:
-            vals = [getattr(data, p) for p in ALL_PERMS] + [data.color]
-        cur.execute(f"UPDATE roles SET {sets} WHERE nombre = %s", vals + [nombre])
+            sets = ", ".join([f"{p} = %s" for p in ALL_PERMS]) + ", color = %s"
+            if nuevo_nombre != nombre:
+                sets = f"nombre = %s, {sets}"
+                vals = [nuevo_nombre] + [getattr(data, p) for p in ALL_PERMS] + [data.color]
+            else:
+                vals = [getattr(data, p) for p in ALL_PERMS] + [data.color]
+            cur.execute(f"UPDATE roles SET {sets} WHERE nombre = %s", vals + [nombre])
     return {"ok": True}
 
 

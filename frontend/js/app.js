@@ -4380,9 +4380,13 @@ function renderRoles() {
       : '';
     const handle = r.es_protegido ? '' :
       `<span class="rol-drag-handle" title="Arrastrar para reordenar" style="cursor:grab;font-size:16px;color:var(--muted);margin-right:6px;user-select:none">⠿</span>`;
-    const acciones = r.es_protegido ? '' :
-      `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>
-       <button class="btn-del" onclick="_deleteRol('${esc(r.nombre)}')">Eliminar</button>`;
+    // Superadmin protegido: solo el caller superadmin puede editar (solo color)
+    const btnEditarProtegido = (r.es_protegido && esSuperadmin())
+      ? `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar color</button>` : '';
+    const acciones = r.es_protegido
+      ? btnEditarProtegido
+      : `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>
+         <button class="btn-del" onclick="_deleteRol('${esc(r.nombre)}')">Eliminar</button>`;
     const groupsHtml = groups.map(g => {
       const active = g.perms.filter(pk => r[pk]).map(pk => tag(permLabel[pk]));
       if (!active.length) return '';
@@ -4439,7 +4443,11 @@ function _openRolModal(nombre) {
   document.getElementById('rol-color-input').value = rol?.color || '#888888';
   _PERMS_UI.forEach(p => {
     const cb = document.getElementById(`rolperm-${p.key}`);
-    if (cb) cb.checked = rol ? !!rol[p.key] : false;
+    if (!cb) return;
+    cb.checked = rol ? !!rol[p.key] : false;
+    // Roles protegidos: checkboxes siempre marcados y no editables
+    cb.disabled = !!(rol && rol.es_protegido);
+    cb.closest('label').style.opacity = (rol && rol.es_protegido) ? '0.45' : '';
   });
   document.getElementById('rol-modal').classList.remove('hidden');
   _syncClientePerms();
