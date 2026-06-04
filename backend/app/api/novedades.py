@@ -142,12 +142,12 @@ def _export(mayorista: str, semana: str):
     ws.title = "Novedades"
 
     hdrs = [
-        ("Tipo",             14),
         ("Cód. Cliente",     14),
         ("Cliente",          28),
         ("Cód. Artículo",   14),
         ("Descripción",      40),
         ("Unidades totales", 14),
+        ("Tipo",             14),
         ("Observaciones",    30),
     ]
     for ci, (label, width) in enumerate(hdrs, 1):
@@ -164,12 +164,12 @@ def _export(mayorista: str, semana: str):
         _f = openpyxl.styles.PatternFill("solid", fgColor=ROW_ALT if ri % 2 == 0 else WHITE)
         for ci in range(1, 8):
             ws.cell(row=ri, column=ci).fill = _f
-        data_cell(ws, ri, 1, tipo_str,                 align="center", bold=True)
-        data_cell(ws, ri, 2, r["cliente"],             align="center")
-        data_cell(ws, ri, 3, r["cliente_nombre"],      align="left")
-        data_cell(ws, ri, 4, r["cod_art"],             align="center")
-        data_cell(ws, ri, 5, r["descrip"],             align="left")
-        data_cell(ws, ri, 6, uni_total,                align="center")
+        data_cell(ws, ri, 1, r["cliente"],             align="center")
+        data_cell(ws, ri, 2, r["cliente_nombre"],      align="left")
+        data_cell(ws, ri, 3, r["cod_art"],             align="center")
+        data_cell(ws, ri, 4, r["descrip"],             align="left")
+        data_cell(ws, ri, 5, uni_total,                align="center")
+        data_cell(ws, ri, 6, tipo_str,                 align="center", bold=True)
         data_cell(ws, ri, 7, r["observaciones"] or "", align="left")
 
     ws.auto_filter.ref = f"A1:G{len(rows)+1}" if rows else None
