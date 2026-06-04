@@ -41,6 +41,11 @@ const INACTIVIDAD_MS = 10 * 60 * 1000; // 10 minutos
 
 function _saveView(view) {
   localStorage.setItem('_last_view', view);
+  // Si es una vista de app, también guardarla como última vista de app
+  // (separada de _last_view que puede ser 'hub' al presionar Volver)
+  if (view === 'pick' || view === 'clientes' || view === 'admin') {
+    localStorage.setItem('_last_app_view', view);
+  }
 }
 
 function _saveAdminTab(adminTab) {
@@ -312,12 +317,14 @@ document.querySelectorAll('.mayorista-card').forEach((btn) => {
     } else if (destino === 'novedades') {
       showNovedades();
     } else {
-      const _lastView = localStorage.getItem('_last_view');
+      const _lastAppView = localStorage.getItem('_last_app_view') || 'pick';
       const _panelApp = ['admin_clientes','admin_clientes_full','admin_semanas',
                          'admin_zonas','admin_auditoria','admin_articulos'];
       const _tienePanelReal = _panelApp.some(p => hasPerm(p)) || esVendedor();
-      if (_lastView === 'admin' && _tienePanelReal) {
+      if (_lastAppView === 'admin' && _tienePanelReal) {
         showApp('admin');  // initAdmin restaurará el sub-tab guardado
+      } else if (_lastAppView === 'clientes' && tienePick()) {
+        showApp('clientes');
       } else if (!tienePick()) {
         showApp('admin');
       } else {
