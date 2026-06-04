@@ -90,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const target = btn.dataset.adminTab;
       document.querySelectorAll('.admin-tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.adminTab === target));
       document.querySelectorAll('.admin-tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.adminPanel !== target));
+      _setTopbarSection(_ADMIN_TAB_LABELS[target] || target);
       if (target === 'usuarios') loadUsers();
       if (target === 'nueva-semana') loadSemanasAdmin();
       if (target === 'zonas') loadZonas();
@@ -453,6 +454,18 @@ function updateProgressBar(completed, total) {
   if (label) { label.textContent = pct + '%'; label.style.color = pct >= 100 ? 'var(--green)' : ''; }
 }
 
+// ── Nombre de sección en topbar ────────────────────────────────────────────
+const _TAB_LABELS = { pick: 'Pick', clientes: 'Clientes', admin: 'Panel' };
+const _ADMIN_TAB_LABELS = {
+  'clientes': 'Clientes', 'nueva-semana': 'Semanas', 'usuarios': 'Usuarios',
+  'zonas': 'Zonas', 'reparto': 'Reparto', 'historial': 'Auditoría',
+  'articulos': 'Artículos', 'roles': 'Roles',
+};
+function _setTopbarSection(name) {
+  const el = document.getElementById('topbar-section');
+  if (el) el.textContent = name || '';
+}
+
 // ── Tabs ───────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -468,6 +481,7 @@ function switchTab(tab) {
   if (tab === 'admin') initAdmin();
   if (tab === 'sobrantes') initSobrantes();
   _saveView(tab);
+  _setTopbarSection(_TAB_LABELS[tab] || tab);
 }
 
 // ── Tab: Pick ──────────────────────────────────────────────────────────────
@@ -1602,12 +1616,14 @@ function initAdmin() {
         document.querySelector(`.admin-tab-panel[data-admin-panel="${target}"]`)?.classList.remove('hidden');
         if (target === 'nueva-semana') loadSemanasAdmin();
         if (target === 'clientes') loadClientes();
+        _setTopbarSection(_ADMIN_TAB_LABELS[target] || target);
       }
     } else {
       // Asegurar que Clientes esté activo para Yaguar o vendedor
       document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.adminTab === 'clientes'));
       document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.toggle('hidden', p.dataset.adminPanel !== 'clientes'));
       loadClientes();
+      _setTopbarSection('Clientes');
     }
   } else {
     document.getElementById('admin-lock').classList.remove('hidden');

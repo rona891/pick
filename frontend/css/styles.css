@@ -476,6 +476,14 @@ input:focus, select:focus { border-color: var(--accent); }
   gap: 8px;
   min-width: 0;
 }
+.topbar-section-label {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 15px;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
 .topbar-logo {
   height: 44px;
   max-width: 110px;
