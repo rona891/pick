@@ -2237,12 +2237,13 @@ function renderUsers() {
     }
     const esEsteSuperadmin = u.rol === 'superadmin';
     const superadminCount = data.filter(x => x.rol === 'superadmin').length;
-    // Eliminar: cualquier usuario excepto el último superadmin
-    const puedeEliminar = !esEsteSuperadmin || superadminCount > 1;
+    const callerEsSuperadmin = esSuperadmin();
+    // Editar/eliminar superadmin: solo otro superadmin puede
+    const puedeTocarSuperadmin = !esEsteSuperadmin || callerEsSuperadmin;
+    const puedeEliminar = puedeTocarSuperadmin && (!esEsteSuperadmin || superadminCount > 1);
     const rolLabel = `<span style="color:${ROL_COLORS[u.rol] || 'var(--muted)'}">${ROL_LABELS[u.rol] || u.rol}</span>`;
     const deleteBtn = puedeEliminar ? `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>` : '';
-    // Editar: siempre (el backend rechaza cambios inválidos)
-    const clickAttr = `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"`;
+    const clickAttr = puedeTocarSuperadmin ? `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"` : '';
     return `<tr ${clickAttr}>
       <td>${u.username}</td>
       <td>${rolLabel}</td>
