@@ -154,7 +154,13 @@ function showHub() {
     let tieneDest;
     if      (dest === 'sobrantes') tieneDest = tieneSobrantes();
     else if (dest === 'novedades') tieneDest = tieneNovedades();
-    else                           tieneDest = tienePick() || esAdmin();
+    else {
+      // La card de picking solo aparece si hay pick o permisos de PANEL
+      // (no basta con usuarios/roles que se gestionan desde el hub)
+      const _panelApp = ['admin_clientes','admin_clientes_full','admin_semanas',
+                         'admin_zonas','admin_auditoria','admin_articulos'];
+      tieneDest = tienePick() || _panelApp.some(p => hasPerm(p));
+    }
     c.classList.toggle('hidden', !tieneM || !tieneDest);
   });
 
@@ -278,7 +284,11 @@ document.querySelectorAll('.mayorista-card').forEach((btn) => {
     let tieneDest;
     if      (destino === 'sobrantes') tieneDest = tieneSobrantes();
     else if (destino === 'novedades') tieneDest = tieneNovedades();
-    else                              tieneDest = tienePick() || esAdmin();
+    else {
+      const _panelApp = ['admin_clientes','admin_clientes_full','admin_semanas',
+                         'admin_zonas','admin_auditoria','admin_articulos'];
+      tieneDest = tienePick() || _panelApp.some(p => hasPerm(p));
+    }
     if (!tieneM || !tieneDest) return; // bloquear si no tiene permiso
 
     setMayorista(m);
@@ -1614,25 +1624,17 @@ function initAdmin() {
     document.querySelector('.admin-tab-btn[data-admin-tab="historial"]').classList.toggle('hidden', !puedeVerAuditoria());
     document.querySelector('.admin-tab-btn[data-admin-tab="articulos"]').classList.toggle('hidden', !puedeVerArticulos());
 
-    const esDiarco = getMayorista() === 'diarco';
-    if (esDiarco && !vendedor) {
-      document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.add('hidden'));
-      const firstBtn = document.querySelector('.admin-tab-btn:not(.hidden)');
-      if (firstBtn) {
-        firstBtn.classList.add('active');
-        const target = firstBtn.dataset.adminTab;
-        document.querySelector(`.admin-tab-panel[data-admin-panel="${target}"]`)?.classList.remove('hidden');
-        if (target === 'nueva-semana') loadSemanasAdmin();
-        if (target === 'clientes') loadClientes();
-        _setTopbarSection(_ADMIN_TAB_LABELS[target] || target);
-      }
-    } else {
-      // Asegurar que Clientes esté activo para Yaguar o vendedor
-      document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.adminTab === 'clientes'));
-      document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.toggle('hidden', p.dataset.adminPanel !== 'clientes'));
-      loadClientes();
-      _setTopbarSection('Clientes');
+    // Ambas ramas (Yaguar y DIARCO) buscan el primer tab visible según permisos
+    document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.add('hidden'));
+    const firstBtn = document.querySelector('.admin-tab-btn:not(.hidden)');
+    if (firstBtn) {
+      firstBtn.classList.add('active');
+      const target = firstBtn.dataset.adminTab;
+      document.querySelector(`.admin-tab-panel[data-admin-panel="${target}"]`)?.classList.remove('hidden');
+      if (target === 'nueva-semana') loadSemanasAdmin();
+      if (target === 'clientes') loadClientes();
+      _setTopbarSection(_ADMIN_TAB_LABELS[target] || target);
     }
   } else {
     document.getElementById('admin-lock').classList.remove('hidden');
