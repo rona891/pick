@@ -163,7 +163,7 @@ def yaguar_codigo_libre():
     with get_db() as cur:
         cur.execute("""
             SELECT id_yaguar FROM clientes_yaguar
-            WHERE estado = 'libre' AND id_yaguar IS NOT NULL
+            WHERE estado = 'libre' AND mayorista = 'yaguar' AND id_yaguar IS NOT NULL
             ORDER BY id_yaguar
             LIMIT 1
         """)
@@ -190,7 +190,7 @@ def yaguar_marcar_no_zona(payload: MarcarNoAptoIn):
             )
         cur.execute(
             """SELECT id_yaguar FROM clientes_yaguar
-               WHERE estado = 'libre' AND id_yaguar IS NOT NULL
+               WHERE estado = 'libre' AND mayorista = 'yaguar' AND id_yaguar IS NOT NULL
                ORDER BY id_yaguar LIMIT 1"""
         )
         row = cur.fetchone()
@@ -215,7 +215,7 @@ def yaguar_marcar_no_apto(payload: MarcarNoAptoIn):
         # Siguiente código libre disponible
         cur.execute(
             """SELECT id_yaguar FROM clientes_yaguar
-               WHERE estado = 'libre' AND id_yaguar IS NOT NULL
+               WHERE estado = 'libre' AND mayorista = 'yaguar' AND id_yaguar IS NOT NULL
                ORDER BY id_yaguar LIMIT 1"""
         )
         row = cur.fetchone()
