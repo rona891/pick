@@ -74,6 +74,28 @@ async def lifespan(app: FastAPI):
         cur.execute("ALTER TABLE users ALTER COLUMN acceso_reparto DROP NOT NULL")
         # Usuarios con flags especiales (idempotente)
         cur.execute("UPDATE users SET es_oculto = true WHERE LOWER(username) = 'mia'")
+        # Garantizar que la tabla roles existe antes de consultarla (puede ser DB vacía)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS roles (
+                nombre            VARCHAR PRIMARY KEY,
+                es_protegido      BOOLEAN NOT NULL DEFAULT false,
+                orden             INTEGER NOT NULL DEFAULT 100,
+                perm_pick         BOOLEAN NOT NULL DEFAULT false,
+                perm_sobrantes    BOOLEAN NOT NULL DEFAULT false,
+                perm_novedades    BOOLEAN NOT NULL DEFAULT false,
+                perm_yaguar       BOOLEAN NOT NULL DEFAULT false,
+                perm_diarco       BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_clientes       BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_clientes_full  BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_semanas        BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_zonas          BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_auditoria      BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_articulos      BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_usuarios       BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_roles          BOOLEAN NOT NULL DEFAULT false,
+                created_at        TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
         # Crear usuario ADMIN con el rol protegido si no existe ningún usuario con rol protegido
         cur.execute("""
             SELECT r.nombre FROM users u

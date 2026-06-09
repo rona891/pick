@@ -1,0 +1,53 @@
+services:
+  db-qa:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: picking
+      POSTGRES_USER: picking
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_QA}
+    volumes:
+      - postgres_qa_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U picking"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - picking_qa_net
+
+  backend-qa:
+    build: ./backend
+    env_file:
+      - ./backend/.env.qa-prod
+    volumes:
+      - /srv/picking-qa/data:/data:ro
+    depends_on:
+      db-qa:
+        condition: service_healthy
+    restart: always
+    networks:
+      - picking_qa_net
+
+  frontend-qa:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    ports:
+      - "8081:80"
+    environment:
+      - BACKEND_URL=http://backend-qa:8000
+    depends_on:
+      - backend-qa
+    restart: always
+    networks:
+      - picking_qa_net
+
+networks:
+  picking_qa_net:
+    driver: bridge
+
+volumes:
+  postgres_qa_data:

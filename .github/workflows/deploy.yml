@@ -1,0 +1,47 @@
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [Main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rsync
+        run: sudo apt-get install -yq rsync
+
+      - name: Copy files to VPS
+        run: |
+          echo "${{ secrets.VPS_SSH_KEY }}" > /tmp/vps_key
+          chmod 600 /tmp/vps_key
+          rsync -az --delete \
+            --exclude='.git' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.env' \
+            --exclude='backend/.env.prod' \
+            --exclude='backend/.env.qa' \
+            -e "ssh -i /tmp/vps_key -o StrictHostKeyChecking=no" \
+            . deploy@${{ secrets.VPS_HOST }}:/srv/picking/
+
+      - name: Rebuild and restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /srv/picking
+            docker compose -f docker-compose.vps.yml up --build -d --remove-orphans
+            docker image prune -f
+            for i in $(seq 1 6); do
+              if curl -sf http://localhost:8080/health > /dev/null; then
+                echo "Health check passed"; exit 0
+              fi
+              echo "Waiting ($i/6)..."; sleep 5
+            done
+            echo "Health check failed" && exit 1
