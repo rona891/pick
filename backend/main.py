@@ -1,12 +1,12 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import picks, auth, health, clientes, admin, zonas, export
+from app.api import picks, auth, health, clientes, admin, zonas, export, articulos, roles as roles_api
 from app.api.yaguar import semanas as yaguar_semanas
 from app.api.diarco import semanas as diarco_semanas
 from app.api.sobrantes import router_yaguar as sob_yaguar, router_diarco as sob_diarco, router_shared as sob_shared
 from app.api.novedades import router_yaguar as nov_yaguar, router_diarco as nov_diarco
-from app.api.asignaciones import router_yaguar as asig_yaguar, router_diarco as asig_diarco
+from app.api.asignaciones import router_yaguar as asig_yaguar, router_diarco as asig_diarco, router_shared as asig_shared
 # picks, clientes y export tienen routers dobles (uno por mayorista)
 from app.auth.jwt import hash_password
 from app.db.database import init_pool, get_db
@@ -17,17 +17,106 @@ from config import settings
 async def lifespan(app: FastAPI):
     init_pool()
     with get_db() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id bigserial PRIMARY KEY,
+                username varchar UNIQUE NOT NULL,
+                password_hash varchar NOT NULL,
+                created_at timestamptz DEFAULT now(),
+                rol varchar NOT NULL DEFAULT 'operario'
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS pick (
+                id bigserial PRIMARY KEY,
+                cod_bar varchar,
+                cod_art varchar,
+                descrip varchar,
+                nombre varchar,
+                cliente varchar,
+                localidad varchar,
+                uni integer,
+                bul integer,
+                cantidad_pickeada integer DEFAULT 0,
+                estado varchar,
+                semana varchar,
+                updated_at timestamptz,
+                created_at timestamptz DEFAULT now(),
+                uxb integer DEFAULT 0,
+                importe_total numeric DEFAULT 0,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                cod_bar_bulto varchar
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS clientes_yaguar (
+                id bigserial PRIMARY KEY,
+                nombre varchar,
+                localidad varchar,
+                direccion varchar,
+                telefono varchar,
+                contacto varchar,
+                vendedor varchar,
+                created_at timestamptz DEFAULT now(),
+                id_yaguar varchar,
+                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                estado varchar,
+                flete numeric
+            )
+        """)
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS rol VARCHAR NOT NULL DEFAULT 'operario'")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_sobrantes BOOLEAN NOT NULL DEFAULT false")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_novedades BOOLEAN NOT NULL DEFAULT false")
         cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_pick BOOLEAN NOT NULL DEFAULT true")
-        # Crear superadmin si no existe ninguno
-        cur.execute("SELECT COUNT(*) AS n FROM users WHERE rol = 'superadmin'")
-        if cur.fetchone()["n"] == 0:
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS es_oculto BOOLEAN NOT NULL DEFAULT false")
+        cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS acceso_reparto BOOLEAN DEFAULT NULL")
+        # NULL = hereda del rol; true/false = override explícito del admin
+        cur.execute("ALTER TABLE users ALTER COLUMN acceso_reparto DROP NOT NULL")
+        # Usuarios con flags especiales (idempotente)
+        cur.execute("UPDATE users SET es_oculto = true WHERE LOWER(username) = 'mia'")
+        # Garantizar que la tabla roles existe antes de consultarla (puede ser DB vacía)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS roles (
+                nombre            VARCHAR PRIMARY KEY,
+                es_protegido      BOOLEAN NOT NULL DEFAULT false,
+                orden             INTEGER NOT NULL DEFAULT 100,
+                perm_pick         BOOLEAN NOT NULL DEFAULT false,
+                perm_sobrantes    BOOLEAN NOT NULL DEFAULT false,
+                perm_novedades    BOOLEAN NOT NULL DEFAULT false,
+                perm_yaguar       BOOLEAN NOT NULL DEFAULT false,
+                perm_diarco       BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_clientes       BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_clientes_full  BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_semanas        BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_zonas          BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_auditoria      BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_articulos      BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_usuarios       BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_roles          BOOLEAN NOT NULL DEFAULT false,
+                created_at        TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        # Crear usuario ADMIN con el rol protegido si no existe ningún usuario con rol protegido
+        cur.execute("""
+            SELECT r.nombre FROM users u
+            JOIN roles r ON r.nombre = u.rol
+            WHERE r.es_protegido = true LIMIT 1
+        """)
+        rol_protegido = cur.fetchone()
+        if not rol_protegido:
+            # Primera vez: el rol protegido aún no existe (se crea más adelante en el seed)
+            # Insertar ADMIN con 'superadmin' provisional; se corregirá en el próximo arranque
             cur.execute(
                 """INSERT INTO users (username, password_hash, rol) VALUES (%s, %s, 'superadmin')
-                   ON CONFLICT (username) DO UPDATE SET rol = 'superadmin', password_hash = EXCLUDED.password_hash""",
+                   ON CONFLICT (username) DO NOTHING""",
                 ("ADMIN", hash_password(settings.ADMIN_PASSWORD)),
+            )
+        else:
+            # Asegurar que ADMIN tenga el rol protegido actualizado y la contraseña correcta
+            cur.execute(
+                """INSERT INTO users (username, password_hash, rol) VALUES (%s, %s, %s)
+                   ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash""",
+                ("ADMIN", hash_password(settings.ADMIN_PASSWORD), rol_protegido["nombre"]),
             )
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS id_yaguar VARCHAR")
         cur.execute("ALTER TABLE clientes_yaguar ADD COLUMN IF NOT EXISTS mayorista VARCHAR NOT NULL DEFAULT 'yaguar'")
@@ -136,13 +225,21 @@ async def lifespan(app: FastAPI):
             CREATE TABLE IF NOT EXISTS asignaciones_reparto (
                 id bigserial PRIMARY KEY,
                 semana varchar NOT NULL,
-                mayorista varchar NOT NULL DEFAULT 'yaguar',
+                mayorista varchar NOT NULL DEFAULT 'shared',
                 reparto varchar NOT NULL,
                 user_id bigint REFERENCES users(id) ON DELETE SET NULL,
                 username varchar NOT NULL,
-                created_at timestamptz DEFAULT now(),
-                UNIQUE (semana, mayorista, reparto)
+                created_at timestamptz DEFAULT now()
             )
+        """)
+        # Migrar: eliminar old unique constraint y crear uno nuevo (semana, reparto, user_id)
+        cur.execute("""
+            ALTER TABLE asignaciones_reparto
+                DROP CONSTRAINT IF EXISTS asignaciones_reparto_semana_mayorista_reparto_key
+        """)
+        cur.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS asig_uniq_semana_reparto_user
+                ON asignaciones_reparto(semana, reparto, user_id)
         """)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS sobrantes (
@@ -157,6 +254,12 @@ async def lifespan(app: FastAPI):
                 created_at timestamptz DEFAULT now(),
                 precio_unit numeric,
                 uxb integer DEFAULT 0
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS sobrantes_listas (
+                nombre VARCHAR PRIMARY KEY,
+                created_at TIMESTAMPTZ DEFAULT NOW()
             )
         """)
         cur.execute("""
@@ -188,6 +291,105 @@ async def lifespan(app: FastAPI):
                 mayorista TEXT NOT NULL,
                 precio_con_iva NUMERIC NOT NULL,
                 uxb INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (cod_art, mayorista)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS roles (
+                nombre            VARCHAR PRIMARY KEY,
+                es_protegido      BOOLEAN NOT NULL DEFAULT false,
+                orden             INTEGER NOT NULL DEFAULT 100,
+                perm_pick         BOOLEAN NOT NULL DEFAULT false,
+                perm_sobrantes    BOOLEAN NOT NULL DEFAULT false,
+                perm_novedades    BOOLEAN NOT NULL DEFAULT false,
+                perm_yaguar       BOOLEAN NOT NULL DEFAULT false,
+                perm_diarco       BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_clientes       BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_clientes_full  BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_semanas        BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_zonas     BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_auditoria BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_articulos BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_usuarios  BOOLEAN NOT NULL DEFAULT false,
+                perm_admin_roles     BOOLEAN NOT NULL DEFAULT false,
+                created_at        TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        # Migración: nueva columna perm_admin_clientes_full (debe ir ANTES del seed INSERT)
+        cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS perm_admin_clientes_full BOOLEAN NOT NULL DEFAULT false")
+        # Rol protegido: solo insertar si no existe ninguno (puede haber sido renombrado)
+        cur.execute("SELECT COUNT(*) AS n FROM roles WHERE es_protegido = true")
+        if cur.fetchone()["n"] == 0:
+            cur.execute("""
+                INSERT INTO roles (nombre, es_protegido,
+                    perm_pick, perm_sobrantes, perm_novedades, perm_yaguar, perm_diarco,
+                    perm_admin_clientes, perm_admin_clientes_full,
+                    perm_admin_semanas, perm_admin_zonas,
+                    perm_admin_auditoria, perm_admin_articulos, perm_admin_usuarios, perm_admin_roles)
+                VALUES ('superadmin', true, true, true, true, true, true, true, true, true, true, true, true, true, true)
+                ON CONFLICT (nombre) DO NOTHING
+            """)
+        # Roles no protegidos: siempre seed seguro con ON CONFLICT
+        cur.execute("""
+            INSERT INTO roles (nombre, es_protegido,
+                perm_pick, perm_sobrantes, perm_novedades, perm_yaguar, perm_diarco,
+                perm_admin_clientes, perm_admin_clientes_full,
+                perm_admin_semanas, perm_admin_zonas,
+                perm_admin_auditoria, perm_admin_articulos, perm_admin_usuarios, perm_admin_roles)
+            VALUES
+                ('admin',    false, true, true, true, true, true, true, true,  true, true, true, true, true, true),
+                ('operario', false, true, false,false,true, true, false,false, false,false,false,false,false,false),
+                ('vendedor', false, true, false,false,true, true, true, false, false,false,false,true, false,false)
+            ON CONFLICT (nombre) DO NOTHING
+        """)
+        # Rol protegido y admin reciben full=true si ya tenían clientes=true
+        cur.execute("UPDATE roles SET perm_admin_clientes_full = true WHERE (es_protegido = true OR nombre = 'admin') AND perm_admin_clientes = true")
+        # Migración: perm_reparto para indicar qué roles son elegibles en repartos
+        cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS perm_reparto BOOLEAN NOT NULL DEFAULT false")
+        cur.execute("UPDATE roles SET perm_reparto = true WHERE nombre = 'operario' AND perm_reparto = false")
+        # Migración: columna color para roles
+        cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS color VARCHAR DEFAULT NULL")
+        # Migración: agregar columna orden si no existe, y asignar valores iniciales
+        cur.execute("ALTER TABLE roles ADD COLUMN IF NOT EXISTS orden INTEGER NOT NULL DEFAULT 100")
+        cur.execute("""
+            UPDATE roles SET orden = CASE
+                WHEN es_protegido = true THEN 0
+                WHEN nombre = 'admin'    THEN 1
+                WHEN nombre = 'operario' THEN 2
+                WHEN nombre = 'vendedor' THEN 3
+                ELSE 100
+            END
+            WHERE orden = 100 OR orden IS NULL
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS articulos_catalogo (
+                cod_art           VARCHAR NOT NULL,
+                mayorista         VARCHAR NOT NULL,
+                descrip           VARCHAR,
+                cod_bar           VARCHAR,
+                cod_bar_bulto     VARCHAR,
+                uxb               INTEGER DEFAULT 0,
+                precio_con_iva    NUMERIC,
+                precio_costo      NUMERIC,
+                precio_mayorista  NUMERIC,
+                porc_iva          NUMERIC,
+                impuestos_monto   NUMERIC,
+                impuestos_porc    NUMERIC,
+                descuento_default NUMERIC,
+                fabricante        VARCHAR,
+                unidad_medida     VARCHAR,
+                tipo_unidad       VARCHAR,
+                familia           VARCHAR,
+                subcategoria      VARCHAR,
+                tipo_estado       VARCHAR,
+                estado            SMALLINT,
+                stock             NUMERIC,
+                observaciones     VARCHAR,
+                folder            VARCHAR,
+                usrdef_0          NUMERIC,
+                usrdef_1          NUMERIC,
+                usrdef_6          NUMERIC,
+                updated_at        TIMESTAMPTZ DEFAULT NOW(),
                 PRIMARY KEY (cod_art, mayorista)
             )
         """)
@@ -283,3 +485,9 @@ app.include_router(nov_diarco, prefix="/api")
 # ── Asignaciones de reparto ────────────────────────────────────────────────────
 app.include_router(asig_yaguar, prefix="/api")
 app.include_router(asig_diarco, prefix="/api")
+app.include_router(asig_shared, prefix="/api")
+# ── Artículos catálogo ─────────────────────────────────────────────────────────
+app.include_router(articulos.router_yaguar, prefix="/api")
+app.include_router(articulos.router_diarco, prefix="/api")
+# ── Roles ──────────────────────────────────────────────────────────────────────
+app.include_router(roles_api.router, prefix="/api")

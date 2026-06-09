@@ -147,14 +147,19 @@ body {
 
 .hub-topbar-btn {
   background: none;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--text) 30%, transparent);
   border-radius: var(--radius);
-  color: var(--muted);
+  color: color-mix(in srgb, var(--text) 70%, transparent);
   font-size: 12px;
   font-family: var(--font);
   padding: 5px 10px;
   cursor: pointer;
   transition: color .15s, border-color .15s;
+  line-height: 1;
+  height: 28px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
 }
 .hub-topbar-btn:hover { color: var(--text); border-color: var(--accent); }
 
@@ -164,6 +169,7 @@ body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
+  min-height: 100dvh;
   padding: 24px;
   background: var(--bg);
 }
@@ -240,9 +246,8 @@ body {
 .hub-sub-selector {
   margin-top: 8px;
   padding: 16px;
-  background: var(--surface);
-  border: 1.5px solid var(--border);
-  border-radius: 12px;
+  background: none;
+  border: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -416,6 +421,7 @@ input:focus, select:focus { border-color: var(--accent); }
 
 /* ── App layout ───────────────────────────────────────────────────────────── */
 #app-view { max-width: 680px; margin: 0 auto; padding: 20px 16px 80px; }
+#app-view > .topbar { margin: -20px -16px 16px; }
 
 /* ── Semana selector ──────────────────────────────────────────────────────── */
 .semana-row {
@@ -450,30 +456,44 @@ input:focus, select:focus { border-color: var(--accent); }
 
 .semana-select:focus { border-color: var(--accent); }
 
-/* ── Top bar ──────────────────────────────────────────────────────────────── */
-.topbar {
+/* ── Top bar (unificado: pick, sobrantes, novedades) ─────────────────────── */
+.topbar, .sob-view-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.topbar-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+.topbar-section-label {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 15px;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  flex-shrink: 0;
 }
 .topbar-logo {
   height: 44px;
-  max-width: 130px;
+  max-width: 110px;
   object-fit: contain;
-  cursor: pointer;
   flex-shrink: 0;
   opacity: .9;
-  transition: opacity .15s;
 }
-.topbar-logo:active { opacity: .6; }
-
-.topbar-actions { display: flex; gap: 8px; }
 .btn-theme { font-size: 16px; }
 
 .topbar-usuario {
-  flex: 1;
-  text-align: center;
   font-size: 12px;
   color: var(--muted);
   letter-spacing: 0.5px;
@@ -2379,21 +2399,47 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
     max-width: 100%;
     padding: 0 0 60px;
   }
+  #app-view > .topbar { margin: 0; }
 
   /* ── Topbar ─────────────────────────────────────────────────────────── */
-  .topbar {
+  .topbar, .sob-view-header {
     padding: 14px 40px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 0;
   }
+  /* ── Hub: full-width y distribuido verticalmente en desktop ─────────── */
+  .hub { max-width: 100%; }
+  #hub-view .hub {
+    justify-content: space-evenly;
+    padding: 40px 0;
+  }
+  .hub-topbar {
+    max-width: 100%;
+    align-self: stretch;
+    padding: 14px 0;
+  }
+
+  /* ── Mayorista cards: horizontal y logos más grandes en desktop ─────── */
+  .mayorista-cards {
+    flex-direction: row;
+    gap: 24px;
+  }
+  .mayorista-card {
+    flex: 1;
+    min-height: 200px;
+    padding: 40px;
+  }
+  .mayorista-logo {
+    max-width: 360px;
+    max-height: 160px;
+  }
+
   /* ── Bottom nav: se vuelve una barra horizontal estática en desktop ─── */
   .bottom-nav {
     position: static;
     border-top: none;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
-    max-width: 720px;
-    margin: 0 auto;
+    max-width: 100%;
+    margin: 0 40px;
     padding-bottom: 0;
   }
   .bottom-nav .tab-btn {
@@ -2412,24 +2458,24 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   .nav-label { font-size: 13px; letter-spacing: .3px; }
 
 
-  /* ── Semana row, progreso, stats: centrados y acotados ─────────────── */
+  /* ── Semana row, progreso, stats: full-width ────────────────────────── */
   .semana-row,
   .progress-bar-wrap,
   .stats {
-    max-width: 720px;
-    margin-left: auto;
-    margin-right: auto;
-    padding-left: 20px;
-    padding-right: 20px;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 40px;
+    padding-right: 40px;
   }
   .semana-row   { padding-top: 20px; }
 
-  /* Pick y Clientes: panel centrado, ancho acotado */
+  /* Pick y Clientes: full-width */
   .tab-panel[data-panel="pick"],
   .tab-panel[data-panel="clientes"] {
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 0 20px;
+    max-width: 100%;
+    margin: 0;
+    padding: 0 40px;
   }
 
   /* ── Admin: panel completo full-width ───────────────────────────────── */
@@ -2617,6 +2663,10 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
 .historial-stat.ok {
   background: color-mix(in srgb, var(--green) 15%, transparent);
   color: var(--green);
+}
+body.light-mode .historial-stat.ok {
+  background: #d1fae5;
+  color: #065f46;
 }
 
 .historial-stat.err {
@@ -3227,11 +3277,19 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   flex: 1;
 }
 
-/* ── Hub: el hub-view necesita flex-direction column para el topbar ──────── */
+/* ── Hub: fondos/bordes neutros, textos/botones en azul frío ─────────────── */
 #hub-view {
   flex-direction: column;
   justify-content: flex-start;
   padding-top: 12px;
+  --border:  #2a2a2a;
+  --surface: #1c1c1c;
+  --bg:      #111111;
+}
+body.light-mode #hub-view {
+  --border:  #d0d0d0;
+  --surface: #f0f0f0;
+  --bg:      #ffffff;
 }
 
 #hub-view .hub {
@@ -3242,6 +3300,38 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   justify-content: center;
   padding: 24px 0;
 }
+
+/* ── Hub topbar: azul frío fijo (no adapta al mayorista) ─────────────────── */
+
+/* Textos del hub — azul claro en dark, marrón cálido en light */
+#hub-view .hub-section-title,
+#hub-view .topbar-usuario {
+  color: #8ec5e8;
+}
+body.light-mode #hub-view .hub-section-title,
+body.light-mode #hub-view .topbar-usuario {
+  color: #5c2e0e;
+}
+
+/* Botones del hub — azul medio en dark, naranja/siena en light */
+#hub-view .hub-topbar-btn {
+  color: #4e8ab5;
+  border-color: rgba(78, 138, 181, 0.45);
+}
+#hub-view .hub-topbar-btn:hover {
+  color: #8ec5e8;
+  border-color: #8ec5e8;
+}
+body.light-mode #hub-view .hub-topbar-btn {
+  color: #b85020;
+  border-color: rgba(184, 80, 32, 0.45);
+}
+body.light-mode #hub-view .hub-topbar-btn:hover {
+  color: #5c2e0e;
+  border-color: #5c2e0e;
+}
+
+/* Sobrantes y Novedades: heredan el tema del mayorista activo (igual que el pick) */
 
 /* ── Sobrantes: botones de stepper más pequeños para que entren en la card ── */
 .sob-stepper .btn-step-minus,
@@ -3269,23 +3359,6 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   height: 100vh;
   overflow-y: auto;
   background: var(--bg);
-}
-
-.sob-view-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 50;
-}
-
-.sob-header-usuario {
-  flex: 1;
-  text-align: center;
 }
 
 .sob-back-btn {
@@ -3468,12 +3541,14 @@ body.light-mode .sob-mayorista-diarco { color: #a0000b; }
   #filtro-estado-dropdown { left: 0; right: auto; max-width: calc(100vw - 32px); }
 }
 
-/* ── Admin clientes: tabla con scroll interno ─────────────────────────────── */
-.admin-tab-panel[data-admin-panel="clientes"] .table-wrap {
+/* ── Admin clientes / artículos: tabla con scroll interno ─────────────────── */
+.admin-tab-panel[data-admin-panel="clientes"] .table-wrap,
+.admin-tab-panel[data-admin-panel="articulos"] .table-wrap {
   max-height: 65vh;
   overflow-y: auto;
 }
-.admin-tab-panel[data-admin-panel="clientes"] .clientes-table thead th {
+.admin-tab-panel[data-admin-panel="clientes"] .clientes-table thead th,
+.admin-tab-panel[data-admin-panel="articulos"] .clientes-table thead th {
   position: sticky;
   top: 0;
   z-index: 10;

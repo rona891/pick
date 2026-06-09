@@ -125,8 +125,8 @@ def _lookup(cod_bar: str, mayorista: str):
 def _search_descrip(q: str, mayorista: str):
     with get_db() as cur:
         cur.execute(
-            "SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, uxb, precio_unit FROM pick WHERE descrip ILIKE %s AND mayorista=%s ORDER BY cod_art, descrip LIMIT 20",
-            (f"%{q}%", mayorista)
+            "SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, uxb, precio_unit FROM pick WHERE (descrip ILIKE %s OR cod_art ILIKE %s) AND mayorista=%s ORDER BY cod_art, descrip LIMIT 20",
+            (f"%{q}%", f"%{q}%", mayorista)
         )
         return [dict(r) for r in cur.fetchall()]
 
@@ -247,8 +247,15 @@ def diarco_delete_item(lista: str, item_id: int): return _delete_item(lista, ite
 def _list_listas_shared():
     with get_db() as cur:
         cur.execute("""
-            SELECT lista, COUNT(*) AS items, MAX(created_at) AS ultima
-            FROM sobrantes GROUP BY lista ORDER BY ultima DESC
+            SELECT COALESCE(sl.nombre, s.lista) AS lista,
+                   COALESCE(s.items, 0) AS items,
+                   COALESCE(s.ultima, sl.created_at) AS ultima
+            FROM sobrantes_listas sl
+            FULL OUTER JOIN (
+                SELECT lista, COUNT(*) AS items, MAX(created_at) AS ultima
+                FROM sobrantes GROUP BY lista
+            ) s ON s.lista = sl.nombre
+            ORDER BY ultima DESC
         """)
         return [dict(r) for r in cur.fetchall()]
 
@@ -291,15 +298,15 @@ def _search_shared(q: str, mayorista: Optional[str] = None):
         if mayorista:
             cur.execute("""
                 SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista, uxb, precio_unit
-                FROM pick WHERE descrip ILIKE %s AND mayorista = %s
+                FROM pick WHERE (descrip ILIKE %s OR cod_art ILIKE %s) AND mayorista = %s
                 ORDER BY cod_art, descrip LIMIT 20
-            """, (f"%{q}%", mayorista))
+            """, (f"%{q}%", f"%{q}%", mayorista))
         else:
             cur.execute("""
                 SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip, mayorista, uxb, precio_unit
-                FROM pick WHERE descrip ILIKE %s
+                FROM pick WHERE (descrip ILIKE %s OR cod_art ILIKE %s)
                 ORDER BY cod_art, descrip LIMIT 20
-            """, (f"%{q}%",))
+            """, (f"%{q}%", f"%{q}%"))
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -422,12 +429,18 @@ def shared_list_listas(): return _list_listas_shared()
 def shared_crear_lista(data: ListaIn):
     nombre = data.nombre.strip()
     if not nombre: raise HTTPException(400, "Nombre vacío")
+    with get_db() as cur:
+        cur.execute(
+            "INSERT INTO sobrantes_listas (nombre) VALUES (%s) ON CONFLICT (nombre) DO NOTHING",
+            (nombre,)
+        )
     return {"lista": nombre}
 
 @router_shared.delete("/listas/{lista}")
 def shared_delete_lista(lista: str):
     with get_db() as cur:
         cur.execute("DELETE FROM sobrantes WHERE lista=%s", (lista,))
+        cur.execute("DELETE FROM sobrantes_listas WHERE nombre=%s", (lista,))
     return {"ok": True}
 
 @router_shared.get("/lookup/{cod_bar}")

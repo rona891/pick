@@ -130,15 +130,27 @@ def _buscar(mayorista: str, q: str, semana: Optional[str]):
         if semana:
             cur.execute("""
                 SELECT DISTINCT cod_bar, cod_art, descrip FROM pick
-                WHERE descrip ILIKE %s AND semana = %s AND mayorista = %s
+                WHERE (descrip ILIKE %s OR cod_art ILIKE %s) AND semana = %s AND mayorista = %s
                 ORDER BY descrip LIMIT 25
-            """, (pattern, semana, mayorista))
+            """, (pattern, pattern, semana, mayorista))
         else:
             cur.execute("""
                 SELECT DISTINCT cod_bar, cod_art, descrip FROM pick
-                WHERE descrip ILIKE %s AND mayorista = %s
+                WHERE (descrip ILIKE %s OR cod_art ILIKE %s) AND mayorista = %s
                 ORDER BY descrip LIMIT 25
-            """, (pattern, mayorista))
+            """, (pattern, pattern, mayorista))
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _todos_articulos(mayorista: str, semana: str):
+    """Devuelve todos los artículos distintos de un semana para búsqueda fuzzy client-side."""
+    with get_db() as cur:
+        cur.execute("""
+            SELECT DISTINCT ON (cod_art) cod_bar, cod_art, descrip
+            FROM pick
+            WHERE semana = %s AND mayorista = %s
+            ORDER BY cod_art, descrip
+        """, (semana, mayorista))
         return [dict(r) for r in cur.fetchall()]
 
 
@@ -233,19 +245,25 @@ def _historial(mayorista: str, semana: Optional[str]):
     with get_db() as cur:
         if semana:
             cur.execute("""
-                SELECT cod_art, descrip, nombre, uni, cantidad_entregada, estado, updated_by,
-                       created_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at
-                FROM pick_auditoria
-                WHERE semana = %s AND mayorista = %s
-                ORDER BY created_at DESC
+                SELECT pa.cod_art, pa.descrip, pa.nombre, pa.uni, pa.cantidad_entregada,
+                       pa.estado, pa.updated_by,
+                       pa.created_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at,
+                       COALESCE(p.uxb, 1) AS uxb
+                FROM pick_auditoria pa
+                LEFT JOIN pick p ON p.id = pa.pick_id
+                WHERE pa.semana = %s AND pa.mayorista = %s
+                ORDER BY pa.created_at DESC
             """, (semana, mayorista))
         else:
             cur.execute("""
-                SELECT cod_art, descrip, nombre, uni, cantidad_entregada, estado, updated_by,
-                       created_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at
-                FROM pick_auditoria
-                WHERE mayorista = %s
-                ORDER BY created_at DESC
+                SELECT pa.cod_art, pa.descrip, pa.nombre, pa.uni, pa.cantidad_entregada,
+                       pa.estado, pa.updated_by,
+                       pa.created_at AT TIME ZONE 'America/Argentina/Buenos_Aires' AS updated_at,
+                       COALESCE(p.uxb, 1) AS uxb
+                FROM pick_auditoria pa
+                LEFT JOIN pick p ON p.id = pa.pick_id
+                WHERE pa.mayorista = %s
+                ORDER BY pa.created_at DESC
                 LIMIT 500
             """, (mayorista,))
         rows = cur.fetchall()
@@ -269,6 +287,10 @@ def yaguar_por_cliente(nombre: str = Query(...), semana: Optional[str] = Query(N
 @router_yaguar.get("/buscar")
 def yaguar_buscar(q: str = Query(..., min_length=2), semana: Optional[str] = Query(None)):
     return _buscar("yaguar", q, semana)
+
+@router_yaguar.get("/todos-articulos")
+def yaguar_todos_articulos(semana: str = Query(...)):
+    return _todos_articulos("yaguar", semana)
 
 @router_yaguar.get("/barcode/{cod_bar}", response_model=List[Pick])
 def yaguar_by_barcode(cod_bar: str, semana: Optional[str] = Query(None)):
@@ -310,6 +332,10 @@ def diarco_por_cliente(nombre: str = Query(...), semana: Optional[str] = Query(N
 @router_diarco.get("/buscar")
 def diarco_buscar(q: str = Query(..., min_length=2), semana: Optional[str] = Query(None)):
     return _buscar("diarco", q, semana)
+
+@router_diarco.get("/todos-articulos")
+def diarco_todos_articulos(semana: str = Query(...)):
+    return _todos_articulos("diarco", semana)
 
 @router_diarco.get("/barcode/{cod_bar}", response_model=List[Pick])
 def diarco_by_barcode(cod_bar: str, semana: Optional[str] = Query(None)):

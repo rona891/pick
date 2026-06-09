@@ -250,7 +250,7 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
             # Artículos del pedido (pasos GWS.ELEM)
             # Formula × V2 × V4 = total sin IVA del ítem
             items = conn.execute(
-                "SELECT STEPUID, STEPSelDesc, Value2, Value4, Formula FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS.ELEM'",
+                "SELECT STEPUID, STEPSelDesc, Value1, Value2, Value4, Formula FROM mWTATrx WHERE TRANSID=? AND STEPCode='GWS.ELEM'",
                 (transid,),
             ).fetchall()
 
@@ -275,10 +275,19 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
                 except (ValueError, TypeError):
                     qty = 0
                 if qty <= 0:
-                    continue
-                # Si factor>1: Value2 está en bultos → multiplicar por uxb para obtener unidades
-                uni = qty * uxb if qty_en_bultos and uxb > 0 else qty
-                bul = uni // uxb if uxb > 0 else 0
+                    # Algunos ítems DIARCO guardan la cantidad en Value1 (ya en unidades, sin factor)
+                    try:
+                        qty_v1 = int(float(item["Value1"] or 0))
+                    except (ValueError, TypeError):
+                        qty_v1 = 0
+                    if qty_v1 <= 0:
+                        continue
+                    uni = qty_v1
+                    bul = uni // uxb if uxb > 0 else 0
+                else:
+                    # Si factor>1: Value2 está en bultos → multiplicar por uxb para obtener unidades
+                    uni = qty * uxb if qty_en_bultos and uxb > 0 else qty
+                    bul = uni // uxb if uxb > 0 else 0
 
                 try:
                     formula_sin_iva = float(item["Formula"] or 0)
@@ -317,11 +326,54 @@ def _query_diarco_db(db_bytes: bytes, fecha_desde: str, fecha_hasta: str, zonas_
                 f = picks[i].pop("_formula_sin_iva", 0.0)
                 picks[i]["precio_unit"] = round(f * iva_ratio, 4) if f else None
 
+        catalogo = _leer_catalogo_diarco(conn, barcodes_13, barcodes_14)
         conn.close()
     finally:
         os.unlink(tmp_path)
 
-    return picks, totales
+    return picks, totales, catalogo
+
+
+def _leer_catalogo_diarco(conn, barcodes_13: dict, barcodes_14: dict) -> list:
+    """Lee el catálogo de artículos ALO de mWTARep y construye dicts para upsert."""
+    familias = {str(r["STEPUID"]): r["RepDesc"]
+                for r in conn.execute(
+                    "SELECT STEPUID, RepDesc FROM mWTARep WHERE Key1='FAM'"
+                ).fetchall()}
+    subfamilias = {str(r["STEPUID"]): r["RepDesc"]
+                   for r in conn.execute(
+                       "SELECT STEPUID, RepDesc FROM mWTARep WHERE Key1='SUBFAM'"
+                   ).fetchall()}
+
+    catalogo = []
+    for row in conn.execute("""
+        SELECT STEPUID, RepDesc, Value1, Value2, Value4, Value5, Value8, Key2, Key4, Key5
+        FROM mWTARep
+        WHERE Key1='ALO' AND TRIM(STEPUID) GLOB '[0-9]*' AND TRIM(STEPUID) != ''
+        GROUP BY STEPUID
+    """).fetchall():
+        def _f(v):
+            try: return float(v) if v not in (None, '', -1) else None
+            except (ValueError, TypeError): return None
+
+        cod = str(row["STEPUID"]).strip()
+        uxb, _, descrip = _parse_pack(row["RepDesc"])
+        catalogo.append({
+            "cod_art":          cod,
+            "descrip":          descrip,
+            "uxb":              uxb,
+            "precio_costo":     _f(row["Value1"]),
+            "precio_con_iva":   _f(row["Value2"]),
+            "precio_mayorista": _f(row["Value4"]),
+            "stock":            _f(row["Value5"]),
+            "tipo_unidad":      str(row["Value8"]).strip() if row["Value8"] else None,
+            "tipo_estado":      str(row["Key5"]).strip() if row["Key5"] else None,
+            "cod_bar":          barcodes_13.get(cod),
+            "cod_bar_bulto":    barcodes_14.get(cod),
+            "familia":          familias.get(str(row["Key2"])) if row["Key2"] else None,
+            "subcategoria":     subfamilias.get(str(row["Key4"])) if row["Key4"] else None,
+        })
+    return catalogo
 
 
 @router.get("/")
@@ -369,11 +421,14 @@ async def importar_semana_diarco(
 
     all_picks: list = []
     totales_por_cliente: dict = {}
+    all_catalogo: dict = {}  # cod_art → row, deduplicado entre archivos
 
     for archivo in archivos:
         content = await archivo.read()
-        picks, totales = _query_diarco_db(content, fecha_desde, fecha_hasta, zonas_norm)
+        picks, totales, catalogo = _query_diarco_db(content, fecha_desde, fecha_hasta, zonas_norm)
         all_picks.extend(picks)
+        for art in catalogo:
+            all_catalogo[art["cod_art"]] = art
         for cliente, monto in totales.items():
             totales_por_cliente[cliente] = totales_por_cliente.get(cliente, 0.0) + monto
 
@@ -509,6 +564,45 @@ async def importar_semana_diarco(
               AND (estado IS NULL OR estado NOT IN ('no_apto', 'no_zona'))
               AND id_yaguar IN (SELECT cliente FROM codigos_con_historial)
         """)
+
+    # Upsert catálogo de artículos DIARCO
+    if all_catalogo:
+        with get_db() as cur:
+            for art in all_catalogo.values():
+                cur.execute("""
+                    INSERT INTO articulos_catalogo
+                        (cod_art, mayorista, descrip, cod_bar, cod_bar_bulto, uxb,
+                         precio_con_iva, precio_costo, precio_mayorista,
+                         tipo_unidad, tipo_estado, familia, subcategoria,
+                         stock, updated_at)
+                    VALUES (%s,'diarco',%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                    ON CONFLICT (cod_art, mayorista) DO UPDATE SET
+                        descrip=EXCLUDED.descrip,
+                        cod_bar=EXCLUDED.cod_bar,
+                        cod_bar_bulto=EXCLUDED.cod_bar_bulto,
+                        uxb=EXCLUDED.uxb,
+                        precio_con_iva=EXCLUDED.precio_con_iva,
+                        precio_costo=EXCLUDED.precio_costo,
+                        precio_mayorista=EXCLUDED.precio_mayorista,
+                        tipo_unidad=EXCLUDED.tipo_unidad,
+                        tipo_estado=EXCLUDED.tipo_estado,
+                        familia=EXCLUDED.familia,
+                        subcategoria=EXCLUDED.subcategoria,
+                        stock=EXCLUDED.stock,
+                        updated_at=NOW()
+                    WHERE (
+                        articulos_catalogo.descrip IS DISTINCT FROM EXCLUDED.descrip OR
+                        articulos_catalogo.precio_con_iva IS DISTINCT FROM EXCLUDED.precio_con_iva OR
+                        articulos_catalogo.precio_costo IS DISTINCT FROM EXCLUDED.precio_costo OR
+                        articulos_catalogo.familia IS DISTINCT FROM EXCLUDED.familia OR
+                        articulos_catalogo.stock IS DISTINCT FROM EXCLUDED.stock
+                    )
+                """, (
+                    art["cod_art"], art["descrip"], art["cod_bar"], art["cod_bar_bulto"],
+                    art["uxb"], art["precio_con_iva"], art["precio_costo"],
+                    art["precio_mayorista"], art["tipo_unidad"], art["tipo_estado"],
+                    art["familia"], art["subcategoria"], art["stock"],
+                ))
 
     clientes_sin_datos = [{"id": cod, "nombre": obs} for cod, obs in sin_datos.items()]
 

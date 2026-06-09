@@ -4,6 +4,7 @@ let scannerActive = false;
 let adminUnlocked = false;
 let editingClienteId = null;
 let semanaActual = '';
+let _pickDescripCache = []; // artículos del semana actual para búsqueda fuzzy
 let soloPendientes = false;
 let wakeLock = null;
 let resumenData = [];
@@ -22,6 +23,13 @@ let clienteActual = '';        // nombre del cliente cuyo sheet está abierto
 let filtroRepartosClientes = new Set();  // repartos seleccionados como chips
 let _clienteEsFA = false;               // true cuando el nuevo cliente es Factura A
 
+function _actualizarCuitHint() {
+  const hint = document.getElementById('cf-cuit-hint');
+  if (!hint) return;
+  hint.textContent = _clienteEsFA ? '*' : '(opcional)';
+  hint.style.color = _clienteEsFA ? 'var(--danger, #e53e3e)' : 'var(--muted)';
+}
+
 // ── Estado: filtro de repartos en Pick tab ─────────────────────────────────
 let filtroRepartosPick = new Set();      // repartos seleccionados en Pick
 let zonaRepartoMap = {};                 // { 'MERLO': 'Merlo', 'VILLA LARCA': 'Sur Arriba', ... }
@@ -33,6 +41,19 @@ const INACTIVIDAD_MS = 10 * 60 * 1000; // 10 minutos
 
 function _saveView(view) {
   localStorage.setItem('_last_view', view);
+  // Si es una vista de app, también guardarla como última vista de app
+  // (separada de _last_view que puede ser 'hub' al presionar Volver)
+  if (view === 'pick' || view === 'clientes' || view === 'admin') {
+    localStorage.setItem('_last_app_view', view);
+  }
+}
+
+function _saveAdminTab(adminTab) {
+  localStorage.setItem('_last_admin_tab', adminTab);
+}
+
+function _getAdminTab() {
+  return localStorage.getItem('_last_admin_tab') || null;
 }
 
 function _updateActivity() {
@@ -65,11 +86,15 @@ function _restoreView() {
 document.addEventListener('DOMContentLoaded', () => {
   aplicarModo();
   if (getToken()) {
-    if (mayoristaCaducado() || !_actividadReciente()) {
-      showHub();
-    } else {
-      _restoreView();
-    }
+    // Refrescar permisos desde el servidor antes de mostrar la vista,
+    // para evitar usar datos stale de una sesión anterior con distinto rol
+    checkPermissions().finally(() => {
+      if (mayoristaCaducado() || !_actividadReciente()) {
+        showHub();
+      } else {
+        _restoreView();
+      }
+    });
   } else {
     showLogin();
   }
@@ -79,11 +104,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const target = btn.dataset.adminTab;
       document.querySelectorAll('.admin-tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.adminTab === target));
       document.querySelectorAll('.admin-tab-panel').forEach((p) => p.classList.toggle('hidden', p.dataset.adminPanel !== target));
+      _setTopbarSection(_ADMIN_TAB_LABELS[target] || target);
+      _saveAdminTab(target);
       if (target === 'usuarios') loadUsers();
       if (target === 'nueva-semana') loadSemanasAdmin();
       if (target === 'zonas') loadZonas();
       if (target === 'reparto') loadAsignaciones();
       if (target === 'historial') loadHistorial();
+      if (target === 'articulos') loadArticulos();
     });
   });
 });
@@ -103,8 +131,7 @@ function showNovedades() {
   _saveView('novedades');
   const m = getMayorista();
   aplicarTema(m);
-  document.getElementById('nov-view-badge').textContent = m.toUpperCase();
-  document.getElementById('nov-view-badge').className = `sob-view-badge sob-view-badge-${m}`;
+  document.getElementById('nov-logo').src = m === 'diarco' ? 'diarco.png' : 'yaguar.png';
   document.getElementById('nov-usuario').textContent = localStorage.getItem('username') || '';
   document.getElementById('novedades-view').classList.remove('hidden');
   initNovedades();
@@ -132,6 +159,37 @@ function showHub() {
   const hubTheme = document.getElementById('hub-theme-btn');
   if (hubTheme) hubTheme.textContent = esLightMode() ? '🌙' : '☀';
   document.getElementById('hub-usuario').textContent = localStorage.getItem('username') || '';
+
+  // Ocultar cards según mayorista + destino: solo mostrar si el usuario
+  // tiene permiso para ese mayorista Y para esa sección
+  document.querySelectorAll('.mayorista-card').forEach(c => {
+    const m    = c.dataset.mayorista;
+    const dest = c.dataset.destino || 'pick';
+    const tieneM = m === 'yaguar' ? tieneYaguar() : tieneDiarco();
+    let tieneDest;
+    if      (dest === 'sobrantes') tieneDest = tieneSobrantes();
+    else if (dest === 'novedades') tieneDest = tieneNovedades();
+    else {
+      // La card de picking solo aparece si hay pick o permisos de PANEL
+      // (no basta con usuarios/roles que se gestionan desde el hub)
+      const _panelApp = ['admin_clientes','admin_clientes_full','admin_semanas',
+                         'admin_zonas','admin_auditoria','admin_articulos'];
+      tieneDest = tienePick() || _panelApp.some(p => hasPerm(p));
+    }
+    c.classList.toggle('hidden', !tieneM || !tieneDest);
+  });
+
+  // Ocultar la sección Picking entera si no quedan cards visibles
+  const hayCardsPick = [...document.querySelectorAll('.mayorista-card[data-destino="pick"]')]
+    .some(c => !c.classList.contains('hidden'));
+  document.getElementById('hub-picking-section').classList.toggle('hidden', !hayCardsPick);
+
+  // Si el mayorista activo ya no es accesible, cambiar al que sí está disponible
+  const actual = getMayorista();
+  if ((actual === 'yaguar' && !tieneYaguar()) || (actual === 'diarco' && !tieneDiarco())) {
+    if (tieneYaguar()) setMayorista('yaguar');
+    else if (tieneDiarco()) setMayorista('diarco');
+  }
 }
 
 function showSobrantes() {
@@ -139,8 +197,7 @@ function showSobrantes() {
   _saveView('sobrantes');
   const m = getMayorista();
   aplicarTema(m);
-  document.getElementById('sob-view-badge').textContent = m.toUpperCase();
-  document.getElementById('sob-view-badge').className = `sob-view-badge sob-view-badge-${m}`;
+  document.getElementById('sob-logo').src = m === 'diarco' ? 'diarco.png' : 'yaguar.png';
   document.getElementById('sob-usuario').textContent = localStorage.getItem('username') || '';
   document.getElementById('sobrantes-view').classList.remove('hidden');
   initSobrantes();
@@ -158,7 +215,11 @@ function showApp(initialTab = 'pick') {
   _hideAllViews();
   document.getElementById('app-view').classList.remove('hidden');
   const adminBtn = document.querySelector('.tab-btn[data-tab="admin"]');
-  adminBtn.classList.toggle('hidden', !esAdminOVendedor());
+  // Solo mostrar Panel si tiene permisos reales de panel (no basta usuarios/roles del hub)
+  const _panelPerms = ['admin_clientes','admin_clientes_full','admin_semanas',
+                       'admin_zonas','admin_auditoria','admin_articulos'];
+  const tienePanelReal = _panelPerms.some(p => hasPerm(p)) || esVendedor();
+  adminBtn.classList.toggle('hidden', !tienePanelReal);
   if (esVendedor()) document.getElementById('nav-admin-label').textContent = 'Gestión';
   else document.getElementById('nav-admin-label').textContent = 'Panel';
   const sinPick = !tienePick();
@@ -182,18 +243,19 @@ async function checkPermissions() {
   if (!getToken()) return;
   try {
     const me = await api.getMe();
-    const prevSob = localStorage.getItem('acceso_sobrantes');
-    const prevNov = localStorage.getItem('acceso_novedades');
-    const prevPick = localStorage.getItem('acceso_pick');
-    const newSob = me.acceso_sobrantes ? '1' : '0';
-    const newNov = me.acceso_novedades ? '1' : '0';
-    const newPick = me.acceso_pick ? '1' : '0';
-    localStorage.setItem('acceso_sobrantes', newSob);
-    localStorage.setItem('acceso_novedades', newNov);
-    localStorage.setItem('acceso_pick', newPick);
-    if (prevSob !== newSob || prevNov !== newNov || prevPick !== newPick) {
+    const prev = _ALL_PERMS.map(p => localStorage.getItem(p));
+    _savePerms(me);
+    if (me.rol) setRol(me.rol);
+    const changed = _ALL_PERMS.some((p, i) => (me[p] ? '1' : '0') !== prev[i]);
+    if (changed) {
       const hubVisible = !document.getElementById('hub-view').classList.contains('hidden');
       if (hubVisible) showHub();
+      // Si el mayorista activo ya no es accesible, forzar cambio
+      const actual = getMayorista();
+      if ((actual === 'yaguar' && !tieneYaguar()) || (actual === 'diarco' && !tieneDiarco())) {
+        if (tieneYaguar()) setMayorista('yaguar');
+        else if (tieneDiarco()) setMayorista('diarco');
+      }
     }
   } catch { /* silencioso */ }
 }
@@ -214,11 +276,13 @@ function esLightMode() {
 function aplicarModo() {
   const light = esLightMode();
   document.body.classList.toggle('light-mode', light);
-  const btn = document.getElementById('btn-theme');
-  if (btn) btn.textContent = light ? '🌙' : '☀';
+  document.querySelectorAll('.btn-theme').forEach(btn => {
+    btn.textContent = light ? '🌙' : '☀';
+  });
 }
 
-document.getElementById('btn-theme').addEventListener('click', () => {
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.btn-theme')) return;
   localStorage.setItem('lightMode', esLightMode() ? '0' : '1');
   aplicarModo();
 });
@@ -233,16 +297,39 @@ document.querySelectorAll('.mayorista-card').forEach((btn) => {
   btn.addEventListener('click', () => {
     const m = btn.dataset.mayorista;
     const destino = btn.dataset.destino || 'pick';
+
+    // Verificar permisos en tiempo de click (doble protección además de la ocultación visual)
+    const tieneM = m === 'yaguar' ? tieneYaguar() : tieneDiarco();
+    let tieneDest;
+    if      (destino === 'sobrantes') tieneDest = tieneSobrantes();
+    else if (destino === 'novedades') tieneDest = tieneNovedades();
+    else {
+      const _panelApp = ['admin_clientes','admin_clientes_full','admin_semanas',
+                         'admin_zonas','admin_auditoria','admin_articulos'];
+      tieneDest = tienePick() || _panelApp.some(p => hasPerm(p));
+    }
+    if (!tieneM || !tieneDest) return; // bloquear si no tiene permiso
+
     setMayorista(m);
     aplicarTema(m);
     if (destino === 'sobrantes') {
       showSobrantes();
     } else if (destino === 'novedades') {
       showNovedades();
-    } else if (!tienePick()) {
-      showApp('admin');
     } else {
-      showApp('pick');
+      const _lastAppView = localStorage.getItem('_last_app_view') || 'pick';
+      const _panelApp = ['admin_clientes','admin_clientes_full','admin_semanas',
+                         'admin_zonas','admin_auditoria','admin_articulos'];
+      const _tienePanelReal = _panelApp.some(p => hasPerm(p)) || esVendedor();
+      if (_lastAppView === 'admin' && _tienePanelReal) {
+        showApp('admin');  // initAdmin restaurará el sub-tab guardado
+      } else if (_lastAppView === 'clientes' && tienePick()) {
+        showApp('clientes');
+      } else if (!tienePick()) {
+        showApp('admin');
+      } else {
+        showApp('pick');
+      }
     }
   });
 });
@@ -254,14 +341,18 @@ function cambiarMayorista() {
 }
 
 document.getElementById('hub-btn-sobrantes').addEventListener('click', () => {
+  document.getElementById('hub-nov-selector').classList.add('hidden');
   document.getElementById('hub-sob-selector').classList.remove('hidden');
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 });
 
+document.getElementById('app-back-btn').addEventListener('click', () => showHub());
 document.getElementById('sob-back-btn').addEventListener('click', volverAlHub);
 
 document.getElementById('hub-btn-novedades').addEventListener('click', () => {
   document.getElementById('hub-sob-selector').classList.add('hidden');
   document.getElementById('hub-nov-selector').classList.remove('hidden');
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 });
 document.getElementById('hub-nov-cancelar').addEventListener('click', () => {
   document.getElementById('hub-nov-selector').classList.add('hidden');
@@ -269,12 +360,24 @@ document.getElementById('hub-nov-cancelar').addEventListener('click', () => {
 
 // ── Hub topbar: Usuarios, Tema, Cuenta, Salir ──────────────────────────────
 document.getElementById('hub-admin-btn').addEventListener('click', () => {
+  // Resetear al tab Usuarios
+  document.getElementById('gest-panel-usuarios').classList.remove('hidden');
+  document.getElementById('gest-panel-roles').classList.add('hidden');
+  document.querySelectorAll('.gest-tab-btn').forEach(b => {
+    const active = b.dataset.gestTab === 'usuarios';
+    b.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
+    b.style.color = active ? 'var(--text)' : 'var(--muted)';
+  });
   document.getElementById('usuarios-modal').classList.remove('hidden');
   loadUsers();
+  _recargarSelectsRoles();
 });
 
 document.getElementById('usuarios-modal-close').addEventListener('click', () => {
   document.getElementById('usuarios-modal').classList.add('hidden');
+});
+document.getElementById('usuarios-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
 });
 
 document.getElementById('hub-theme-btn').addEventListener('click', () => {
@@ -317,15 +420,9 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
     const res = await api.login(username, password);
     setToken(res.access_token);
     setRol(res.rol);
-    localStorage.setItem('acceso_sobrantes', res.acceso_sobrantes ? '1' : '0');
-    localStorage.setItem('acceso_novedades', res.acceso_novedades ? '1' : '0');
-    localStorage.setItem('acceso_pick', res.acceso_pick ? '1' : '0');
+    _savePerms(res);
     localStorage.setItem('username', username);
-    if (mayoristaCaducado()) {
-      showMayoristaSelector();
-    } else {
-      showApp();
-    }
+    showHub(); // siempre mostrar el hub al iniciar sesión
     setTimeout(() => { if (!isFullscreen()) enterFullscreen(); }, 300);
   } catch (err) {
     errorDiv.textContent = err.message || 'Usuario o contraseña incorrectos';
@@ -336,7 +433,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
   }
 });
 
-document.getElementById('logout-btn').addEventListener('click', async () => {
+document.getElementById('logout-btn')?.addEventListener('click', async () => {
   await api.logout().catch(() => {});
   clearToken();
   stopScanner();
@@ -353,16 +450,25 @@ async function loadSemanas() {
     if (semanas.length === 0) {
       select.innerHTML = '<option value="">Sin semanas cargadas</option>';
       semanaActual = '';
+      _pickDescripCache = [];
     } else {
       select.innerHTML = semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('');
       semanaActual = semanas[0].nombre;
       select.value = semanaActual;
+      _cargarPickDescripCache(semanaActual);
     }
   } catch (_) {}
 }
 
+async function _cargarPickDescripCache(semana) {
+  try {
+    _pickDescripCache = semana ? await api.getTodosArticulosSemana(semana) : [];
+  } catch (_) { _pickDescripCache = []; }
+}
+
 document.getElementById('semana-select').addEventListener('change', (e) => {
   semanaActual = e.target.value;
+  _cargarPickDescripCache(semanaActual);
   document.getElementById('results').innerHTML = '';
   document.getElementById('barcode-input').value = '';
   document.getElementById('descrip-input').value = '';
@@ -401,6 +507,18 @@ function updateProgressBar(completed, total) {
   if (label) { label.textContent = pct + '%'; label.style.color = pct >= 100 ? 'var(--green)' : ''; }
 }
 
+// ── Nombre de sección en topbar ────────────────────────────────────────────
+const _TAB_LABELS = { pick: 'Pick', clientes: 'Clientes', admin: 'Panel' };
+const _ADMIN_TAB_LABELS = {
+  'clientes': 'Clientes', 'nueva-semana': 'Semanas', 'usuarios': 'Usuarios',
+  'zonas': 'Zonas', 'reparto': 'Reparto', 'historial': 'Auditoría',
+  'articulos': 'Artículos', 'roles': 'Roles',
+};
+function _setTopbarSection(name) {
+  const el = document.getElementById('topbar-section');
+  if (el) el.textContent = name || '';
+}
+
 // ── Tabs ───────────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -416,6 +534,7 @@ function switchTab(tab) {
   if (tab === 'admin') initAdmin();
   if (tab === 'sobrantes') initSobrantes();
   _saveView(tab);
+  _setTopbarSection(_TAB_LABELS[tab] || tab);
 }
 
 // ── Tab: Pick ──────────────────────────────────────────────────────────────
@@ -933,7 +1052,7 @@ document.getElementById('descrip-input').addEventListener('input', (e) => {
   clearTimeout(descripTimer);
   const q = e.target.value.trim();
   if (q.length < 2) { hideDescripResults(); return; }
-  descripTimer = setTimeout(() => buscarPorDescrip(q), 300);
+  descripTimer = setTimeout(() => buscarPorDescrip(_normQuery(q)), 300);
 });
 
 document.getElementById('descrip-input').addEventListener('keydown', (e) => {
@@ -960,7 +1079,12 @@ document.addEventListener('click', (e) => {
 
 async function buscarPorDescrip(q) {
   try {
-    const items = await api.buscarPorDescrip(q, semanaActual);
+    // Si hay caché del semana, filtrar localmente con fuzzy; si no, usar API
+    const items = _pickDescripCache.length
+      ? _pickDescripCache.filter(item =>
+          _clienteMatch(q, item.descrip ?? '') || _clienteMatch(q, item.cod_art ?? ''))
+        .slice(0, 25)
+      : await api.buscarPorDescrip(q, semanaActual);
     const container = document.getElementById('descrip-results');
     if (!items.length) {
       container.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
@@ -1340,7 +1464,7 @@ document.querySelectorAll('#filtro-estado-dropdown .chip-reparto[data-filter]').
 
 
 document.getElementById('clientes-search').addEventListener('input', (e) => {
-  renderResumen(e.target.value.trim().toLowerCase());
+  renderResumen(e.target.value.trim());
 });
 
 function getPapelesKey() {
@@ -1365,7 +1489,7 @@ function renderResumen(searchQ = '') {
     : resumenData.filter((r) => r.estado_general === filtroActivo);
 
   if (searchQ) {
-    filtered = filtered.filter((r) => r.nombre.toLowerCase().includes(searchQ));
+    filtered = filtered.filter((r) => _clienteMatch(searchQ, r.nombre));
   }
 
   if (!filtered.length) {
@@ -1406,7 +1530,7 @@ function renderResumen(searchQ = '') {
       const nombre = decodeURIComponent(btn.dataset.papel);
       const marcado = !btn.classList.contains('marcado');
       savePapelSeparado(nombre, marcado);
-      renderResumen(document.getElementById('clientes-search').value.trim().toLowerCase());
+      renderResumen(document.getElementById('clientes-search').value.trim());
     });
   });
 
@@ -1530,31 +1654,34 @@ function initAdmin() {
     document.getElementById('admin-lock').classList.add('hidden');
     document.getElementById('admin-panel').classList.remove('hidden');
 
-    // Usuarios siempre oculto del panel (movido al hub)
-    document.querySelector('.admin-tab-btn[data-admin-tab="usuarios"]').classList.add('hidden');
-    // Vendedor: ocultar Semanas, Zonas, Reparto e Historial
-    document.querySelector('.admin-tab-btn[data-admin-tab="nueva-semana"]').classList.toggle('hidden', vendedor);
-    document.querySelector('.admin-tab-btn[data-admin-tab="zonas"]').classList.toggle('hidden', vendedor);
-    document.querySelector('.admin-tab-btn[data-admin-tab="reparto"]').classList.toggle('hidden', vendedor);
-    document.querySelector('.admin-tab-btn[data-admin-tab="historial"]').classList.toggle('hidden', vendedor);
+    // Visibilidad de tabs según permisos granulares del rol
+    document.querySelector('.admin-tab-btn[data-admin-tab="usuarios"]').classList.add('hidden'); // siempre en hub modal
+    document.querySelector('.admin-tab-btn[data-admin-tab="clientes"]').classList.toggle('hidden', !puedeGestionarClientes());
+    document.querySelector('.admin-tab-btn[data-admin-tab="nueva-semana"]').classList.toggle('hidden', !puedeImportarSemanas());
+    document.querySelector('.admin-tab-btn[data-admin-tab="zonas"]').classList.toggle('hidden', !puedeGestionarZonas());
+    document.querySelector('.admin-tab-btn[data-admin-tab="reparto"]').classList.toggle('hidden', !puedeGestionarZonas());
+    document.querySelector('.admin-tab-btn[data-admin-tab="historial"]').classList.toggle('hidden', !puedeVerAuditoria());
+    document.querySelector('.admin-tab-btn[data-admin-tab="articulos"]').classList.toggle('hidden', !puedeVerArticulos());
 
-    const esDiarco = getMayorista() === 'diarco';
-    if (esDiarco && !vendedor) {
-      document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.add('hidden'));
-      const firstBtn = document.querySelector('.admin-tab-btn:not(.hidden)');
-      if (firstBtn) {
-        firstBtn.classList.add('active');
-        const target = firstBtn.dataset.adminTab;
-        document.querySelector(`.admin-tab-panel[data-admin-panel="${target}"]`)?.classList.remove('hidden');
-        if (target === 'nueva-semana') loadSemanasAdmin();
-        if (target === 'clientes') loadClientes();
-      }
-    } else {
-      // Asegurar que Clientes esté activo para Yaguar o vendedor
-      document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.adminTab === 'clientes'));
-      document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.toggle('hidden', p.dataset.adminPanel !== 'clientes'));
-      loadClientes();
+    // Buscar el tab a mostrar: el guardado (si existe y es visible) o el primero visible
+    document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.admin-tab-panel').forEach(p => p.classList.add('hidden'));
+    const savedAdminTab = _getAdminTab();
+    const savedBtn = savedAdminTab
+      ? document.querySelector(`.admin-tab-btn[data-admin-tab="${savedAdminTab}"]:not(.hidden)`)
+      : null;
+    const firstBtn = savedBtn || document.querySelector('.admin-tab-btn:not(.hidden)');
+    if (firstBtn) {
+      firstBtn.classList.add('active');
+      const target = firstBtn.dataset.adminTab;
+      document.querySelector(`.admin-tab-panel[data-admin-panel="${target}"]`)?.classList.remove('hidden');
+      if (target === 'nueva-semana') loadSemanasAdmin();
+      if (target === 'clientes') loadClientes();
+      if (target === 'historial') loadHistorial();
+      if (target === 'zonas') loadZonas();
+      if (target === 'reparto') loadAsignaciones();
+      if (target === 'articulos') loadArticulos();
+      _setTopbarSection(_ADMIN_TAB_LABELS[target] || target);
     }
   } else {
     document.getElementById('admin-lock').classList.remove('hidden');
@@ -1664,6 +1791,44 @@ let _clientesData = [];
 let _clientesSortCol = 'nombre';
 let _clientesSortDir = 1;  // 1 = asc, -1 = desc
 
+// Normaliza solo acentos (mantiene espacios) para enviar a búsquedas API
+function _normQuery(q) {
+  return (q || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function _norm(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, '');
+}
+
+function _lev(a, b) {
+  const m = a.length, n = b.length;
+  const d = Array.from({length: m + 1}, (_, i) =>
+    Array.from({length: n + 1}, (_, j) => i === 0 ? j : j === 0 ? i : 0));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i-1] === b[j-1] ? 0 : 1;
+      d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + cost);
+      if (i > 1 && j > 1 && a[i-1] === b[j-2] && a[i-2] === b[j-1])
+        d[i][j] = Math.min(d[i][j], d[i-2][j-2] + cost);
+    }
+  return d[m][n];
+}
+
+function _clienteMatch(query, campo) {
+  const q = _norm(query);
+  const t = _norm(campo);
+  if (!q) return true;
+  if (t.includes(q)) return true;
+  if (q.length < 4) return false;
+  const maxErr = Math.max(1, Math.floor(q.length / 4));
+  for (let i = 0; i <= t.length - q.length; i++) {
+    if (_lev(q, t.slice(i, i + q.length)) <= maxErr) return true;
+  }
+  return false;
+}
+
 async function loadClientes() {
   document.getElementById('btn-exportar-clientes').classList.remove('hidden');
   const tbody = document.getElementById('clientes-tbody');
@@ -1713,11 +1878,12 @@ function renderClientes() {
     const tipoCell = c.es_factura_a
       ? '<span class="badge-fa">A</span>'
       : '<span class="badge-cf">CF</span>';
-    const hidden = q && !(`${c.id_yaguar} ${c.nombre} ${flete}`).toLowerCase().includes(q) ? 'style="display:none"' : '';
+    const hidden = q && !_clienteMatch(q, c.nombre) && !_clienteMatch(q, c.id_yaguar ?? '') && !_clienteMatch(q, c.localidad ?? '') ? 'style="display:none"' : '';
     return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})" ${hidden}>
       <td class="td-full td-cod">${c.id_yaguar ?? '—'}</td>
       <td style="text-align:center;width:52px">${tipoCell}</td>
       <td class="td-full">${c.nombre ?? ''}</td>
+      <td>${c.localidad ?? '—'}</td>
       <td>${flete}</td>
       <td onclick="event.stopPropagation()"><div class="td-actions">
         <button class="btn-edit" onclick="openClienteForm(${c.id})">Editar</button>
@@ -1801,6 +1967,8 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null,
         document.getElementById('cf-flete').value = c.flete != null ? Math.round(c.flete * 10000) / 100 : '';
         document.getElementById('cf-cod_sis').value = c.cod_sis ?? '';
         document.getElementById('cf-cuit_deposito').value = c.cuit_deposito ?? '';
+        _clienteEsFA = c.es_factura_a ?? false;
+        _actualizarCuitHint();
         // Vendor: add to list if value isn't already an option (legacy/imported data)
         const vv = c.vendedor ?? '';
         if (vv && !selVend.querySelector(`option[value="${vv.replace(/"/g, '\\"')}"]`)) {
@@ -1818,12 +1986,15 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null,
   }
 
   // Vendedores editando: solo pueden tocar nombre, zona, dirección, teléfono, contacto
-  const soloLectura = id && esVendedor();
+  // soloLectura = tiene permiso básico pero NO el completo (al editar un cliente existente)
+  const soloLectura = !!id && !puedeGestionarClientesFull();
   idInput.readOnly = idInput.readOnly || soloLectura;
-  selVend.disabled = soloLectura;  // select no soporta readOnly; disabled pero JS aún lee .value
+  selVend.disabled = soloLectura;
   document.getElementById('cf-flete-wrap').style.display   = soloLectura ? 'none' : '';
   document.getElementById('cf-cod-sis-wrap').classList.toggle('hidden', !esYaguar || soloLectura);
-  document.getElementById('cf-cuit-wrap').style.display    = soloLectura ? 'none' : '';
+  // cuit_deposito visible en ambos modos (básico y completo)
+  document.getElementById('cf-cuit-wrap').style.display    = '';
+  _actualizarCuitHint();
 
   document.getElementById('cliente-modal').classList.remove('hidden');
 }
@@ -1875,6 +2046,7 @@ document.getElementById('cliente-form').addEventListener('submit', async (e) => 
 
   if (!data.localidad) { showToast('Seleccioná una zona', 'error'); return; }
   if (!data.vendedor) { showToast('Ingresá el vendedor', 'error'); return; }
+  if (_clienteEsFA && !data.cuit_deposito) { showToast('El CUIT es obligatorio para clientes Factura A', 'error'); return; }
 
   if (editingClienteId) {
     const ok = await confirmar('¿Confirmás los cambios en este cliente?');
@@ -2062,37 +2234,145 @@ async function deleteSemana(id, nombre) {
 const ROL_COLORS = { superadmin: 'var(--accent)', admin: 'var(--green)', vendedor: '#7eb8ff', operario: 'var(--muted)' };
 const ROL_LABELS = { superadmin: 'Superadmin', admin: 'Admin', vendedor: 'Vendedor', operario: 'Operario' };
 
+let _usersData = [];
+let _usersSortCol = 'rol';
+let _usersSortDir = 1;
+
 async function loadUsers() {
   const tbody = document.getElementById('users-tbody');
   if (!tbody) return;
   tbody.innerHTML = '<tr><td colspan="3" class="loading">Cargando...</td></tr>';
   try {
-    const users = await api.getUsers();
-    tbody.innerHTML = users.map((u) => {
-      const esSuperadmin = u.rol === 'superadmin';
-      const rolLabel = `<span style="color:${ROL_COLORS[u.rol] || 'var(--muted)'}">${ROL_LABELS[u.rol] || u.rol}</span>`;
-      const deleteBtn = esSuperadmin ? '' : `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>`;
-      const clickAttr = esSuperadmin ? '' : `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick})" style="cursor:pointer"`;
-      return `
-        <tr ${clickAttr}>
-          <td>${u.username}</td>
-          <td>${rolLabel}</td>
-          <td onclick="event.stopPropagation()"><div class="td-actions">${deleteBtn}</div></td>
-        </tr>`;
-    }).join('');
+    // Cargar roles si no están disponibles para que el orden por rol funcione
+    if (!_rolesData.length) {
+      _rolesData = await api.getRoles().catch(() => []);
+    }
+    _usersData = await api.getUsers();
+    renderUsers();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="3" class="error-msg">${err.message}</td></tr>`;
   }
 }
 
+function renderUsers() {
+  const tbody = document.getElementById('users-tbody');
+  if (!tbody) return;
+  const q = (document.getElementById('users-search')?.value || '').toLowerCase();
+
+  // Usar el orden definido en la tabla de roles (si está cargado)
+  const _rolWeight = (r) => {
+    if (r === 'superadmin') return -1;
+    const found = _rolesData.find(x => x.nombre === r);
+    return found ? (found.orden ?? 100) : 100;
+  };
+  const superadmins = _usersData.filter(u => u.rol === 'superadmin');
+  const resto = _usersData.filter(u => u.rol !== 'superadmin');
+  const data = [...superadmins, ...resto.sort((a, b) => {
+    let va, vb;
+    if (_usersSortCol === 'rol') {
+      va = _rolWeight(a.rol);
+      vb = _rolWeight(b.rol);
+    } else {
+      va = (a[_usersSortCol] || '').toLowerCase();
+      vb = (b[_usersSortCol] || '').toLowerCase();
+    }
+    if (va < vb) return -_usersSortDir;
+    if (va > vb) return  _usersSortDir;
+    return 0;
+  })];
+
+  // Actualizar indicadores en headers
+  document.querySelectorAll('#users-table th[data-sort]').forEach(th => {
+    const col = th.dataset.sort;
+    const arrow = col === _usersSortCol ? (_usersSortDir === 1 ? ' ▲' : ' ▼') : '';
+    th.textContent = th.dataset.label + arrow;
+  });
+
+  tbody.innerHTML = data.map((u) => {
+    if (q && !u.username.toLowerCase().includes(q) && !(ROL_LABELS[u.rol] || u.rol).toLowerCase().includes(q)) {
+      return '';
+    }
+    const esEsteSuperadmin = u.rol === 'superadmin';
+    const superadminCount = data.filter(x => x.rol === 'superadmin').length;
+    const callerEsSuperadmin = esSuperadmin();
+    // El último superadmin no se puede tocar (ni editar ni eliminar)
+    const esUltimoSuperadmin = esEsteSuperadmin && superadminCount <= 1;
+    // Para los demás superadmins: solo otro superadmin puede tocarlos
+    const puedeTocar = !esUltimoSuperadmin && (!esEsteSuperadmin || callerEsSuperadmin);
+    const rolColor = _rolesData.find(r => r.nombre === u.rol)?.color || ROL_COLORS[u.rol] || 'var(--muted)';
+    const rolLabel = `<span style="color:${rolColor}">${ROL_LABELS[u.rol] || u.rol}</span>`;
+    const deleteBtn = puedeTocar ? `<button class="btn-del" onclick="deleteUser(${u.id})">✕</button>` : '';
+    const clickAttr = puedeTocar ? `onclick="openEditUser(${u.id}, '${u.username.replace(/'/g, "\\'")}', '${u.rol}', ${u.acceso_sobrantes}, ${u.acceso_novedades}, ${u.acceso_pick}, ${u.acceso_reparto})" style="cursor:pointer"` : '';
+    return `<tr ${clickAttr}>
+      <td>${u.username}</td>
+      <td>${rolLabel}</td>
+      <td onclick="event.stopPropagation()"><div class="td-actions">${deleteBtn}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+// Click en header → ordenar
+document.addEventListener('click', (e) => {
+  const th = e.target.closest('#users-table th[data-sort]');
+  if (!th) return;
+  const col = th.dataset.sort;
+  if (_usersSortCol === col) _usersSortDir *= -1;
+  else { _usersSortCol = col; _usersSortDir = 1; }
+  renderUsers();
+});
+
+// Buscador
+document.getElementById('users-search')?.addEventListener('input', renderUsers);
+
+// Tabs del modal de administración (Usuarios / Roles)
+document.querySelectorAll('.gest-tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.gestTab;
+    document.querySelectorAll('.gest-tab-btn').forEach(b => {
+      const isActive = b.dataset.gestTab === tab;
+      b.style.borderBottomColor = isActive ? 'var(--accent)' : 'transparent';
+      b.style.color = isActive ? 'var(--text)' : 'var(--muted)';
+    });
+    document.getElementById('gest-panel-usuarios').classList.toggle('hidden', tab !== 'usuarios');
+    document.getElementById('gest-panel-roles').classList.toggle('hidden', tab !== 'roles');
+    if (tab === 'roles') loadRoles();
+  });
+});
+
+// Botón Nuevo usuario
+document.getElementById('btn-nuevo-usuario')?.addEventListener('click', () => {
+  document.getElementById('nuevo-usuario-form').reset();
+  _recargarSelectsRoles().then(() => {
+    document.getElementById('nuevo-usuario-modal').classList.remove('hidden');
+  });
+});
+document.getElementById('nuevo-usuario-modal-close')?.addEventListener('click', () => {
+  document.getElementById('nuevo-usuario-modal').classList.add('hidden');
+});
+document.getElementById('nuevo-usuario-modal')?.addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
+
 // ── Modal editar usuario ───────────────────────────────────────────────────
-function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades, accesosPick) {
+function openEditUser(id, username, rol, accesoSobrantes, accesoNovedades, accesosPick, accesoReparto) {
   document.getElementById('edit-user-id').value = id;
   document.getElementById('edit-username').value = username;
-  document.getElementById('edit-rol').value = rol;
+  // Incluir superadmin en el select solo si el caller ES superadmin
+  const selRol = document.getElementById('edit-rol');
+  if (esSuperadmin()) {
+    if (!selRol.querySelector('option[value="superadmin"]')) {
+      const opt = document.createElement('option');
+      opt.value = 'superadmin'; opt.textContent = 'Superadmin';
+      selRol.insertBefore(opt, selRol.firstChild);
+    }
+  } else {
+    selRol.querySelector('option[value="superadmin"]')?.remove();
+  }
+  selRol.value = rol;
   document.getElementById('edit-sobrantes').checked = !!accesoSobrantes;
   document.getElementById('edit-novedades').checked = !!accesoNovedades;
   document.getElementById('edit-pick').checked = accesosPick === undefined ? true : !!accesosPick;
+  document.getElementById('edit-reparto').checked = !!accesoReparto;
   document.getElementById('edit-rol-group').classList.remove('hidden');
   document.getElementById('edit-user-modal').classList.remove('hidden');
 }
@@ -2112,6 +2392,7 @@ document.getElementById('edit-user-form').addEventListener('submit', async (e) =
     acceso_sobrantes: document.getElementById('edit-sobrantes').checked,
     acceso_novedades: document.getElementById('edit-novedades').checked,
     acceso_pick: document.getElementById('edit-pick').checked,
+    acceso_reparto: document.getElementById('edit-reparto').checked,
   };
   data.rol = document.getElementById('edit-rol').value;
   try {
@@ -2168,6 +2449,7 @@ document.getElementById('nuevo-usuario-form').addEventListener('submit', async (
     await api.createUser(username, password, rol);
     showToast(`Usuario ${username} creado`, 'success');
     document.getElementById('nuevo-usuario-form').reset();
+    document.getElementById('nuevo-usuario-modal')?.classList.add('hidden');
     loadUsers();
   } catch (err) {
     showToast(err.message, 'error');
@@ -2330,7 +2612,7 @@ document.getElementById('btn-importar-diarco').addEventListener('click', async (
 });
 
 // ── Cambiar contraseña ─────────────────────────────────────────────────────
-document.getElementById('change-pw-btn').addEventListener('click', () => {
+document.getElementById('change-pw-btn')?.addEventListener('click', () => {
   document.getElementById('pw-form').reset();
   document.getElementById('username-form').reset();
   document.getElementById('pw-modal').classList.remove('hidden');
@@ -2381,8 +2663,6 @@ document.getElementById('username-form').addEventListener('submit', async (e) =>
   const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   if (!MOBILE) return;
 
-  const btn = document.getElementById('btn-fullscreen');
-
   function enterFullscreen() {
     const el = document.documentElement;
     if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
@@ -2398,16 +2678,20 @@ document.getElementById('username-form').addEventListener('submit', async (e) =>
     return !!(document.fullscreenElement || document.webkitFullscreenElement);
   }
 
-  function updateBtn() {
-    if (!btn) return;
-    btn.textContent = isFullscreen() ? '⊡' : '⛶';
-    btn.title = isFullscreen() ? 'Salir de pantalla completa' : 'Pantalla completa';
+  function updateBtns() {
+    const icon = isFullscreen() ? '⊡' : '⛶';
+    const title = isFullscreen() ? 'Salir de pantalla completa' : 'Pantalla completa';
+    document.querySelectorAll('.btn-fullscreen-mobile').forEach(b => {
+      b.textContent = icon;
+      b.title = title;
+    });
   }
 
-  document.addEventListener('fullscreenchange', updateBtn);
-  document.addEventListener('webkitfullscreenchange', updateBtn);
+  document.addEventListener('fullscreenchange', updateBtns);
+  document.addEventListener('webkitfullscreenchange', updateBtns);
 
-  if (btn) btn.addEventListener('click', () => {
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.btn-fullscreen-mobile')) return;
     if (isFullscreen()) exitFullscreen(); else enterFullscreen();
   });
 
@@ -2527,7 +2811,7 @@ document.getElementById('nueva-zona-form').addEventListener('submit', async (e) 
 });
 
 // ── Modal de confirmación ──────────────────────────────────────────────────
-function confirmar(msg, btnLabel = 'Sí, confirmar') {
+function confirmar(msg, btnLabel = 'Sí, confirmar', mostrarCancelar = true) {
   return new Promise((resolve) => {
     const overlay = document.getElementById('confirm-modal');
     document.getElementById('confirm-msg').textContent = msg;
@@ -2535,8 +2819,10 @@ function confirmar(msg, btnLabel = 'Sí, confirmar') {
     const ok = document.getElementById('confirm-ok');
     ok.textContent = btnLabel;
     const cancel = document.getElementById('confirm-cancel');
+    cancel.style.display = mostrarCancelar ? '' : 'none';
     function cleanup(result) {
       overlay.classList.add('hidden');
+      cancel.style.display = '';
       ok.removeEventListener('click', onOk);
       cancel.removeEventListener('click', onCancel);
       resolve(result);
@@ -2571,6 +2857,7 @@ let _sobCameras = [];
 let _sobCamIdx = 0;
 
 async function initSobrantes() {
+  _ensureCatalogoCache(); // carga en background para búsqueda fuzzy
   await loadSobListas();
 }
 
@@ -2579,28 +2866,30 @@ async function loadSobListas() {
     _sobListas = await api.sobGetListas();
   } catch { _sobListas = []; }
 
-  const sel = document.getElementById('sob-lista-select');
+  const btn = document.getElementById('sob-lista-btn');
+  const optionsContainer = document.getElementById('sob-lista-options');
+
   if (_sobListas.length === 0) {
     const now = new Date();
     const hoy = `${String(now.getDate()).padStart(2,'0')}-${String(now.getMonth()+1).padStart(2,'0')}-${now.getFullYear()}`;
     const nombre = `Sobrantes ${hoy}`;
     _sobListaActual = nombre;
-    sel.innerHTML = `<option value="${nombre}">${nombre}</option>`;
+    btn.textContent = `${nombre} ▾`;
+    optionsContainer.innerHTML = `<button class="chip-reparto active" data-lista="${nombre}">${nombre}</button>`;
   } else {
-    sel.innerHTML = _sobListas.map(l =>
-      `<option value="${l.lista}">${l.lista}</option>`
-    ).join('');
     if (!_sobListaActual || !_sobListas.find(l => l.lista === _sobListaActual)) {
       _sobListaActual = _sobListas[0].lista;
     }
-    sel.value = _sobListaActual;
+    btn.textContent = `${_sobListaActual} ▾`;
+    optionsContainer.innerHTML = _sobListas.map(l =>
+      `<button class="chip-reparto${l.lista === _sobListaActual ? ' active' : ''}" data-lista="${l.lista}">${l.lista}</button>`
+    ).join('');
   }
   await loadSobItems();
 }
 
 async function loadSobItems() {
-  const lista = document.getElementById('sob-lista-select').value;
-  _sobListaActual = lista;
+  const lista = _sobListaActual;
   if (!lista) { renderSobItems([]); return; }
   try {
     _sobItems = await api.sobGetItems(lista);
@@ -2637,16 +2926,16 @@ function renderSobItems(items) {
       </div>
       <div class="sob-steppers">
         <div class="sob-stepper">
-          <span class="sob-stepper-label">UNI</span>
-          <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="unidades">−</button>
-          <span class="sob-stepper-val" data-id="${item.id}" data-field="unidades">${item.unidades}</span>
-          <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="unidades">+</button>
-        </div>
-        <div class="sob-stepper">
           <span class="sob-stepper-label">BUL</span>
           <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="bultos">−</button>
           <span class="sob-stepper-val" data-id="${item.id}" data-field="bultos">${item.bultos}</span>
           <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="bultos">+</button>
+        </div>
+        <div class="sob-stepper">
+          <span class="sob-stepper-label">UNI</span>
+          <button class="btn-step-minus sob-btn" data-id="${item.id}" data-field="unidades">−</button>
+          <span class="sob-stepper-val" data-id="${item.id}" data-field="unidades">${item.unidades}</span>
+          <button class="btn-step-plus sob-btn" data-id="${item.id}" data-field="unidades">+</button>
         </div>
       </div>
     </div>
@@ -2672,6 +2961,7 @@ document.getElementById('sob-items').addEventListener('click', async (e) => {
   const removeBtn = e.target.closest('.sob-item-remove');
   if (removeBtn) {
     const id = parseInt(removeBtn.dataset.id);
+    if (!await confirmar('¿Quitar este artículo de la lista?', 'Sí, quitar')) return;
     try {
       await api.sobDeleteItem(_sobListaActual, id);
       _sobItems = _sobItems.filter(i => i.id !== id);
@@ -2681,32 +2971,18 @@ document.getElementById('sob-items').addEventListener('click', async (e) => {
 });
 
 // Buscar / escanear
-async function sobBuscar(codBar) {
-  if (!codBar.trim()) return;
-  const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
+async function _sobAgregarArticulo(codBar, codArt, descrip, precioUnit, uxb) {
+  const lista = _sobListaActual;
   if (!lista) { showToast('Creá una lista primero', 'error'); return; }
-
-  let cod_art = null, descrip = null, mayorista = getMayorista(), precio_unit = null, uxb = 0;
-  let encontradoEnPicks = false;
   try {
-    const lookup = await api.sobLookup(codBar.trim());
-    if (lookup.found) {
-      cod_art = lookup.cod_art;
-      descrip = lookup.descrip;
-      // Siempre usar el mayorista activo — el lookup puede encontrar el artículo
-      // en el otro mayorista y asignaría el mayorista incorrecto
-      precio_unit = lookup.precio_unit ?? null;
-      uxb = lookup.uxb || 0;
-      encontradoEnPicks = true;
-    }
-    // Si no está en picks se agrega igual con solo el código de barras
-  } catch { /* continúa con solo el barcode */ }
-
-  try {
-    const res = await api.sobAddItem(lista, { cod_bar: codBar.trim(), cod_art, descrip, mayorista, precio_unit, uxb });
+    const res = await api.sobAddItem(lista, {
+      cod_bar: codBar || null, cod_art: codArt || null, descrip: descrip || null,
+      mayorista: getMayorista(), precio_unit: precioUnit || null, uxb: uxb || 0,
+    });
+    _sobItems = await api.sobGetItems(lista);
+    await loadSobListas();
+    renderSobItems(_sobItems);
     if (res.action === 'existing') {
-      _sobItems = await api.sobGetItems(lista);
-      renderSobItems(_sobItems);
       showToast('Ya estaba en la lista — resaltado', 'info');
       setTimeout(() => {
         const el = document.querySelector(`.sob-item[data-id="${res.id}"]`);
@@ -2714,14 +2990,42 @@ async function sobBuscar(codBar) {
         setTimeout(() => el?.classList.remove('highlight'), 1500);
       }, 50);
     } else {
-      _sobItems = await api.sobGetItems(lista);
-      await loadSobListas();
-      renderSobItems(_sobItems);
-      showToast(encontradoEnPicks ? 'Artículo agregado' : 'Artículo agregado (sin descripción — no está en picks)', 'success');
+      showToast('Artículo agregado', 'success');
       setTimeout(() => document.querySelector('.sob-item')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     }
   } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function sobBuscar(codBar) {
+  const bar = (codBar || '').trim();
+  if (!bar) return;
+  if (!_sobListaActual) { showToast('Creá una lista primero', 'error'); return; }
   document.getElementById('sob-barcode-input').value = '';
+
+  try {
+    const items = await api.getArticulos(bar, 10);
+    const exactos = items.filter(i => i.cod_bar === bar || i.cod_bar_bulto === bar);
+    const lista_ = exactos.length ? exactos : items;
+
+    if (lista_.length === 1) {
+      const a = lista_[0];
+      await _sobAgregarArticulo(bar, a.cod_art, a.descrip, a.precio_con_iva, a.uxb || 0);
+    } else if (lista_.length > 1) {
+      // Mostrar picker (reutiliza el panel de búsqueda de texto)
+      const results = document.getElementById('sob-descrip-results');
+      const fmt = (v) => v != null ? '$' + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+      results.innerHTML = lista_.map(i =>
+        `<div class="descrip-result-item" data-bar="${i.cod_bar || ''}" data-art="${i.cod_art || ''}" data-descrip="${(i.descrip || '').replace(/"/g, '&quot;')}" data-precio="${i.precio_con_iva ?? ''}" data-uxb="${i.uxb || 0}">
+           <span class="descrip-result-text">${i.descrip}</span>
+         </div>`
+      ).join('');
+      results.classList.remove('hidden');
+    } else {
+      _abrirFallbackModal(bar, async (art) => {
+        await _sobAgregarArticulo(art.cod_bar, art.cod_art, art.descrip, art.precio_unit, art.uxb);
+      });
+    }
+  } catch { showToast('Error al buscar el artículo', 'error'); }
 }
 
 document.getElementById('sob-barcode-input').addEventListener('keydown', (e) => {
@@ -2729,6 +3033,18 @@ document.getElementById('sob-barcode-input').addEventListener('keydown', (e) => 
 });
 
 // Búsqueda por descripción
+// Catálogo local para búsqueda fuzzy en sobrantes y novedades
+let _catalogoCache = [];
+let _catalogoCacheMayorista = '';
+async function _ensureCatalogoCache() {
+  const m = getMayorista();
+  if (_catalogoCache.length && _catalogoCacheMayorista === m) return;
+  try {
+    _catalogoCache = await api.getArticulos('', 20000);
+    _catalogoCacheMayorista = m;
+  } catch { _catalogoCache = []; }
+}
+
 let _sobDescripTimer = null;
 document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
   clearTimeout(_sobDescripTimer);
@@ -2737,16 +3053,21 @@ document.getElementById('sob-descrip-input').addEventListener('input', (e) => {
   if (q.length < 2) { results.classList.add('hidden'); return; }
   _sobDescripTimer = setTimeout(async () => {
     try {
-      const items = await api.sobSearch(q);
+      const items = _catalogoCache.length
+        ? _catalogoCache.filter(i =>
+            _clienteMatch(q, i.descrip ?? '') ||
+            _clienteMatch(q, i.cod_bar ?? '') ||
+            _clienteMatch(q, i.cod_bar_bulto ?? ''))
+          .slice(0, 50)
+        : await api.getArticulos(_normQuery(q), 50);
       if (!items.length) {
         results.innerHTML = '<div class="descrip-result-empty">Sin resultados</div>';
         results.classList.remove('hidden');
         return;
       }
       results.innerHTML = items.map(i =>
-        `<div class="descrip-result-item" data-bar="${i.cod_bar || ''}" data-art="${i.cod_art || ''}" data-descrip="${(i.descrip || '').replace(/"/g, '&quot;')}" data-mayorista="${i.mayorista || 'yaguar'}" data-precio="${i.precio_unit ?? ''}" data-uxb="${i.uxb || 0}">
+        `<div class="descrip-result-item" data-bar="${i.cod_bar || ''}" data-art="${i.cod_art || ''}" data-descrip="${(i.descrip || '').replace(/"/g, '&quot;')}" data-precio="${i.precio_con_iva ?? ''}" data-uxb="${i.uxb || 0}">
           <span class="descrip-result-text">${i.descrip}</span>
-          <span class="sob-mayorista-badge sob-mayorista-${i.mayorista || 'otro'}">${(i.mayorista || '?').toUpperCase()}</span>
         </div>`
       ).join('');
       results.classList.remove('hidden');
@@ -2759,37 +3080,29 @@ document.getElementById('sob-descrip-results').addEventListener('click', async (
   if (!item) return;
   document.getElementById('sob-descrip-results').classList.add('hidden');
   document.getElementById('sob-descrip-input').value = '';
-  const lista = document.getElementById('sob-lista-select').value || _sobListaActual;
+  const lista = _sobListaActual;
   if (!lista) { showToast('Creá una lista primero', 'error'); return; }
-  try {
-    const res = await api.sobAddItem(lista, {
-      cod_bar: item.dataset.bar || null,
-      cod_art: item.dataset.art || null,
-      descrip: item.dataset.descrip || null,
-      mayorista: item.dataset.mayorista || 'yaguar',
-      precio_unit: item.dataset.precio ? parseFloat(item.dataset.precio) : null,
-      uxb: parseInt(item.dataset.uxb) || 0,
-    });
-    if (res.action === 'existing') {
-      _sobItems = await api.sobGetItems(lista);
-      renderSobItems(_sobItems);
-      setTimeout(() => {
-        const el = document.querySelector(`.sob-item[data-id="${res.id}"]`);
-        if (el) { el.classList.add('highlight'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-        setTimeout(() => el?.classList.remove('highlight'), 1500);
-      }, 50);
-    } else {
-      _sobItems = await api.sobGetItems(lista);
-      await loadSobListas();
-      renderSobItems(_sobItems);
-      setTimeout(() => document.querySelector('.sob-item')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-    }
-  } catch (err) { showToast(err.message, 'error'); }
+  await _sobAgregarArticulo(
+    item.dataset.bar || null,
+    item.dataset.art || null,
+    item.dataset.descrip || null,
+    item.dataset.precio ? parseFloat(item.dataset.precio) : null,
+    parseInt(item.dataset.uxb) || 0,
+  );
 });
 
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#sob-descrip-input') && !e.target.closest('#sob-descrip-results')) {
     document.getElementById('sob-descrip-results')?.classList.add('hidden');
+  }
+  if (!e.target.closest('#sob-lista-wrap')) {
+    document.getElementById('sob-lista-dropdown')?.classList.add('hidden');
+  }
+  if (!e.target.closest('#nov-semana-wrap')) {
+    document.getElementById('nov-semana-dropdown')?.classList.add('hidden');
+  }
+  if (!e.target.closest('#hist-semana-wrap')) {
+    document.getElementById('hist-semana-dropdown')?.classList.add('hidden');
   }
 });
 
@@ -2819,12 +3132,26 @@ document.getElementById('sob-nueva-input').addEventListener('keydown', (e) => {
   if (e.key === 'Escape') document.getElementById('sob-nueva-modal').classList.add('hidden');
 });
 
-// Cambiar lista
-document.getElementById('sob-lista-select').addEventListener('change', loadSobItems);
+// Dropdown de lista
+document.getElementById('sob-lista-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('sob-lista-dropdown').classList.toggle('hidden');
+});
+
+document.getElementById('sob-lista-options').addEventListener('click', (e) => {
+  const opt = e.target.closest('[data-lista]');
+  if (!opt) return;
+  _sobListaActual = opt.dataset.lista;
+  document.getElementById('sob-lista-btn').textContent = `${_sobListaActual} ▾`;
+  document.getElementById('sob-lista-dropdown').classList.add('hidden');
+  document.querySelectorAll('#sob-lista-options [data-lista]').forEach(b => b.classList.remove('active'));
+  opt.classList.add('active');
+  loadSobItems();
+});
 
 // Eliminar lista
 document.getElementById('sob-del-lista-btn').addEventListener('click', async () => {
-  const lista = document.getElementById('sob-lista-select').value;
+  const lista = _sobListaActual;
   if (!lista) return;
   if (!await confirmar(`¿Eliminar la lista "${lista}"? Esta acción no se puede deshacer.`, 'Sí, eliminar')) return;
   try {
@@ -2945,25 +3272,37 @@ function stopHistScanner() {
 // ── Historial ─────────────────────────────────────────────────────────────
 let _historialRows = [];
 
+let _histSemana = '';
+
 async function loadHistorial() {
   const resumenWrap = document.getElementById('historial-resumen');
   const tablaWrap = document.getElementById('historial-tabla-wrap');
-  const semSel = document.getElementById('hist-semana-sel');
+  const semBtn = document.getElementById('hist-semana-btn');
+  const semOptions = document.getElementById('hist-semana-options');
   const usuSel = document.getElementById('hist-filter-usuario');
 
   resumenWrap.innerHTML = '<p class="loading">Cargando...</p>';
   tablaWrap.innerHTML = '';
 
-  // Cargar semanas para el selector propio del historial
+  // Cargar semanas para el dropdown
   try {
     const semanas = await api.getSemanas();
-    semSel.innerHTML = semanas.length
-      ? semanas.map((s) => `<option value="${s.nombre}">${s.nombre}</option>`).join('')
-      : '<option value="">Sin semanas</option>';
-    // Preseleccionar la semana activa del pick tab si está disponible
-    if (semanaActual && semanas.find((s) => s.nombre === semanaActual)) semSel.value = semanaActual;
+    if (semanas.length) {
+      // Preseleccionar la semana activa del pick tab si está disponible
+      const pre = semanaActual && semanas.find((s) => s.nombre === semanaActual) ? semanaActual : semanas[0].nombre;
+      _histSemana = pre;
+      semBtn.textContent = `${_histSemana} ▾`;
+      semOptions.innerHTML = semanas.map((s) =>
+        `<button class="chip-reparto${s.nombre === _histSemana ? ' active' : ''}" data-semana="${s.nombre}">${s.nombre}</button>`
+      ).join('');
+    } else {
+      _histSemana = '';
+      semBtn.textContent = 'Sin semanas ▾';
+      semOptions.innerHTML = '';
+    }
   } catch (_) {
-    semSel.innerHTML = '<option value="">Error cargando semanas</option>';
+    _histSemana = '';
+    semBtn.textContent = 'Error ▾';
   }
 
   // Cargar todos los usuarios para el selector (una sola vez)
@@ -2977,15 +3316,31 @@ async function loadHistorial() {
     resumenWrap.innerHTML = '<p class="loading">Cargando...</p>';
     tablaWrap.innerHTML = '';
     try {
-      _historialRows = await api.getHistorial(semSel.value);
+      _historialRows = await api.getHistorial(_histSemana);
       renderHistorial();
     } catch (err) {
       resumenWrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
     }
   }
 
-  semSel.onchange = fetchYRender;
+  semOptions.addEventListener('click', (e) => {
+    const opt = e.target.closest('[data-semana]');
+    if (!opt) return;
+    _histSemana = opt.dataset.semana;
+    semBtn.textContent = `${_histSemana} ▾`;
+    document.getElementById('hist-semana-dropdown').classList.add('hidden');
+    semOptions.querySelectorAll('[data-semana]').forEach(b => b.classList.remove('active'));
+    opt.classList.add('active');
+    fetchYRender();
+  });
+
+  semBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('hist-semana-dropdown').classList.toggle('hidden');
+  });
+
   document.getElementById('hist-filter-producto').oninput = renderHistorial;
+  document.getElementById('hist-filter-cliente').oninput = renderHistorial;
   usuSel.onchange = renderHistorial;
   document.getElementById('historial-solo-errores').onchange = renderHistorial;
 
@@ -2996,15 +3351,19 @@ function renderHistorial() {
   const resumenWrap = document.getElementById('historial-resumen');
   const tablaWrap = document.getElementById('historial-tabla-wrap');
   const soloErrores = document.getElementById('historial-solo-errores')?.checked;
-  const filtroProd = (document.getElementById('hist-filter-producto')?.value || '').toLowerCase();
-  const filtroUser = document.getElementById('hist-filter-usuario')?.value || '';
+  const filtroProd    = (document.getElementById('hist-filter-producto')?.value || '').trim();
+  const filtroCliente = (document.getElementById('hist-filter-cliente')?.value || '').trim();
+  const filtroUser    = document.getElementById('hist-filter-usuario')?.value || '';
   const esc = (s) => (s || '—').replace(/</g, '&lt;');
 
   // Resumen por usuario (sobre todos los datos, sin filtro)
   const porUsuario = {};
   _historialRows.forEach((r) => {
     const u = r.updated_by || '?';
-    if (!porUsuario[u]) porUsuario[u] = { completados: 0, incompletos: 0 };
+    if (!porUsuario[u]) porUsuario[u] = { completados: 0, incompletos: 0, bultos: 0 };
+    const uxb = r.uxb || 1;
+    const bul = uxb > 1 ? Math.floor((r.cantidad_entregada || 0) / uxb) : 0;
+    porUsuario[u].bultos += bul;
     if (r.estado?.startsWith('completado')) porUsuario[u].completados++;
     else porUsuario[u].incompletos++;
   });
@@ -3021,6 +3380,7 @@ function renderHistorial() {
         <div class="historial-user-chip">
           <span class="historial-user-name">${esc(u)}</span>
           <span class="historial-stat ok">${d.completados} ✓</span>
+          ${d.bultos > 0 ? `<span class="historial-stat">${d.bultos} bul</span>` : ''}
           ${d.incompletos ? `<span class="historial-stat err">${d.incompletos} incompletos</span>` : ''}
         </div>
       `).join('')}
@@ -3032,10 +3392,11 @@ function renderHistorial() {
     if (soloErrores && r.estado?.startsWith('completado')) return false;
     if (filtroUser && r.updated_by !== filtroUser) return false;
     if (filtroProd) {
-      const hayMatch = (r.cod_art || '').toLowerCase().includes(filtroProd) ||
-                       (r.descrip || '').toLowerCase().includes(filtroProd);
+      const hayMatch = _clienteMatch(filtroProd, r.cod_art ?? '') ||
+                       _clienteMatch(filtroProd, r.descrip ?? '');
       if (!hayMatch) return false;
     }
+    if (filtroCliente && !_clienteMatch(filtroCliente, r.nombre ?? '')) return false;
     return true;
   });
 
@@ -3087,7 +3448,7 @@ async function loadAsignaciones() {
   wrap.innerHTML = '<p class="loading">Cargando...</p>';
   try {
     const [semanas, repartos, users] = await Promise.all([
-      api.getSemanas(),
+      api.getSemanasAdmin(),  // solo semanas del mayorista activo
       api.getRepartos(),
       api.getUsers(),
     ]);
@@ -3108,61 +3469,119 @@ async function renderAsignaciones(repartos, users, semana) {
   wrap.innerHTML = '<p class="loading">Cargando asignaciones...</p>';
   try {
     const asignaciones = await api.getAsignaciones(semana);
-    const esc = (s) => (s || '').replace(/</g, '&lt;');
-    const userOptions = users.map((u) => `<option value="${u.id}">${esc(u.username)}</option>`).join('');
+    const esc = s => (s || '').replace(/</g, '&lt;');
+    const asigPorReparto = {};
+    asignaciones.forEach(a => {
+      if (!asigPorReparto[a.reparto]) asigPorReparto[a.reparto] = [];
+      asigPorReparto[a.reparto].push({ id: a.id, user_id: a.user_id, username: a.username });
+    });
+
     wrap.innerHTML = `
       <table class="clientes-table" style="margin-top:12px">
-        <thead><tr><th>Reparto</th><th>Usuario asignado</th></tr></thead>
+        <thead><tr><th>Reparto</th><th>Responsables</th><th></th></tr></thead>
         <tbody>
-          ${repartos.map((r) => `
-            <tr>
+          ${repartos.map((r) => {
+            const asigs = asigPorReparto[r.nombre] || [];
+            const nombres = asigs.length ? asigs.map(a => esc(a.username)).join(', ') : '<span style="color:var(--muted)">Sin asignar</span>';
+            return `<tr data-reparto="${esc(r.nombre)}" style="cursor:pointer">
               <td><strong>${esc(r.nombre)}</strong></td>
-              <td>
-                <select class="reparto-user-sel" data-reparto="${esc(r.nombre)}" style="width:100%">
-                  <option value="">— Sin asignar —</option>
-                  ${userOptions}
-                </select>
+              <td class="reparto-nombres-cell">${nombres}</td>
+              <td style="white-space:nowrap">
+                <button class="btn-edit reparto-editar-btn" data-reparto="${esc(r.nombre)}">✏ Editar</button>
               </td>
             </tr>
-          `).join('')}
+            <tr class="reparto-dropdown-row hidden" data-reparto="${esc(r.nombre)}">
+              <td colspan="3" style="padding:0">
+                <div class="reparto-dropdown-panel" style="padding:12px 16px;background:var(--surface);border-top:1px solid var(--border)">
+                  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+                    ${users.filter(u => u.acceso_reparto).map(u => {
+                      const asig = asigs.find(a => a.user_id === u.id);
+                      return `<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">
+                        <input type="checkbox" class="reparto-user-cb"
+                               data-reparto="${esc(r.nombre)}"
+                               data-userid="${u.id}"
+                               data-asigid="${asig ? asig.id : ''}"
+                               ${asig ? 'checked' : ''} />
+                        ${esc(u.username)}
+                      </label>`;
+                    }).join('')}
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <button class="btn-primary reparto-guardar-btn" data-reparto="${esc(r.nombre)}" style="padding:6px 16px">Guardar</button>
+                    <button class="btn-secondary reparto-cancelar-btn" data-reparto="${esc(r.nombre)}" style="padding:6px 12px">Cancelar</button>
+                  </div>
+                </div>
+              </td>
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
-      <button id="btn-guardar-repartos" class="btn-primary" style="margin-top:14px">Guardar</button>
-      <span id="reparto-save-msg" style="margin-left:10px;font-size:13px;color:var(--green);display:none">Guardado</span>
     `;
-    // Preseleccionar usuarios ya asignados
-    asignaciones.forEach((a) => {
-      const sel = wrap.querySelector(`.reparto-user-sel[data-reparto="${a.reparto}"]`);
-      if (sel) sel.value = a.user_id;
-    });
-    // Guardar todo de una vez
-    wrap.querySelector('#btn-guardar-repartos').addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      btn.disabled = true;
-      btn.textContent = '...';
-      try {
-        const existentes = await api.getAsignaciones(semana);
-        const ops = repartos.map(async (r) => {
-          const sel = wrap.querySelector(`.reparto-user-sel[data-reparto="${r.nombre}"]`);
-          const userId = parseInt(sel?.value);
-          const anterior = existentes.find((x) => x.reparto === r.nombre);
-          if (userId) {
-            await api.setAsignacion({ semana, reparto: r.nombre, user_id: userId });
-          } else if (anterior) {
-            await api.deleteAsignacion(anterior.id);
-          }
+
+    // Abrir/cerrar dropdown por reparto
+    wrap.onclick = async (e) => {
+      const editBtn = e.target.closest('.reparto-editar-btn');
+      const cancelBtn = e.target.closest('.reparto-cancelar-btn');
+      const guardarBtn = e.target.closest('.reparto-guardar-btn');
+
+      // Click en la fila principal (no en el dropdown ni en sus botones)
+      const mainRow = !editBtn && !cancelBtn && !guardarBtn
+        && e.target.closest('tr[data-reparto]:not(.reparto-dropdown-row)');
+
+      const trigger = editBtn || mainRow;
+      if (trigger) {
+        const reparto = trigger.dataset?.reparto || trigger.closest('tr')?.dataset?.reparto;
+        if (!reparto) return;
+        // Cerrar otros dropdowns abiertos
+        wrap.querySelectorAll('.reparto-dropdown-row').forEach(row => {
+          if (row.dataset.reparto !== reparto) row.classList.add('hidden');
         });
-        await Promise.all(ops);
-        const msg = wrap.querySelector('#reparto-save-msg');
-        msg.style.display = 'inline';
-        setTimeout(() => { msg.style.display = 'none'; }, 2000);
-      } catch (err) {
-        alert(err.message);
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Guardar';
+        const dropRow = wrap.querySelector(`.reparto-dropdown-row[data-reparto="${reparto}"]`);
+        dropRow?.classList.toggle('hidden');
       }
-    });
+
+      if (cancelBtn) {
+        const reparto = cancelBtn.dataset.reparto;
+        wrap.querySelector(`.reparto-dropdown-row[data-reparto="${reparto}"]`)?.classList.add('hidden');
+      }
+
+      if (guardarBtn) {
+        const reparto = guardarBtn.dataset.reparto;
+        guardarBtn.disabled = true;
+        guardarBtn.textContent = '...';
+        try {
+          const cbs = wrap.querySelectorAll(`.reparto-user-cb[data-reparto="${reparto}"]`);
+          const ops = [];
+          cbs.forEach(cb => {
+            const userId = parseInt(cb.dataset.userid);
+            const asigId = cb.dataset.asigid ? parseInt(cb.dataset.asigid) : null;
+            if (cb.checked && !asigId) ops.push(api.setAsignacion({ semana, reparto, user_id: userId }));
+            else if (!cb.checked && asigId) ops.push(api.deleteAsignacion(asigId));
+          });
+          await Promise.all(ops);
+          // Recargar asignaciones de este reparto y actualizar la celda de nombres
+          const newAsigs = await api.getAsignaciones(semana);
+          const newAsigReparto = newAsigs.filter(a => a.reparto === reparto);
+          const nuevosNombres = newAsigReparto.length ? newAsigReparto.map(a => esc(a.username)).join(', ') : '<span style="color:var(--muted)">Sin asignar</span>';
+          const nombreCell = wrap.querySelector(`tr[data-reparto="${reparto}"] .reparto-nombres-cell`);
+          if (nombreCell) nombreCell.innerHTML = nuevosNombres;
+          // Actualizar data-asigid en los checkboxes
+          cbs.forEach(cb => {
+            const uid = parseInt(cb.dataset.userid);
+            const match = newAsigReparto.find(a => a.user_id === uid);
+            cb.dataset.asigid = match ? match.id : '';
+            cb.checked = !!match;
+          });
+          wrap.querySelector(`.reparto-dropdown-row[data-reparto="${reparto}"]`)?.classList.add('hidden');
+          showToast('Asignación guardada', 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        } finally {
+          guardarBtn.disabled = false;
+          guardarBtn.textContent = 'Guardar';
+        }
+      }
+    };
   } catch (err) {
     wrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
   }
@@ -3186,25 +3605,44 @@ let _novDescripTimer = null;
 let _novMaxUni = null;  // máximo de unidades según lo pedido por el cliente
 
 async function initNovedades() {
-  const sel = document.getElementById('nov-semana-select');
+  _ensureCatalogoCache(); // carga en background para búsqueda fuzzy
+  const btn = document.getElementById('nov-semana-btn');
+  const optionsContainer = document.getElementById('nov-semana-options');
   try {
     const semanas = await api.getSemanas();
     if (!semanas.length) {
-      sel.innerHTML = '<option value="">Sin semanas</option>';
       _novSemana = '';
+      btn.textContent = 'Sin semanas ▾';
+      optionsContainer.innerHTML = '';
     } else {
-      sel.innerHTML = semanas.map(s => `<option value="${s.nombre}">${s.nombre}</option>`).join('');
       _novSemana = semanas[0].nombre;
-      sel.value = _novSemana;
+      btn.textContent = `${_novSemana} ▾`;
+      optionsContainer.innerHTML = semanas.map(s =>
+        `<button class="chip-reparto${s.nombre === _novSemana ? ' active' : ''}" data-semana="${s.nombre}">${s.nombre}</button>`
+      ).join('');
     }
-  } catch { sel.innerHTML = '<option value="">Error</option>'; }
+  } catch {
+    _novSemana = '';
+    btn.textContent = 'Error ▾';
+  }
   try { _novClientes = await api.getClientes(); } catch { _novClientes = []; }
   _resetNovForm();
   await loadNovedades();
 }
 
-document.getElementById('nov-semana-select').addEventListener('change', (e) => {
-  _novSemana = e.target.value;
+document.getElementById('nov-semana-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('nov-semana-dropdown').classList.toggle('hidden');
+});
+
+document.getElementById('nov-semana-options').addEventListener('click', (e) => {
+  const opt = e.target.closest('[data-semana]');
+  if (!opt) return;
+  _novSemana = opt.dataset.semana;
+  document.getElementById('nov-semana-btn').textContent = `${_novSemana} ▾`;
+  document.getElementById('nov-semana-dropdown').classList.add('hidden');
+  document.querySelectorAll('#nov-semana-options [data-semana]').forEach(b => b.classList.remove('active'));
+  opt.classList.add('active');
   loadNovedades();
 });
 
@@ -3257,6 +3695,7 @@ function renderNovedades(items) {
   }).join('');
   container.querySelectorAll('.nov-del-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
+      if (!await confirmar('¿Eliminar esta novedad?', 'Sí, eliminar')) return;
       try { await api.novDeleteItem(parseInt(btn.dataset.id)); await loadNovedades(); }
       catch (err) { showToast(err.message, 'error'); }
     });
@@ -3271,10 +3710,17 @@ document.getElementById('nov-barcode-input').addEventListener('keydown', (e) => 
 
 async function novBuscarPorCodigo(cod) {
   if (!cod) return;
+  document.getElementById('nov-barcode-input').value = '';
   try {
     const res = await api.novLookup(cod, _novSemana);
-    if (res.found) _setNovItem({ cod_bar: cod, cod_art: res.cod_art, descrip: res.descrip, uxb: res.uxb || 0 });
-    else showToast('Producto no encontrado', 'error');
+    if (res.found) {
+      _setNovItem({ cod_bar: cod, cod_art: res.cod_art, descrip: res.descrip, uxb: res.uxb || 0 });
+    } else {
+      await confirmar(
+        `Este artículo no está en el pick de la semana "${_novSemana || 'actual'}". Para registrar una novedad usá el botón ✏️ Manual.`,
+        'Entendido', false
+      );
+    }
   } catch { showToast('Error en la búsqueda', 'error'); }
 }
 
@@ -3285,7 +3731,11 @@ document.getElementById('nov-descrip-input').addEventListener('input', (e) => {
   if (q.length < 2) { results.classList.add('hidden'); return; }
   _novDescripTimer = setTimeout(async () => {
     try {
-      const items = await api.novSearch(q, _novSemana);
+      const items = _pickDescripCache.length
+        ? _pickDescripCache.filter(i =>
+            _clienteMatch(q, i.descrip ?? '') || _clienteMatch(q, i.cod_art ?? ''))
+          .slice(0, 25)
+        : await api.novSearch(_normQuery(q), _novSemana);
       if (!items.length) {
         results.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
       } else {
@@ -3323,17 +3773,19 @@ async function _setNovItem(item) {
   const clienteBtn = document.getElementById('nov-cliente-btn');
   clienteBtn.disabled = false;
   clienteBtn.textContent = 'Elegir cliente...';
-  // Cargar picks de este ítem para filtrar clientes y conocer cantidades
-  try {
-    let picks = [];
-    if (item.cod_art) picks = await api.getByCodArt(item.cod_art, _novSemana).catch(() => []);
-    if (!picks.length && item.cod_bar) picks = await api.getByBarcode(item.cod_bar, _novSemana).catch(() => []);
-    const seen = new Set();
-    _novClientesFiltrados = picks
-      .filter(p => p.nombre && !seen.has(p.nombre) && seen.add(p.nombre))
-      .map(p => ({ nombre: p.nombre, id_yaguar: p.cliente, uni: p.uni, bul: p.bul, uxb: p.uxb }));
-  } catch {
-    _novClientesFiltrados = _novClientes;
+  // Para ítems manuales, usar siempre la lista completa de clientes
+  if (!item.manual) {
+    try {
+      let picks = [];
+      if (item.cod_art) picks = await api.getByCodArt(item.cod_art, _novSemana).catch(() => []);
+      if (!picks.length && item.cod_bar) picks = await api.getByBarcode(item.cod_bar, _novSemana).catch(() => []);
+      const seen = new Set();
+      _novClientesFiltrados = picks
+        .filter(p => p.nombre && !seen.has(p.nombre) && seen.add(p.nombre))
+        .map(p => ({ nombre: p.nombre, id_yaguar: p.cliente, uni: p.uni, bul: p.bul, uxb: p.uxb }));
+    } catch {
+      _novClientesFiltrados = _novClientes;
+    }
   }
   // Si ya hay cliente seleccionado, actualizar el máximo
   if (_novCliente) _novActualizarMax();
@@ -3352,19 +3804,116 @@ document.getElementById('nov-item-clear').addEventListener('click', () => {
   document.getElementById('nov-cliente-btn').classList.remove('hidden');
 });
 
-// ── Carga manual ─────────────────────────────────────────────────────────────
+// ── Fallback: artículo no encontrado en catálogo ─────────────────────────────
+
+let _fallbackArtCallback = null;
+
+function _abrirFallbackModal(codBar, onConfirm) {
+  document.getElementById('fallback-art-codbar').value = codBar || '';
+  document.getElementById('fallback-art-descrip').value = '';
+  document.getElementById('fallback-art-uxb').value = '';
+  _fallbackArtCallback = onConfirm;
+  document.getElementById('fallback-art-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('fallback-art-descrip').focus(), 50);
+}
+
+function _cerrarFallbackModal() {
+  document.getElementById('fallback-art-modal').classList.add('hidden');
+  _fallbackArtCallback = null;
+}
+
+document.getElementById('fallback-art-cancel').addEventListener('click', _cerrarFallbackModal);
+document.getElementById('fallback-art-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) _cerrarFallbackModal();
+});
+
+document.getElementById('fallback-art-confirm').addEventListener('click', async () => {
+  const descrip = document.getElementById('fallback-art-descrip').value.trim();
+  if (!descrip) { showToast('La descripción es obligatoria', 'error'); return; }
+  const uxb = parseInt(document.getElementById('fallback-art-uxb').value);
+  if (!uxb || uxb <= 0) { showToast('El UxB es obligatorio', 'error'); return; }
+  const codBar = document.getElementById('fallback-art-codbar').value || null;
+  const cb = _fallbackArtCallback;
+  _cerrarFallbackModal();
+  // Guardar en articulos_catalogo del mayorista actual
+  if (codBar) {
+    try { await api.crearArticuloManual({ cod_bar: codBar, descrip, uxb }); } catch {}
+  }
+  if (cb) cb({ cod_bar: codBar, cod_art: codBar, descrip, uxb, precio_unit: null });
+});
+
+// ── Buscar artículo por catálogo (reemplaza ingreso manual libre) ─────────────
+
+let _novManualTimer = null;
+let _novManualItems = [];
+let _novManualScannerActive = false;
+let _novManualCodeReader = null;
 
 function _openNovManualModal() {
-  document.getElementById('nov-manual-codart').value = '';
-  document.getElementById('nov-manual-descrip').value = '';
-  document.getElementById('nov-manual-uxb').value = '';
-  document.getElementById('nov-manual-precio').value = '';
+  document.getElementById('nov-manual-search').value = '';
+  document.getElementById('nov-manual-results').innerHTML = '';
+  _novManualItems = [];
   document.getElementById('nov-manual-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('nov-manual-search').focus(), 50);
 }
 
 function _closeNovManualModal() {
+  stopNovManualScanner();
   document.getElementById('nov-manual-modal').classList.add('hidden');
 }
+
+async function startNovManualScanner() {
+  const container = document.getElementById('nov-manual-scanner-container');
+  container.classList.remove('hidden');
+  document.getElementById('nov-manual-scan-btn').textContent = 'Detener';
+  _novManualScannerActive = true;
+  const hints = new Map([[2, [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+                              ZXing.BarcodeFormat.EAN_14, ZXing.BarcodeFormat.CODE_128,
+                              ZXing.BarcodeFormat.CODE_39, ZXing.BarcodeFormat.UPC_A]], [3, true]]);
+  _novManualCodeReader = new ZXing.BrowserMultiFormatReader(hints, 0);
+  const targetId = localStorage.getItem('pick_last_camera') ?? null;
+  await _novManualCodeReader.decodeFromVideoDevice(targetId, 'nov-manual-scanner-video', async (result) => {
+    if (result) { stopNovManualScanner(); await _novManualBuscarPorBarcode(result.getText()); }
+  });
+}
+
+function stopNovManualScanner() {
+  if (!_novManualScannerActive) return;
+  _novManualScannerActive = false;
+  if (_novManualCodeReader) { _novManualCodeReader.reset(); _novManualCodeReader = null; }
+  const video = document.getElementById('nov-manual-scanner-video');
+  if (video?.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; }
+  document.getElementById('nov-manual-scanner-container').classList.add('hidden');
+  document.getElementById('nov-manual-scan-btn').textContent = 'Escanear';
+}
+
+async function _novManualBuscarPorBarcode(barcode) {
+  try {
+    const items = await api.getArticulos(barcode, 10);
+    const matches = items.filter(i => i.cod_bar === barcode || i.cod_bar_bulto === barcode);
+    const lista = matches.length ? matches : items;
+    if (!lista.length) { showToast('Artículo no encontrado en el catálogo', 'error'); return; }
+    if (lista.length === 1) {
+      const item = lista[0];
+      _closeNovManualModal();
+      await _setNovItem({ cod_art: item.cod_art, cod_bar: item.cod_bar || null,
+        descrip: item.descrip || null, uxb: item.uxb || 0,
+        precio_manual: item.precio_con_iva || null, manual: true });
+      return;
+    }
+    _novManualItems = lista;
+    const fmt = (v) => v != null ? '$' + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+    document.getElementById('nov-manual-results').innerHTML = lista.map((item, idx) => `
+      <div class="descrip-item" data-idx="${idx}" style="cursor:pointer">
+        <div style="font-size:13px;font-weight:600">${item.descrip || '—'}</div>
+        <div style="font-size:11px;color:var(--muted)">${item.cod_art}${item.uxb != null ? ' · UxB: ' + item.uxb : ''}${item.precio_con_iva != null ? ' · ' + fmt(item.precio_con_iva) : ''}</div>
+      </div>`).join('');
+  } catch { showToast('Error al buscar el artículo', 'error'); }
+}
+
+document.getElementById('nov-manual-scan-btn').addEventListener('click', async () => {
+  if (_novManualScannerActive) stopNovManualScanner(); else await startNovManualScanner();
+});
 
 document.getElementById('nov-manual-btn').addEventListener('click', _openNovManualModal);
 document.getElementById('nov-manual-cancel').addEventListener('click', _closeNovManualModal);
@@ -3372,17 +3921,51 @@ document.getElementById('nov-manual-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) _closeNovManualModal();
 });
 
-document.getElementById('nov-manual-confirm').addEventListener('click', async () => {
-  const codArt = document.getElementById('nov-manual-codart').value.trim().toUpperCase();
-  if (!codArt) { showToast('El código de artículo es obligatorio', 'error'); return; }
-  const descrip = document.getElementById('nov-manual-descrip').value.trim();
-  if (!descrip) { showToast('La descripción es obligatoria', 'error'); return; }
-  const uxb = parseInt(document.getElementById('nov-manual-uxb').value);
-  if (!uxb || uxb <= 0) { showToast('El UxB es obligatorio', 'error'); return; }
-  const precio = parseFloat(document.getElementById('nov-manual-precio').value) || null;
-  const item = { cod_art: codArt, cod_bar: null, descrip: descrip || null, uxb, precio_manual: precio, manual: true };
+document.getElementById('nov-manual-search').addEventListener('input', (e) => {
+  clearTimeout(_novManualTimer);
+  const q = e.target.value.trim();
+  const results = document.getElementById('nov-manual-results');
+  if (q.length < 2) { results.innerHTML = ''; return; }
+  _novManualTimer = setTimeout(async () => {
+    try {
+      const items = _catalogoCache.length
+        ? _catalogoCache.filter(i =>
+            _clienteMatch(q, i.descrip ?? '') ||
+            _clienteMatch(q, i.cod_bar ?? '') ||
+            _clienteMatch(q, i.cod_art ?? ''))
+          .slice(0, 50)
+        : await api.getArticulos(_normQuery(q), 50);
+      _novManualItems = items;
+      if (!items.length) {
+        results.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
+        return;
+      }
+      const fmt = (v) => v != null ? '$' + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+      results.innerHTML = items.map((item, idx) => `
+        <div class="descrip-item" data-idx="${idx}" style="cursor:pointer">
+          <div style="font-size:13px;font-weight:600">${item.descrip || '—'}</div>
+          <div style="font-size:11px;color:var(--muted)">${item.cod_art}${item.uxb != null ? ' · UxB: ' + item.uxb : ''}${item.precio_con_iva != null ? ' · ' + fmt(item.precio_con_iva) : ''}</div>
+        </div>
+      `).join('');
+    } catch { }
+  }, 250);
+});
+
+document.getElementById('nov-manual-results').addEventListener('click', async (e) => {
+  const el = e.target.closest('[data-idx]');
+  if (!el) return;
+  const item = _novManualItems[parseInt(el.dataset.idx)];
+  if (!item) return;
   _closeNovManualModal();
-  await _setNovItem(item);
+  await _setNovItem({
+    cod_art: item.cod_art,
+    cod_bar: item.cod_bar || null,
+    descrip: item.descrip || null,
+    uxb: item.uxb || 0,
+    precio_manual: item.precio_con_iva || null,
+    manual: true,
+  });
+
 });
 
 // ── Scanner ──────────────────────────────────────────────────────────────────
@@ -3629,7 +4212,7 @@ document.getElementById('nov-agregar-btn').addEventListener('click', async () =>
 
 function _resetNovForm() {
   _novItem = null; _novCliente = null; _novTipo = 'devolucion'; _novBultos = 0; _novUnidades = 0; _novMaxUni = null;
-  ['nov-barcode-input','nov-descrip-input','nov-observaciones','nov-manual-codart','nov-manual-descrip','nov-manual-uxb','nov-manual-precio'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['nov-barcode-input','nov-descrip-input','nov-observaciones','nov-manual-search'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   _closeNovManualModal();
   document.getElementById('nov-item-selected').classList.add('hidden');
   document.getElementById('nov-cliente-selected').classList.add('hidden');
@@ -3646,3 +4229,417 @@ function _resetNovForm() {
 }
 
 document.getElementById('nov-back-btn').addEventListener('click', () => { stopNovScanner(); showHub(); });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ARTÍCULOS CATÁLOGO
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _articulosTimer = null;
+let _articulosData = [];
+let _articulosSortCol = 'descrip';
+let _articulosSortDir = 1;
+
+const DETALLE_YAGUAR = [
+  { label: 'Código',         field: 'cod_art' },
+  { label: 'Barcode',        field: 'cod_bar' },
+  { label: 'Fabricante',     field: 'fabricante' },
+  { label: 'Unidad medida',  field: 'unidad_medida' },
+  { label: '% IVA',          field: 'porc_iva',         money: false, num: true },
+  { label: 'Costo',          field: 'precio_costo',     money: true },
+  { label: '% Descuento',    field: 'descuento_default',money: false, num: true },
+  { label: 'Imp. Monto',     field: 'impuestos_monto',  money: true },
+  { label: 'Imp. %',         field: 'impuestos_porc',   money: false, num: true },
+  { label: 'Subcategoría',   field: 'subcategoria' },
+  { label: 'Stock',          field: 'stock',            money: false, num: true },
+  { label: 'Estado',         field: 'estado' },
+  { label: 'Observaciones',  field: 'observaciones' },
+  { label: 'Folder',         field: 'folder' },
+  { label: 'Usrdef 0',       field: 'usrdef_0',         money: false, num: true },
+  { label: 'Usrdef 1',       field: 'usrdef_1',         money: false, num: true },
+  { label: 'Usrdef 6',       field: 'usrdef_6',         money: false, num: true },
+];
+
+const DETALLE_DIARCO = [
+  { label: 'Código',         field: 'cod_art' },
+  { label: 'Barcode unidad', field: 'cod_bar' },
+  { label: 'Barcode bulto',  field: 'cod_bar_bulto' },
+  { label: 'Tipo unidad',    field: 'tipo_unidad' },
+  { label: 'Costo',          field: 'precio_costo',     money: true },
+  { label: 'P. Mayorista',   field: 'precio_mayorista', money: true },
+  { label: 'Familia',        field: 'familia' },
+  { label: 'Subcategoría',   field: 'subcategoria' },
+  { label: 'Estado cat.',    field: 'tipo_estado' },
+  { label: 'Stock',          field: 'stock',            money: false, num: true },
+];
+
+function _abrirDetalleArticulo(item) {
+  const fmt = (v) => v != null ? Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
+  const modal = document.getElementById('art-detalle-modal');
+  document.getElementById('art-detalle-title').textContent = item.descrip || item.cod_art;
+  const body = document.getElementById('art-detalle-body');
+
+  // Siempre muestra precio y uxb al tope
+  const rows = [
+    { label: 'Precio c/IVA', val: item.precio_con_iva != null ? `$${fmt(item.precio_con_iva)}` : '—' },
+    { label: 'UxB',          val: item.uxb != null ? item.uxb : '—' },
+  ];
+
+  const detalle = getMayorista() === 'yaguar' ? DETALLE_YAGUAR : DETALLE_DIARCO;
+  for (const d of detalle) {
+    const v = item[d.field];
+    if (v == null || v === '') continue;
+    let display;
+    if (d.money) display = `$${fmt(v)}`;
+    else if (d.num) display = fmt(v);
+    else display = String(v);
+    rows.push({ label: d.label, val: display });
+  }
+
+  body.innerHTML = rows.map(r => `
+    <div>
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">${r.label}</div>
+      <div style="font-size:13px;font-weight:600">${r.val}</div>
+    </div>
+  `).join('');
+
+  modal.classList.remove('hidden');
+}
+
+const ART_HEADERS = [
+  { label: 'Código',       field: 'cod_art',       align: 'left'  },
+  { label: 'Descripción',  field: 'descrip',        align: 'left'  },
+  { label: 'UxB',          field: 'uxb',            align: 'center' },
+  { label: 'Precio c/IVA', field: 'precio_con_iva', align: 'right' },
+];
+
+function renderArticulos() {
+  const tbody = document.getElementById('articulos-tbody');
+  const thead = document.getElementById('articulos-thead');
+
+  // Headers con indicador de orden
+  thead.innerHTML = `<tr>${ART_HEADERS.map(h => {
+    const arrow = h.field === _articulosSortCol ? (_articulosSortDir === 1 ? ' ▲' : ' ▼') : '';
+    return `<th data-sort="${h.field}" data-label="${h.label}" style="cursor:pointer;user-select:none;text-align:${h.align}">${h.label}${arrow}</th>`;
+  }).join('')}</tr>`;
+
+  const fmt = (v) => v != null ? Number(v).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+
+  // Filtrar con fuzzy si hay búsqueda
+  const qArts = (document.getElementById('admin-articulos-search')?.value || '').trim();
+  const baseData = qArts
+    ? _articulosData.filter(item =>
+        _clienteMatch(qArts, item.descrip ?? '') ||
+        _clienteMatch(qArts, item.cod_art ?? '') ||
+        _clienteMatch(qArts, item.cod_bar ?? ''))
+    : _articulosData;
+
+  // Ordenar
+  const data = [...baseData].sort((a, b) => {
+    let va = a[_articulosSortCol], vb = b[_articulosSortCol];
+    const na = parseFloat(va), nb = parseFloat(vb);
+    if (!isNaN(na) && !isNaN(nb)) {
+      va = na; vb = nb;
+    } else {
+      va = (va ?? '').toString().toLowerCase();
+      vb = (vb ?? '').toString().toLowerCase();
+    }
+    if (va < vb) return -_articulosSortDir;
+    if (va > vb) return  _articulosSortDir;
+    return 0;
+  });
+
+  tbody.innerHTML = data.map((item, idx) => `
+    <tr data-idx="${_articulosData.indexOf(item)}" style="cursor:pointer">
+      <td>${item.cod_art ?? '—'}</td>
+      <td>${item.descrip ?? '—'}</td>
+      <td style="text-align:center">${item.uxb ?? '—'}</td>
+      <td style="text-align:right">${item.precio_con_iva != null ? '$' + fmt(item.precio_con_iva) : '—'}</td>
+    </tr>
+  `).join('');
+
+  const countEl = document.getElementById('articulos-count');
+  if (countEl) {
+    const n = data.length;
+    countEl.textContent = `${n} artículo${n !== 1 ? 's' : ''}${qArts ? ` para "${qArts}"` : ''}`;
+  }
+}
+
+async function loadArticulos() {
+  const tbody = document.getElementById('articulos-tbody');
+  const count = document.getElementById('articulos-count');
+  const exportBtn = document.getElementById('btn-exportar-articulos');
+
+  tbody.innerHTML = '<tr><td colspan="4" class="loading">Cargando...</td></tr>';
+
+  try {
+    // Cargar catálogo completo si no está disponible; filtrado fuzzy es client-side
+    const items = await api.getArticulos('', 20000);
+    _articulosData = items;
+
+    if (!_articulosData.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="muted-text" style="text-align:center;padding:16px">Sin artículos cargados. Importá una semana primero.</td></tr>';
+      count.textContent = '';
+      exportBtn.classList.add('hidden');
+      return;
+    }
+
+    renderArticulos();
+    exportBtn.classList.remove('hidden');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="4" class="error-msg">${err.message}</td></tr>`;
+    exportBtn.classList.add('hidden');
+  }
+}
+
+document.getElementById('articulos-tbody').addEventListener('click', (e) => {
+  const row = e.target.closest('tr[data-idx]');
+  if (!row) return;
+  const item = _articulosData[parseInt(row.dataset.idx)];
+  if (item) _abrirDetalleArticulo(item);
+});
+
+document.getElementById('art-detalle-close').addEventListener('click', () => {
+  document.getElementById('art-detalle-modal').classList.add('hidden');
+});
+
+document.getElementById('art-detalle-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
+});
+
+// Click en header → ordenar
+document.addEventListener('click', (e) => {
+  const th = e.target.closest('#articulos-table th[data-sort]');
+  if (!th) return;
+  const col = th.dataset.sort;
+  if (_articulosSortCol === col) {
+    _articulosSortDir *= -1;
+  } else {
+    _articulosSortCol = col;
+    _articulosSortDir = 1;
+  }
+  renderArticulos();
+});
+
+document.getElementById('admin-articulos-search').addEventListener('input', () => {
+  clearTimeout(_articulosTimer);
+  _articulosTimer = setTimeout(() => renderArticulos(), 200);
+});
+
+document.getElementById('btn-exportar-articulos')?.addEventListener('click', () => {
+  window.location.href = api.exportArticulosUrl();
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ROLES — ABM
+// ══════════════════════════════════════════════════════════════════════════════
+
+const _PERMS_UI = [
+  { key: 'perm_pick',               label: 'Pick',                  group: 'Herramientas' },
+  { key: 'perm_sobrantes',          label: 'Sobrantes',             group: 'Herramientas' },
+  { key: 'perm_novedades',          label: 'Novedades',             group: 'Herramientas' },
+  { key: 'perm_reparto',            label: 'Repartidor',            group: 'Herramientas' },
+  { key: 'perm_yaguar',             label: 'Yaguar',                group: 'Mayoristas' },
+  { key: 'perm_diarco',             label: 'DIARCO',                group: 'Mayoristas' },
+  { key: 'perm_admin_clientes',      label: 'Ver clientes (editar básico)',  group: 'Panel Admin' },
+  { key: 'perm_admin_clientes_full', label: 'Editar clientes completo',    group: 'Panel Admin' },
+  { key: 'perm_admin_semanas',      label: 'Importar semanas',      group: 'Panel Admin' },
+  { key: 'perm_admin_zonas',        label: 'Zonas y repartos',      group: 'Panel Admin' },
+  { key: 'perm_admin_auditoria',    label: 'Auditoría',             group: 'Panel Admin' },
+  { key: 'perm_admin_articulos',    label: 'Catálogo de artículos', group: 'Panel Admin' },
+  { key: 'perm_admin_usuarios',     label: 'Gestionar usuarios',    group: 'Administración' },
+  { key: 'perm_admin_roles',        label: 'Gestionar roles',       group: 'Administración' },
+];
+
+let _rolesData = [];
+let _editingRolNombre = null;
+
+async function loadRoles() {
+  const tbody = document.getElementById('roles-tbody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="99" class="loading">Cargando...</td></tr>';
+  try {
+    _rolesData = await api.getRoles();
+    renderRoles();
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="99" class="error-msg">${err.message}</td></tr>`;
+  }
+}
+
+function renderRoles() {
+  const panel = document.getElementById('gest-panel-roles');
+  if (!panel) return;
+
+  const esc = s => (s || '').replace(/</g,'&lt;');
+  const tag = label =>
+    `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--text);font-family:var(--font)">${label}</span>`;
+
+  const groups = [
+    { label: 'Herramientas', perms: ['perm_pick','perm_sobrantes','perm_novedades'] },
+    { label: 'Mayoristas',   perms: ['perm_yaguar','perm_diarco'] },
+    { label: 'Panel admin',   perms: ['perm_admin_clientes','perm_admin_clientes_full','perm_admin_semanas','perm_admin_zonas','perm_admin_auditoria','perm_admin_articulos'] },
+    { label: 'Administración', perms: ['perm_admin_usuarios','perm_admin_roles'] },
+  ];
+  const permLabel = {};
+  _PERMS_UI.forEach(p => { permLabel[p.key] = p.label; });
+
+  // superadmin siempre arriba del todo
+  const rolesOrdenados = [..._rolesData].sort((a, b) => {
+    if (a.nombre === 'superadmin') return -1;
+    if (b.nombre === 'superadmin') return  1;
+    return (a.orden ?? 100) - (b.orden ?? 100);
+  });
+
+  const cardsHtml = rolesOrdenados.map(r => {
+    const protegido = r.es_protegido ? ' <span style="font-size:11px">🔒</span>' : '';
+    const colorDot = r.color
+      ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${r.color};margin-right:6px;flex-shrink:0"></span>`
+      : '';
+    const handle = r.es_protegido ? '' :
+      `<span class="rol-drag-handle" title="Arrastrar para reordenar" style="cursor:grab;font-size:16px;color:var(--muted);margin-right:6px;user-select:none">⠿</span>`;
+    // Superadmin protegido: solo el caller superadmin puede editar (solo color)
+    const btnEditarProtegido = (r.es_protegido && esRolProtegido())
+      ? `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>` : '';
+    const acciones = r.es_protegido
+      ? btnEditarProtegido
+      : `<button class="btn-edit" onclick="_openRolModal('${esc(r.nombre)}')">Editar</button>
+         <button class="btn-del" onclick="_deleteRol('${esc(r.nombre)}')">Eliminar</button>`;
+    const groupsHtml = groups.map(g => {
+      const active = g.perms.filter(pk => r[pk]).map(pk => tag(permLabel[pk]));
+      if (!active.length) return '';
+      return `<div style="display:flex;align-items:baseline;gap:4px;flex-wrap:wrap;margin-top:4px">
+        <span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;flex-shrink:0">${g.label}:</span>
+        ${active.join(' ')}
+      </div>`;
+    }).join('');
+    const noPerms = groups.every(g => g.perms.every(pk => !r[pk]));
+    return `<div data-rol="${esc(r.nombre)}" data-protegido="${r.es_protegido}"
+               style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="display:flex;align-items:center">${handle}${colorDot}<strong style="font-size:14px">${esc(r.nombre)}${protegido}</strong></div>
+        <div class="td-actions">${acciones}</div>
+      </div>
+      ${noPerms ? '<span style="font-size:12px;color:var(--muted)">Sin permisos asignados</span>' : groupsHtml}
+    </div>`;
+  }).join('');
+
+  const cardsContainer = document.createElement('div');
+  cardsContainer.id = 'roles-cards-container';
+  cardsContainer.innerHTML = _rolesData.length ? cardsHtml : '<p class="muted-text" style="text-align:center;padding:20px">No hay roles cargados.</p>';
+
+  panel.innerHTML = `<div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+    <button class="btn-search" onclick="_openRolModal(null)">+ Nuevo rol</button>
+  </div>`;
+  panel.appendChild(cardsContainer);
+
+  // Drag-and-drop con Sortable.js
+  if (_rolesData.length && typeof Sortable !== 'undefined') {
+    Sortable.create(cardsContainer, {
+      animation: 150,
+      handle: '.rol-drag-handle',
+      filter: '[data-protegido="true"]',
+      onMove: (evt) => evt.related.dataset.protegido !== 'true',  // no mover encima de superadmin
+      onEnd: async () => {
+        const cards = cardsContainer.querySelectorAll('[data-rol]:not([data-protegido="true"])');
+        const nombres = Array.from(cards).map(c => c.dataset.rol);
+        try {
+          await api.setRolesOrden(nombres);
+          await loadRoles();
+        } catch (err) { showToast(err.message, 'error'); }
+      },
+    });
+  }
+}
+
+function _openRolModal(nombre) {
+  _editingRolNombre = nombre || null;
+  const rol = nombre ? _rolesData.find(r => r.nombre === nombre) : null;
+  document.getElementById('rol-modal-title').textContent = nombre ? `Editar rol: ${nombre}` : 'Nuevo rol';
+  document.getElementById('rol-nombre-input').value = rol ? rol.nombre : '';
+  // Protegido: nombre editable solo si el caller tiene el rol protegido
+  document.getElementById('rol-nombre-input').readOnly = !!(rol && rol.es_protegido && !esRolProtegido());
+  document.getElementById('rol-color-input').value = rol?.color || '#888888';
+  _PERMS_UI.forEach(p => {
+    const cb = document.getElementById(`rolperm-${p.key}`);
+    if (!cb) return;
+    cb.checked = rol ? !!rol[p.key] : false;
+    // Roles protegidos: checkboxes siempre marcados y no editables
+    const protegido = !!(rol && rol.es_protegido);
+    cb.disabled = protegido;
+    cb.dataset.permanentDisabled = protegido ? '1' : '';
+    cb.closest('label').style.opacity = protegido ? '0.45' : '';
+  });
+  document.getElementById('rol-modal').classList.remove('hidden');
+  _syncClientePerms();
+}
+
+function _closeRolModal() {
+  document.getElementById('rol-modal').classList.add('hidden');
+  _editingRolNombre = null;
+}
+
+document.getElementById('rol-modal-cancel')?.addEventListener('click', _closeRolModal);
+
+// Dependencia: "editar completo" requiere "editar básico"
+function _syncClientePerms() {
+  const basico = document.getElementById('rolperm-perm_admin_clientes');
+  const full   = document.getElementById('rolperm-perm_admin_clientes_full');
+  if (!basico || !full) return;
+  // No tocar si ya está permanentemente deshabilitado (rol protegido)
+  if (basico.dataset.permanentDisabled || full.dataset.permanentDisabled) return;
+  full.disabled = !basico.checked;
+  if (!basico.checked) full.checked = false;
+  full.closest('label').style.opacity = basico.checked ? '' : '0.4';
+}
+document.getElementById('rolperm-perm_admin_clientes')?.addEventListener('change', _syncClientePerms);
+document.getElementById('rolperm-perm_admin_clientes_full')?.addEventListener('change', _syncClientePerms);
+document.getElementById('rol-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _closeRolModal(); });
+
+document.getElementById('rol-form')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const nombre = document.getElementById('rol-nombre-input').value.trim();
+  if (!nombre) { showToast('El nombre del rol es obligatorio', 'error'); return; }
+  const data = { nombre, color: document.getElementById('rol-color-input').value || null };
+  _PERMS_UI.forEach(p => { data[p.key] = !!document.getElementById(`rolperm-${p.key}`)?.checked; });
+  try {
+    if (_editingRolNombre) {
+      await api.updateRolPerms(_editingRolNombre, data);
+      showToast('Rol actualizado', 'success');
+    } else {
+      await api.createRol(data);
+      showToast('Rol creado', 'success');
+    }
+    _closeRolModal();
+    await loadRoles();
+    await _recargarSelectsRoles();
+    showHub(); // refrescar cards de mayoristas inmediatamente
+  } catch (err) { showToast(err.message, 'error'); }
+});
+
+async function _deleteRol(nombre) {
+  if (!await confirmar(`¿Eliminar el rol "${nombre}"? Esta acción no se puede deshacer.`, 'Sí, eliminar')) return;
+  try {
+    await api.deleteRol(nombre);
+    showToast('Rol eliminado', 'success');
+    await loadRoles();
+    await _recargarSelectsRoles();
+    showHub();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function _recargarSelectsRoles() {
+  try {
+    const roles = await api.getRoles();
+    ['nu-rol','edit-rol'].forEach(id => {
+      const sel = document.getElementById(id);
+      if (!sel) return;
+      const current = sel.value;
+      sel.innerHTML = roles.map(r => `<option value="${r.nombre}">${r.nombre}</option>`).join('');
+      if (roles.find(r => r.nombre === current)) sel.value = current;
+    });
+  } catch {}
+}
+
+// Cargar roles dinámicamente al abrir el modal de usuarios
+const _origLoadUsers = typeof loadUsers !== 'undefined' ? loadUsers : null;
+document.getElementById('hub-admin-btn')?.addEventListener('click', async () => {
+  await _recargarSelectsRoles();
+});
