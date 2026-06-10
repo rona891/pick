@@ -31,6 +31,28 @@ def _get_or_clear_sheet(spreadsheet, tab_name: str, rows: int, cols: int):
         return spreadsheet.add_worksheet(title=tab_name, rows=str(rows), cols=str(cols))
 
 
+def _delete_filter_views(spreadsheet, sheet_id: int):
+    """Elimina todos los filter views del sheet para evitar duplicados al re-subir."""
+    try:
+        resp = spreadsheet.client.request(
+            "GET",
+            f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet.id}",
+            params={"fields": "sheets(properties/sheetId,filterViews/filterViewId)"},
+        )
+        data = resp.json()
+        for sheet in data.get("sheets", []):
+            if sheet.get("properties", {}).get("sheetId") == sheet_id:
+                fvs = sheet.get("filterViews", [])
+                if fvs:
+                    spreadsheet.batch_update({"requests": [
+                        {"deleteFilterView": {"filterId": fv["filterViewId"]}}
+                        for fv in fvs
+                    ]})
+                return
+    except Exception as e:
+        logger.warning(f"gsheets: no se pudieron eliminar filter views: {e}")
+
+
 def _delete_banded_ranges(spreadsheet, sheet_id: int):
     """Elimina todos los banded ranges del sheet para evitar duplicados al re-subir."""
     try:
@@ -144,29 +166,50 @@ def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int, col_
 
 def _apply_diarco_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
                                    data_start: int, data_end: int, total_row: int):
-    """Aplica formato a las secciones NOVEDADES y DEVOLUCIONES del MOD DIARCO.
+    """Aplica formato a las secciones COMPROBANTES y NOVEDADES del MOD DIARCO.
 
     Todos los parámetros de fila son 1-indexed (como en Sheets UI).
+    Google Sheets solo permite un setBasicFilter por hoja (ya usado en la tabla
+    principal), así que las secciones usan Filter Views accesibles desde
+    Menú → Ver → Vistas de filtro → COMPROBANTES / NOVEDADES.
     """
     sid  = ws.id
-    ti   = title_row - 1          # 0-indexed start del título
-    hi   = hdr_row - 1            # 0-indexed start del header de columnas
-    di   = data_start - 1         # 0-indexed start de datos
-    dend = total_row              # 0-indexed exclusivo (= total_row - 1 + 1)
+    ti   = title_row - 1
+    hi   = hdr_row - 1
+    di   = data_start - 1
+    dend = total_row          # 0-indexed exclusivo (total_row - 1 + 1)
+
+    def _brd():
+        return {"style": "SOLID", "width": 1,
+                "color": {"red": 0.6, "green": 0.6, "blue": 0.6}}
+
+    # Limpiar filter views anteriores antes de crear los nuevos
+    _delete_filter_views(spreadsheet, sid)
 
     requests = [
-        # Fila de título "NOVEDADES / DEVOLUCIONES" (cols A:R) — fondo azul, blanco, negrita
+        # Título "COMPROBANTES" — solo A:E (sin azul en col F)
         {"repeatCell": {
             "range": {"sheetId": sid,
                       "startRowIndex": ti, "endRowIndex": ti + 1,
-                      "startColumnIndex": 0, "endColumnIndex": 18},
+                      "startColumnIndex": 0, "endColumnIndex": 5},
             "cell": {"userEnteredFormat": {
                 "backgroundColor": _HDR_BG,
                 "textFormat": {"bold": True, "fontSize": 11, "foregroundColor": _HDR_FG},
             }},
             "fields": "userEnteredFormat(backgroundColor,textFormat)",
         }},
-        # Headers NOVEDADES (A:E)
+        # Título "NOVEDADES" — solo G:R (sin azul en col F)
+        {"repeatCell": {
+            "range": {"sheetId": sid,
+                      "startRowIndex": ti, "endRowIndex": ti + 1,
+                      "startColumnIndex": 6, "endColumnIndex": 18},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": _HDR_BG,
+                "textFormat": {"bold": True, "fontSize": 11, "foregroundColor": _HDR_FG},
+            }},
+            "fields": "userEnteredFormat(backgroundColor,textFormat)",
+        }},
+        # Headers COMPROBANTES (A:E)
         {"repeatCell": {
             "range": {"sheetId": sid,
                       "startRowIndex": hi, "endRowIndex": hi + 1,
@@ -178,7 +221,7 @@ def _apply_diarco_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
             }},
             "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
         }},
-        # Headers DEVOLUCIONES (G:R)
+        # Headers NOVEDADES (G:R)
         {"repeatCell": {
             "range": {"sheetId": sid,
                       "startRowIndex": hi, "endRowIndex": hi + 1,
@@ -190,7 +233,7 @@ def _apply_diarco_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
             }},
             "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
         }},
-        # Banded range NOVEDADES (A:E, header + datos + total)
+        # Banded range COMPROBANTES (A:E)
         {"addBanding": {"bandedRange": {
             "range": {"sheetId": sid,
                       "startRowIndex": hi, "endRowIndex": dend,
@@ -201,7 +244,7 @@ def _apply_diarco_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
                 "secondBandColor": _BAND2,
             },
         }}},
-        # Banded range DEVOLUCIONES (G:R, header + datos + total)
+        # Banded range NOVEDADES (G:R)
         {"addBanding": {"bandedRange": {
             "range": {"sheetId": sid,
                       "startRowIndex": hi, "endRowIndex": dend,
@@ -212,35 +255,65 @@ def _apply_diarco_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
                 "secondBandColor": _BAND2,
             },
         }}},
-        # Col E (MONTO NOVEDADES) — moneda, datos + total
+        # Bordes COMPROBANTES (A:E, header → total)
+        {"updateBorders": {
+            "range": {"sheetId": sid,
+                      "startRowIndex": hi, "endRowIndex": dend,
+                      "startColumnIndex": 0, "endColumnIndex": 5},
+            "top": _brd(), "bottom": _brd(), "left": _brd(), "right": _brd(),
+            "innerHorizontal": _brd(), "innerVertical": _brd(),
+        }},
+        # Bordes NOVEDADES (G:R, header → total)
+        {"updateBorders": {
+            "range": {"sheetId": sid,
+                      "startRowIndex": hi, "endRowIndex": dend,
+                      "startColumnIndex": 6, "endColumnIndex": 18},
+            "top": _brd(), "bottom": _brd(), "left": _brd(), "right": _brd(),
+            "innerHorizontal": _brd(), "innerVertical": _brd(),
+        }},
+        # Filter view COMPROBANTES (ordenar/filtrar: Ver → Vistas de filtro → COMPROBANTES)
+        {"addFilterView": {"filter": {
+            "title": "COMPROBANTES",
+            "range": {"sheetId": sid,
+                      "startRowIndex": hi, "endRowIndex": dend,
+                      "startColumnIndex": 0, "endColumnIndex": 5},
+        }}},
+        # Filter view NOVEDADES
+        {"addFilterView": {"filter": {
+            "title": "NOVEDADES",
+            "range": {"sheetId": sid,
+                      "startRowIndex": hi, "endRowIndex": dend,
+                      "startColumnIndex": 6, "endColumnIndex": 18},
+        }}},
+        # Col E (MONTO COMPROBANTES) — moneda, datos + total
         {"repeatCell": {
             "range": {"sheetId": sid, "startRowIndex": di, "endRowIndex": dend,
                       "startColumnIndex": 4, "endColumnIndex": 5},
             "cell": {"userEnteredFormat": {"numberFormat": {"type": "CURRENCY", "pattern": "$#,##0.00"}}},
             "fields": "userEnteredFormat.numberFormat",
         }},
-        # Col L (UNID. DEVOLUCIONES) — entero, solo filas de datos
+        # Col L (UNID. NOVEDADES) — entero, solo filas de datos
         {"repeatCell": {
             "range": {"sheetId": sid, "startRowIndex": di, "endRowIndex": dend - 1,
                       "startColumnIndex": 11, "endColumnIndex": 12},
             "cell": {"userEnteredFormat": {"numberFormat": {"type": "NUMBER", "pattern": "#,##0"}}},
             "fields": "userEnteredFormat.numberFormat",
         }},
-        # Col M ($ x UNID DEVOLUCIONES) — moneda, solo filas de datos
+        # Col M ($ x UNID NOVEDADES) — moneda, solo filas de datos
         {"repeatCell": {
             "range": {"sheetId": sid, "startRowIndex": di, "endRowIndex": dend - 1,
                       "startColumnIndex": 12, "endColumnIndex": 13},
             "cell": {"userEnteredFormat": {"numberFormat": {"type": "CURRENCY", "pattern": "$#,##0.00"}}},
             "fields": "userEnteredFormat.numberFormat",
         }},
-        # Col N (TOTAL DEVOLUCIONES) — moneda, datos + total
+        # Col N (TOTAL NOVEDADES) — moneda, datos + total
         {"repeatCell": {
             "range": {"sheetId": sid, "startRowIndex": di, "endRowIndex": dend,
                       "startColumnIndex": 13, "endColumnIndex": 14},
             "cell": {"userEnteredFormat": {"numberFormat": {"type": "CURRENCY", "pattern": "$#,##0.00"}}},
             "fields": "userEnteredFormat.numberFormat",
         }},
-        # Auto-ajuste ancho A:R para cubrir las secciones nuevas
+        # Auto-ajuste ancho A:R
         {"autoResizeDimensions": {"dimensions": {
             "sheetId": sid, "dimension": "COLUMNS",
             "startIndex": 0, "endIndex": 18,
@@ -412,15 +485,15 @@ def _upload_mod_bg(semana: str, mayorista: str):
             sec_data_end   = sec_data_start + 89   # 90 filas de datos
             sec_total_row  = sec_data_end + 1
 
-            # NOVEDADES (cols A-E): título + headers + 90 filas vacías + total
+            # COMPROBANTES (cols A-E): título + headers + 90 filas vacías + total
             nov_data = (
-                [["NOVEDADES", "", "", "", ""]]
+                [["COMPROBANTES", "", "", "", ""]]
                 + [["FECHA", "CLIENTE", "CUIT DEPOSITO", "ZONA", "MONTO"]]
                 + [["", "", "", "", ""] for _ in range(90)]
                 + [["TOTAL", "", "", "", f"=SUM(E{sec_data_start}:E{sec_data_end})"]]
             )
 
-            # DEVOLUCIONES (cols G-R, 12 cols): título + headers + 90 filas + total
+            # NOVEDADES/DEVOLUCIONES (cols G-R, 12 cols): título + headers + 90 filas + total
             # Col N (índice 7 en la submatriz G-R) lleva fórmula TOTAL = UNID × precio
             dev_rows = []
             for i in range(90):
@@ -431,7 +504,7 @@ def _upload_mod_bg(semana: str, mayorista: str):
             dev_total = [""] * 12
             dev_total[7] = f"=SUM(N{sec_data_start}:N{sec_data_end})"
             dev_data = (
-                [["DEVOLUCIONES"] + [""] * 11]
+                [["NOVEDADES"] + [""] * 11]
                 + [["FECHA", "CLIENTE", "FACTURA", "COD", "DESCRIPCION",
                     "UNID.", "$ x UNID", "TOTAL", "ESTADO", "ACCION",
                     "NOMBRE CLIENTE", "ZONA"]]
