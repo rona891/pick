@@ -5,21 +5,44 @@ import threading
 logger = logging.getLogger(__name__)
 
 
+def _get_spreadsheet(gc, mayorista: str):
+    sheet_id = os.environ.get(f"GSHEET_ID_{mayorista.upper()}")
+    if not sheet_id:
+        logger.warning(f"gsheets: GSHEET_ID_{mayorista.upper()} no configurado")
+        return None
+    return gc.open_by_key(sheet_id)
+
+
+def _get_or_clear_sheet(spreadsheet, tab_name: str, rows: int, cols: int):
+    import gspread
+    try:
+        ws = spreadsheet.worksheet(tab_name)
+        ws.clear()
+        return ws
+    except gspread.WorksheetNotFound:
+        return spreadsheet.add_worksheet(title=tab_name, rows=str(rows), cols=str(cols))
+
+
+def _auth():
+    import gspread
+    sa_path = os.environ.get("GOOGLE_SA_PATH")
+    if not sa_path or not os.path.exists(sa_path):
+        logger.warning("gsheets: GOOGLE_SA_PATH no configurado o no encontrado")
+        return None
+    return gspread.service_account(filename=sa_path)
+
+
+# ── MOD upload ────────────────────────────────────────────────────────────────
+
 def _upload_mod_bg(semana: str, mayorista: str):
     try:
-        import gspread
-
-        sa_path = os.environ.get("GOOGLE_SA_PATH")
-        if not sa_path or not os.path.exists(sa_path):
-            logger.warning("gsheets: GOOGLE_SA_PATH no configurado o no encontrado")
+        gc = _auth()
+        if not gc:
             return
 
-        sheet_id = os.environ.get(f"GSHEET_ID_{mayorista.upper()}")
-        if not sheet_id:
-            logger.warning(f"gsheets: GSHEET_ID_{mayorista.upper()} no configurado")
+        spreadsheet = _get_spreadsheet(gc, mayorista)
+        if not spreadsheet:
             return
-
-        gc = gspread.service_account(filename=sa_path)
 
         from app.db.database import get_db
         with get_db() as cur:
@@ -40,34 +63,25 @@ def _upload_mod_bg(semana: str, mayorista: str):
             rows = [dict(r) for r in cur.fetchall()]
 
         if not rows:
-            logger.info(f"gsheets: sin datos para {mayorista}/{semana}, omitiendo")
+            logger.info(f"gsheets: sin datos MOD para {mayorista}/{semana}, omitiendo")
             return
 
-        spreadsheet = gc.open_by_key(sheet_id)
-        tab_name = semana[:100]
-        try:
-            ws = spreadsheet.worksheet(tab_name)
-            ws.clear()
-        except gspread.WorksheetNotFound:
-            ws = spreadsheet.add_worksheet(title=tab_name, rows=str(len(rows) + 60), cols="20")
+        tab_name = f"MOD {semana}"[:100]
+        ws = _get_or_clear_sheet(spreadsheet, tab_name, len(rows) + 60, 20)
 
-        is_yaguar = mayorista == "yaguar"
-        cod_label   = "COD YAG"      if is_yaguar else "COD DRCO"
-        total_label = "TOTAL YAGUAR" if is_yaguar else "TOTAL DRCO"
+        is_yaguar  = mayorista == "yaguar"
+        cod_label  = "COD YAG"      if is_yaguar else "COD DRCO"
+        tot_label  = "TOTAL YAGUAR" if is_yaguar else "TOTAL DRCO"
 
         n          = len(rows)
-        first_data = 2          # primera fila de datos (row 1 = headers)
-        last_data  = n + 1      # última fila de datos
-        tr         = last_data + 1   # fila TOTAL
-        vhdr       = tr + 2     # fila header vendedores
-        vfirst     = vhdr + 1   # primera fila de vendedor
+        first_data = 2
+        last_data  = n + 1
+        tr         = last_data + 1
+        vfirst     = tr + 3        # header vendedores en tr+2, datos desde tr+3
 
-        headers = [
-            "FECHA", cod_label, "COD SIS", "NOMBRE", "TELEFONO", "LOCALIDAD",
-            total_label, "%", "COMISION EBD", "ALIMENTOS", "TOTAL",
-            "FT", "BCO", "SALDO", "VENDEDOR",
-        ]
-
+        headers = ["FECHA", cod_label, "COD SIS", "NOMBRE", "TELEFONO", "LOCALIDAD",
+                   tot_label, "%", "COMISION EBD", "ALIMENTOS", "TOTAL",
+                   "FT", "BCO", "SALDO", "VENDEDOR"]
         data = [headers]
 
         for i, r in enumerate(rows):
@@ -90,45 +104,107 @@ def _upload_mod_bg(semana: str, mayorista: str):
                 (r["vendedor"] or "").strip(),
             ])
 
-        # Fila TOTAL
-        data.append([
-            "", "", "", "", "", "TOTAL",
-            f"=SUM(G{first_data}:G{last_data})",
-            "",
-            f"=SUM(I{first_data}:I{last_data})",
-            f"=SUM(J{first_data}:J{last_data})",
-            f'=IFERROR(I{tr}+G{tr}+J{tr},"")',
-            f"=SUM(L{first_data}:L{last_data})",
-            f"=SUM(M{first_data}:M{last_data})",
-            f"=SUM(N{first_data}:N{last_data})",
-            "",
-        ])
-
-        # Separador + header vendedores
+        data.append(["", "", "", "", "", "TOTAL",
+                     f"=SUM(G{first_data}:G{last_data})", "",
+                     f"=SUM(I{first_data}:I{last_data})",
+                     f"=SUM(J{first_data}:J{last_data})",
+                     f'=IFERROR(I{tr}+G{tr}+J{tr},"")',
+                     f"=SUM(L{first_data}:L{last_data})",
+                     f"=SUM(M{first_data}:M{last_data})",
+                     f"=SUM(N{first_data}:N{last_data})", ""])
         data.append([])
         data.append(["VENDEDORES", "", "TOTAL", "", "%", "", "COMI 0.5%"])
 
-        # Filas por vendedor
         unique_vendors = list(dict.fromkeys([r["vendedor"] for r in rows if r.get("vendedor")]))
         for vi, vendor in enumerate(unique_vendors):
             vrow = vfirst + vi
             data.append([
-                vendor,
-                "",
+                vendor, "",
                 f'=SUMIF($O${first_data}:$O${last_data},"{vendor}",$G${first_data}:$G${last_data})',
-                "",
-                f'=C{vrow}/G{tr}',
-                "",
-                f'=C{vrow}*0.005',
+                "", f'=C{vrow}/G{tr}', "", f'=C{vrow}*0.005',
             ])
 
         ws.update("A1", data, value_input_option="USER_ENTERED")
-        logger.info(f"gsheets: MOD {mayorista} subido — {semana} ({n} clientes)")
+        logger.info(f"gsheets: MOD {mayorista} subido — {tab_name} ({n} clientes)")
 
     except Exception as e:
         logger.error(f"gsheets: error subiendo MOD {mayorista}/{semana}: {e}")
 
 
+# ── PICK upload ───────────────────────────────────────────────────────────────
+
+def _upload_pick_bg(semana: str, mayorista: str):
+    try:
+        gc = _auth()
+        if not gc:
+            return
+
+        spreadsheet = _get_spreadsheet(gc, mayorista)
+        if not spreadsheet:
+            return
+
+        from app.db.database import get_db
+        with get_db() as cur:
+            cur.execute("""
+                SELECT p.semana, p.cod_bar, p.cod_art, p.descrip, p.nombre,
+                       p.localidad, COALESCE(z.reparto, '') AS reparto,
+                       p.uni, p.bul, p.uxb, p.cantidad_pickeada, p.estado,
+                       p.importe_total
+                FROM pick p
+                LEFT JOIN zonas z ON UPPER(p.localidad) = z.nombre
+                LEFT JOIN repartos r ON z.reparto = r.nombre
+                WHERE p.semana = %s AND p.mayorista = %s
+                ORDER BY COALESCE(r.orden, 99) ASC, p.localidad ASC,
+                         p.nombre ASC, p.descrip ASC
+            """, (semana, mayorista))
+            rows = [dict(r) for r in cur.fetchall()]
+
+        if not rows:
+            logger.info(f"gsheets: sin datos PICK para {mayorista}/{semana}, omitiendo")
+            return
+
+        tab_name = f"PICK {semana}"[:100]
+        ws = _get_or_clear_sheet(spreadsheet, tab_name, len(rows) + 5, 14)
+
+        headers = ["Semana", "Código barra", "Código art.", "Descripción",
+                   "Cliente", "Zona", "Reparto", "Uni pedidas", "Bultos",
+                   "Uni x bulto", "Uni entregadas", "% entregado", "Estado",
+                   "Importe pedido"]
+        data = [headers]
+
+        for r in rows:
+            uni      = r.get("uni") or 0
+            pickeada = r.get("cantidad_pickeada") or 0
+            pct      = round(pickeada / uni * 100, 1) if uni > 0 else 0
+            data.append([
+                r.get("semana") or "",
+                r.get("cod_bar") or "",
+                r.get("cod_art") or "",
+                r.get("descrip") or "",
+                r.get("nombre") or "",
+                r.get("localidad") or "",
+                r.get("reparto") or "",
+                uni,
+                r.get("bul") or 0,
+                r.get("uxb") or 0,
+                pickeada,
+                pct,
+                r.get("estado") or "",
+                float(r.get("importe_total") or 0),
+            ])
+
+        ws.update("A1", data, value_input_option="USER_ENTERED")
+        logger.info(f"gsheets: PICK {mayorista} subido — {tab_name} ({len(rows)} filas)")
+
+    except Exception as e:
+        logger.error(f"gsheets: error subiendo PICK {mayorista}/{semana}: {e}")
+
+
+# ── Triggers públicos ─────────────────────────────────────────────────────────
+
 def trigger_mod_upload(semana: str, mayorista: str):
-    """Dispara el upload en background para no bloquear el endpoint de import."""
     threading.Thread(target=_upload_mod_bg, args=(semana, mayorista), daemon=True).start()
+
+
+def trigger_pick_upload(semana: str, mayorista: str):
+    threading.Thread(target=_upload_pick_bg, args=(semana, mayorista), daemon=True).start()

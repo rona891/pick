@@ -109,10 +109,10 @@ def _export_picks(semana: str, mayorista: str):
             if fmt:
                 cell.number_format = fmt
 
-    # ── Auto-filtro nativo (compatible con todas las versiones y plataformas) ──
     last_col = get_column_letter(len(PICK_HEADERS))
     last_row = len(rows) + 1
-    ws.auto_filter.ref = f"A1:{last_col}{last_row}"
+    if rows:
+        make_table(ws, f"A1:{last_col}{last_row}", "TablaPickDetalle")
 
     ws.freeze_panes = "A2"
 
@@ -422,6 +422,9 @@ def _export_mod_yaguar(semana: str):  # noqa: C901
         cell.alignment = Alignment(horizontal="right", vertical="center")
         cell.fill = rfill
 
+    make_table(ws, f"A{CH}:D{CDL}", "TablaComprobantes")
+    make_table(ws, f"F{CH}:L{CDL}", "TablaDevoluciones")
+
     ws.freeze_panes = f"A{D1}"
     ws.row_dimensions[H].height = 28
 
@@ -559,7 +562,7 @@ def _export_mod_diarco(semana: str):  # noqa: C901
         cell.alignment = Alignment(horizontal="right", vertical="center")
 
     _tot_lbl(TS1, "TOTAL DIARCO");         _tot_val(TS1, 3, f"=G{TR}")
-    _tot_lbl(TS2, "COMPROBANTES");         _tot_val(TS2, 3, f"=E{CT}")
+    _tot_lbl(TS2, "NOVEDADES");            _tot_val(TS2, 3, f"=E{CT}")
     _tot_lbl(TS3, "DEVOLUCIONES");         _tot_val(TS3, 3, f"=I{CT}")
     _tot_lbl(TS4, "FT A DEPOSITAR");       _tot_val(TS4, 3, f"=L{TR}")
     _tot_lbl(TS5, "CREDITO")
@@ -609,10 +612,10 @@ def _export_mod_diarco(semana: str):  # noqa: C901
         cell.alignment = Alignment(horizontal="right", vertical="center")
 
     # ════════════════════════════════════════════════════════════════════
-    # COMPROBANTES + DEVOLUCIONES (lado a lado)
+    # NOVEDADES + DEVOLUCIONES (lado a lado)
     # ════════════════════════════════════════════════════════════════════
     # Row CS: headers de sección
-    sec_hdr(ws, CS, 1, 4, "COMPROBANTES", level=1)
+    sec_hdr(ws, CS, 1, 4, "NOVEDADES", level=1)
     cell = ws.cell(row=CS, column=5, value="TOTAL")
     cell.font = Font(bold=True, size=10, color=WHITE)
     cell.fill = PatternFill("solid", fgColor=BLUE_MD)
@@ -672,6 +675,9 @@ def _export_mod_diarco(semana: str):  # noqa: C901
         if idx < len(estados_ref):
             cell = ws.cell(row=row, column=20, value=estados_ref[idx])
             cell.font = Font(bold=True, size=10, color=TEXT)
+
+    make_table(ws, f"A{CH}:E{CDL}", "TablaNovedades")
+    make_table(ws, f"G{CH}:R{CDL}", "TablaDevoluciones")
 
     ws.freeze_panes = f"A{D1}"
     ws.row_dimensions[H].height = 28
