@@ -186,7 +186,26 @@ def _apply_mod_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
     # Limpiar filter views anteriores antes de crear los nuevos
     _delete_filter_views(spreadsheet, sid)
 
+    def _no_brd():
+        return {"style": "NONE"}
+
     requests = [
+        # Borrar bordes viejos en toda la zona de secciones (filas 50-300)
+        # ws.clear() no borra formateo, así que bordes de subidas anteriores persisten
+        {"updateBorders": {
+            "range": {"sheetId": sid,
+                      "startRowIndex": 49, "endRowIndex": 300,
+                      "startColumnIndex": 0, "endColumnIndex": 5},
+            "top": _no_brd(), "bottom": _no_brd(), "left": _no_brd(),
+            "right": _no_brd(), "innerHorizontal": _no_brd(), "innerVertical": _no_brd(),
+        }},
+        {"updateBorders": {
+            "range": {"sheetId": sid,
+                      "startRowIndex": 49, "endRowIndex": 300,
+                      "startColumnIndex": 6, "endColumnIndex": 18},
+            "top": _no_brd(), "bottom": _no_brd(), "left": _no_brd(),
+            "right": _no_brd(), "innerHorizontal": _no_brd(), "innerVertical": _no_brd(),
+        }},
         # Título "COMPROBANTES" — solo A:E (sin azul en col F)
         {"repeatCell": {
             "range": {"sheetId": sid,
