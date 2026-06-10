@@ -23,6 +23,29 @@ def _get_or_clear_sheet(spreadsheet, tab_name: str, rows: int, cols: int):
         return spreadsheet.add_worksheet(title=tab_name, rows=str(rows), cols=str(cols))
 
 
+def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int):
+    """Agrega filtro básico (sort/filter por columna), freeze del header y bold."""
+    sid = ws.id
+    end_row = num_data_rows + 1  # 0-indexed exclusivo: header + datos
+    spreadsheet.batch_update({"requests": [
+        {"setBasicFilter": {"filter": {"range": {
+            "sheetId": sid,
+            "startRowIndex": 0, "endRowIndex": end_row,
+            "startColumnIndex": 0, "endColumnIndex": num_cols,
+        }}}},
+        {"updateSheetProperties": {"properties": {
+            "sheetId": sid,
+            "gridProperties": {"frozenRowCount": 1},
+        }, "fields": "gridProperties.frozenRowCount"}},
+        {"repeatCell": {
+            "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1,
+                      "startColumnIndex": 0, "endColumnIndex": num_cols},
+            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+            "fields": "userEnteredFormat.textFormat.bold",
+        }},
+    ]})
+
+
 def _auth():
     import gspread
     sa_path = os.environ.get("GOOGLE_SA_PATH")
@@ -125,6 +148,7 @@ def _upload_mod_bg(semana: str, mayorista: str):
             ])
 
         ws.update("A1", data, value_input_option="USER_ENTERED")
+        _apply_table_format(spreadsheet, ws, n, len(headers))
         logger.info(f"gsheets: MOD {mayorista} subido — {tab_name} ({n} clientes)")
 
     except Exception as e:
@@ -194,6 +218,7 @@ def _upload_pick_bg(semana: str, mayorista: str):
             ])
 
         ws.update("A1", data, value_input_option="USER_ENTERED")
+        _apply_table_format(spreadsheet, ws, len(rows), len(headers))
         logger.info(f"gsheets: PICK {mayorista} subido — {tab_name} ({len(rows)} filas)")
 
     except Exception as e:
