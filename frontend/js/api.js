@@ -263,7 +263,7 @@ const api = {
 
   // Export — rutas separadas por mayorista (/api/yaguar/export/ o /api/diarco/export/)
   exportPicksUrl: (semana) => `/api/${getMayorista()}/export/picks?semana=${encodeURIComponent(semana)}`,
-  exportModUrl: (semana) => `/api/yaguar/export/mod?semana=${encodeURIComponent(semana)}`,
+  exportModUrl: (semana) => `/api/${getMayorista()}/export/mod?semana=${encodeURIComponent(semana)}`,
 
   // Semanas (rutas separadas por mayorista)
   getSemanas: () => request('GET', `/api/${getMayorista()}/semanas/`),

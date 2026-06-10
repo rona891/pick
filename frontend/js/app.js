@@ -2194,7 +2194,7 @@ async function loadSemanasAdmin() {
             ${visible ? 'Visible' : 'Oculta'}
           </button>
           <a class="btn-export" href="${api.exportPicksUrl(s.nombre)}" download>↓ Pick</a>
-          ${m === 'yaguar' ? `<a class="btn-export btn-export-mod" href="${api.exportModUrl(s.nombre)}" download>↓ Mod</a>` : ''}
+          <a class="btn-export btn-export-mod" href="${api.exportModUrl(s.nombre)}" download>↓ Mod</a>
           <button class="btn-del" onclick="deleteSemana(${s.id}, '${s.nombre.replace(/'/g, "\\'")}')">Eliminar</button>
         </div>
       `;
