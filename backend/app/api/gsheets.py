@@ -4,13 +4,13 @@ import threading
 
 logger = logging.getLogger(__name__)
 
-# ── Paleta de colores ──────────────────────────────────────────────────────────
-# Header: azul oscuro  #1d4ed8 (blue-700)
-_HDR_BG   = {"red": 0.114, "green": 0.306, "blue": 0.847}
-_HDR_FG   = {"red": 1.0,   "green": 1.0,   "blue": 1.0}    # blanco
-# Bandas: blanco / azul muy claro  #eff6ff (blue-50)
-_BAND1    = {"red": 1.0,   "green": 1.0,   "blue": 1.0}
-_BAND2    = {"red": 0.937, "green": 0.965, "blue": 1.0}
+# ── Paleta de colores (igual a excel_theme.py) ────────────────────────────────
+_HDR_BG = {"red": 0.122, "green": 0.220, "blue": 0.392}  # #1F3864 NAVY
+_HDR_FG = {"red": 1.0,   "green": 1.0,   "blue": 1.0}    # #FFFFFF blanco
+_SEC_BG = {"red": 0.180, "green": 0.459, "blue": 0.714}  # #2E75B6 BLUE_MD (títulos sección)
+_TOT_BG = {"red": 1.0,   "green": 0.976, "blue": 0.769}  # #FFF9C4 GOLD (filas TOTAL)
+_BAND1  = {"red": 1.0,   "green": 1.0,   "blue": 1.0}    # #FFFFFF blanco
+_BAND2  = {"red": 0.776, "green": 0.851, "blue": 0.945}  # #C6D9F1 ROW_ALT
 
 
 def _get_spreadsheet(gc, mayorista: str):
@@ -100,7 +100,7 @@ def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int, col_
             "sheetId": sid,
             "gridProperties": {"frozenRowCount": 1},
         }, "fields": "gridProperties.frozenRowCount"}},
-        # Header: azul oscuro, texto blanco, negrita, fuente 11
+        # Header: navy, texto blanco, negrita, fuente 10
         {"repeatCell": {
             "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1,
                       "startColumnIndex": 0, "endColumnIndex": num_cols},
@@ -108,7 +108,7 @@ def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int, col_
                 "backgroundColor": _HDR_BG,
                 "textFormat": {
                     "bold": True,
-                    "fontSize": 11,
+                    "fontSize": 10,
                     "foregroundColor": _HDR_FG,
                 },
                 "horizontalAlignment": "CENTER",
@@ -161,6 +161,18 @@ def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int, col_
                 "fields": "userEnteredFormat.numberFormat",
             }})
 
+    # Fila TOTAL: fondo gold, negrita
+    requests.append({"repeatCell": {
+        "range": {"sheetId": sid,
+                  "startRowIndex": end_row, "endRowIndex": end_row + 1,
+                  "startColumnIndex": 0, "endColumnIndex": num_cols},
+        "cell": {"userEnteredFormat": {
+            "backgroundColor": _TOT_BG,
+            "textFormat": {"bold": True},
+        }},
+        "fields": "userEnteredFormat(backgroundColor,textFormat)",
+    }})
+
     spreadsheet.batch_update({"requests": requests})
 
 
@@ -181,7 +193,7 @@ def _apply_mod_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
 
     def _brd():
         return {"style": "SOLID", "width": 1,
-                "color": {"red": 0.6, "green": 0.6, "blue": 0.6}}
+                "color": {"red": 0.788, "green": 0.788, "blue": 0.788}}
 
     # Limpiar filter views anteriores antes de crear los nuevos
     _delete_filter_views(spreadsheet, sid)
@@ -206,48 +218,48 @@ def _apply_mod_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
             "top": _no_brd(), "bottom": _no_brd(), "left": _no_brd(),
             "right": _no_brd(), "innerHorizontal": _no_brd(), "innerVertical": _no_brd(),
         }},
-        # Título "COMPROBANTES" — solo A:E (sin azul en col F)
+        # Título "COMPROBANTES" — solo A:E (sin azul en col F), BLUE_MD como en Excel
         {"repeatCell": {
             "range": {"sheetId": sid,
                       "startRowIndex": ti, "endRowIndex": ti + 1,
                       "startColumnIndex": 0, "endColumnIndex": 5},
             "cell": {"userEnteredFormat": {
-                "backgroundColor": _HDR_BG,
-                "textFormat": {"bold": True, "fontSize": 11, "foregroundColor": _HDR_FG},
+                "backgroundColor": _SEC_BG,
+                "textFormat": {"bold": True, "fontSize": 10, "foregroundColor": _HDR_FG},
             }},
             "fields": "userEnteredFormat(backgroundColor,textFormat)",
         }},
-        # Título "NOVEDADES" — solo G:R (sin azul en col F)
+        # Título "NOVEDADES" — solo G:R (sin azul en col F), BLUE_MD como en Excel
         {"repeatCell": {
             "range": {"sheetId": sid,
                       "startRowIndex": ti, "endRowIndex": ti + 1,
                       "startColumnIndex": 6, "endColumnIndex": 18},
             "cell": {"userEnteredFormat": {
-                "backgroundColor": _HDR_BG,
-                "textFormat": {"bold": True, "fontSize": 11, "foregroundColor": _HDR_FG},
+                "backgroundColor": _SEC_BG,
+                "textFormat": {"bold": True, "fontSize": 10, "foregroundColor": _HDR_FG},
             }},
             "fields": "userEnteredFormat(backgroundColor,textFormat)",
         }},
-        # Headers COMPROBANTES (A:E)
+        # Headers COMPROBANTES (A:E) — NAVY como tabla principal
         {"repeatCell": {
             "range": {"sheetId": sid,
                       "startRowIndex": hi, "endRowIndex": hi + 1,
                       "startColumnIndex": 0, "endColumnIndex": 5},
             "cell": {"userEnteredFormat": {
                 "backgroundColor": _HDR_BG,
-                "textFormat": {"bold": True, "fontSize": 11, "foregroundColor": _HDR_FG},
+                "textFormat": {"bold": True, "fontSize": 10, "foregroundColor": _HDR_FG},
                 "horizontalAlignment": "CENTER",
             }},
             "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
         }},
-        # Headers NOVEDADES (G:R)
+        # Headers NOVEDADES (G:R) — NAVY como tabla principal
         {"repeatCell": {
             "range": {"sheetId": sid,
                       "startRowIndex": hi, "endRowIndex": hi + 1,
                       "startColumnIndex": 6, "endColumnIndex": 18},
             "cell": {"userEnteredFormat": {
                 "backgroundColor": _HDR_BG,
-                "textFormat": {"bold": True, "fontSize": 11, "foregroundColor": _HDR_FG},
+                "textFormat": {"bold": True, "fontSize": 10, "foregroundColor": _HDR_FG},
                 "horizontalAlignment": "CENTER",
             }},
             "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
@@ -331,6 +343,28 @@ def _apply_mod_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
                       "startColumnIndex": 13, "endColumnIndex": 14},
             "cell": {"userEnteredFormat": {"numberFormat": {"type": "CURRENCY", "pattern": "$#,##0.00"}}},
             "fields": "userEnteredFormat.numberFormat",
+        }},
+        # Fila TOTAL COMPROBANTES (A:E) — gold, negrita
+        {"repeatCell": {
+            "range": {"sheetId": sid,
+                      "startRowIndex": dend - 1, "endRowIndex": dend,
+                      "startColumnIndex": 0, "endColumnIndex": 5},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": _TOT_BG,
+                "textFormat": {"bold": True},
+            }},
+            "fields": "userEnteredFormat(backgroundColor,textFormat)",
+        }},
+        # Fila TOTAL NOVEDADES (G:R) — gold, negrita
+        {"repeatCell": {
+            "range": {"sheetId": sid,
+                      "startRowIndex": dend - 1, "endRowIndex": dend,
+                      "startColumnIndex": 6, "endColumnIndex": 18},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": _TOT_BG,
+                "textFormat": {"bold": True},
+            }},
+            "fields": "userEnteredFormat(backgroundColor,textFormat)",
         }},
         # Auto-ajuste ancho A:R
         {"autoResizeDimensions": {"dimensions": {
