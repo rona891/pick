@@ -210,6 +210,30 @@ def _upload_mod_bg(semana: str, mayorista: str):
 
         ws.update("A1", data, value_input_option="USER_ENTERED")
         _apply_table_format(spreadsheet, ws, n, len(headers), _MOD_COL_FORMATS)
+
+        # Formato para la sección VENDEDORES (fuera del rango de la tabla principal)
+        if unique_vendors:
+            sid = ws.id
+            v0   = vfirst - 1                   # 0-indexed, inicio datos vendedores
+            vend = v0 + len(unique_vendors)      # 0-indexed exclusivo
+
+            def _col_fmt(col, pattern, ftype):
+                return {"repeatCell": {
+                    "range": {"sheetId": sid,
+                              "startRowIndex": v0, "endRowIndex": vend,
+                              "startColumnIndex": col, "endColumnIndex": col + 1},
+                    "cell": {"userEnteredFormat": {
+                        "numberFormat": {"type": ftype, "pattern": pattern}
+                    }},
+                    "fields": "userEnteredFormat.numberFormat",
+                }}
+
+            spreadsheet.batch_update({"requests": [
+                _col_fmt(2, "$#,##0.00", "CURRENCY"),  # col C: TOTAL vendedor
+                _col_fmt(4, "0.0%",      "PERCENT"),   # col E: % por vendedor
+                _col_fmt(6, "$#,##0.00", "CURRENCY"),  # col G: COMI 0.5%
+            ]})
+
         logger.info(f"gsheets: MOD {mayorista} subido — {tab_name} ({n} clientes)")
 
     except Exception as e:
