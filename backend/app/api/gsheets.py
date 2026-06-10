@@ -23,11 +23,16 @@ def _get_or_clear_sheet(spreadsheet, tab_name: str, rows: int, cols: int):
         return spreadsheet.add_worksheet(title=tab_name, rows=str(rows), cols=str(cols))
 
 
-def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int):
-    """Filtro básico, freeze, bold en headers y auto-ajuste de ancho de columnas."""
+def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int, col_formats: dict = None):
+    """Filtro básico, freeze, bold en headers, auto-ajuste de ancho y formatos por columna.
+
+    col_formats: {0-indexed_col: format_pattern} para filas de datos (excluye header).
+    Patrones con $ → CURRENCY, con % → PERCENT, resto → NUMBER.
+    """
     sid = ws.id
     end_row = num_data_rows + 1  # 0-indexed exclusivo: header + datos
-    spreadsheet.batch_update({"requests": [
+
+    requests = [
         {"setBasicFilter": {"filter": {"range": {
             "sheetId": sid,
             "startRowIndex": 0, "endRowIndex": end_row,
@@ -49,7 +54,31 @@ def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int):
             "startIndex": 0,
             "endIndex": num_cols,
         }}},
-    ]})
+    ]
+
+    if col_formats:
+        for col_idx, pattern in col_formats.items():
+            if "%" in pattern:
+                fmt_type = "PERCENT"
+            elif "$" in pattern:
+                fmt_type = "CURRENCY"
+            else:
+                fmt_type = "NUMBER"
+            requests.append({"repeatCell": {
+                "range": {
+                    "sheetId": sid,
+                    "startRowIndex": 1,
+                    "endRowIndex": end_row,
+                    "startColumnIndex": col_idx,
+                    "endColumnIndex": col_idx + 1,
+                },
+                "cell": {"userEnteredFormat": {
+                    "numberFormat": {"type": fmt_type, "pattern": pattern}
+                }},
+                "fields": "userEnteredFormat.numberFormat",
+            }})
+
+    spreadsheet.batch_update({"requests": requests})
 
 
 def _auth():
@@ -59,6 +88,32 @@ def _auth():
         logger.warning("gsheets: GOOGLE_SA_PATH no configurado o no encontrado")
         return None
     return gspread.service_account(filename=sa_path)
+
+
+# Formatos de columna para MOD (0-indexed)
+# 6=TOTAL YAG/DRCO, 7=%, 8=COMISION EBD, 9=ALIMENTOS, 10=TOTAL, 11=FT, 12=BCO, 13=SALDO
+_MOD_COL_FORMATS = {
+    6:  "$#,##0.00",
+    7:  "0%",
+    8:  "$#,##0.00",
+    9:  "$#,##0.00",
+    10: "$#,##0.00",
+    11: "$#,##0.00",
+    12: "$#,##0.00",
+    13: "$#,##0.00",
+}
+
+# Formatos de columna para PICK (0-indexed)
+# 7=Uni pedidas, 8=Bultos, 9=Uni x bulto, 10=Uni entregadas,
+# 11=% entregado (valor decimal, ej. 0.755 → muestra 75.5%), 13=Importe pedido
+_PICK_COL_FORMATS = {
+    7:  "#,##0",
+    8:  "#,##0",
+    9:  "#,##0",
+    10: "#,##0",
+    11: "0.0%",
+    13: "$#,##0.00",
+}
 
 
 # ── MOD upload ────────────────────────────────────────────────────────────────
@@ -154,7 +209,7 @@ def _upload_mod_bg(semana: str, mayorista: str):
             ])
 
         ws.update("A1", data, value_input_option="USER_ENTERED")
-        _apply_table_format(spreadsheet, ws, n, len(headers))
+        _apply_table_format(spreadsheet, ws, n, len(headers), _MOD_COL_FORMATS)
         logger.info(f"gsheets: MOD {mayorista} subido — {tab_name} ({n} clientes)")
 
     except Exception as e:
@@ -205,7 +260,8 @@ def _upload_pick_bg(semana: str, mayorista: str):
         for r in rows:
             uni      = r.get("uni") or 0
             pickeada = r.get("cantidad_pickeada") or 0
-            pct      = round(pickeada / uni * 100, 1) if uni > 0 else 0
+            # Valor decimal (ej. 0.755) para que el formato "0.0%" muestre 75.5%
+            pct = round(pickeada / uni, 4) if uni > 0 else 0
             data.append([
                 r.get("semana") or "",
                 r.get("cod_bar") or "",
@@ -224,7 +280,7 @@ def _upload_pick_bg(semana: str, mayorista: str):
             ])
 
         ws.update("A1", data, value_input_option="USER_ENTERED")
-        _apply_table_format(spreadsheet, ws, len(rows), len(headers))
+        _apply_table_format(spreadsheet, ws, len(rows), len(headers), _PICK_COL_FORMATS)
         logger.info(f"gsheets: PICK {mayorista} subido — {tab_name} ({len(rows)} filas)")
 
     except Exception as e:
