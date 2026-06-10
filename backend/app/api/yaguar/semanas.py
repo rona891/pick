@@ -352,6 +352,9 @@ async def importar_semana(
             """, (list(codigos_no_cf),))
             marcados_no_apto = cur.rowcount
 
+    from app.api.gsheets import trigger_mod_upload
+    trigger_mod_upload(nombre, "yaguar")
+
     return {
         "picks_importados": inserted,
         "semana": nombre,

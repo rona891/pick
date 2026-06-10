@@ -606,6 +606,9 @@ async def importar_semana_diarco(
 
     clientes_sin_datos = [{"id": cod, "nombre": obs} for cod, obs in sin_datos.items()]
 
+    from app.api.gsheets import trigger_mod_upload
+    trigger_mod_upload(nombre, MAYORISTA)
+
     return {
         "picks_importados": inserted,
         "semana": nombre,
