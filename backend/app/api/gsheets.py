@@ -385,7 +385,8 @@ def _auth():
 
 
 # Formatos de columna para MOD (0-indexed)
-# 6=TOTAL YAG/DRCO, 7=%, 8=COMISION EBD, 9=ALIMENTOS, 10=TOTAL, 11=FT, 12=BCO, 13=SALDO
+# 6=TOTAL YAG/DRCO, 7=%, 8=COMISION EBD, 9=ALIMENTOS, 10=TOTAL, 11=FT, 12=BCO,
+# 13=NOVEDADES, 14=SALDO  (VENDEDOR movió a col P = 15)
 _MOD_COL_FORMATS = {
     6:  "$#,##0.00",
     7:  "0%",
@@ -394,7 +395,8 @@ _MOD_COL_FORMATS = {
     10: "$#,##0.00",
     11: "$#,##0.00",
     12: "$#,##0.00",
-    13: "$#,##0.00",
+    13: "$#,##0.00",  # NOVEDADES (nuevo)
+    14: "$#,##0.00",  # SALDO (movido de 13)
 }
 
 # Formatos de columna para PICK (0-indexed)
@@ -408,6 +410,149 @@ _PICK_COL_FORMATS = {
     11: "0.0%",
     13: "$#,##0.00",
 }
+
+
+# ── Sync novedades ────────────────────────────────────────────────────────────
+
+def _compute_nov_section_pos(mayorista: str, semana: str):
+    """Calcula posición de la sección NOVEDADES en el sheet MOD a partir de la DB."""
+    try:
+        from app.db.database import get_db
+        with get_db() as cur:
+            cur.execute("""
+                SELECT COUNT(*) AS n,
+                       COUNT(DISTINCT CASE WHEN cy.vendedor IS NOT NULL AND cy.vendedor <> ''
+                                           THEN cy.vendedor END) AS nv
+                FROM pick p
+                JOIN clientes_yaguar cy ON cy.id_yaguar = p.cliente AND cy.mayorista = %s
+                WHERE p.semana = %s AND p.mayorista = %s
+                  AND cy.nombre IS NOT NULL AND cy.nombre <> ''
+            """, (mayorista, semana, mayorista))
+            counts = dict(cur.fetchone())
+        n  = int(counts.get("n") or 0)
+        nv = int(counts.get("nv") or 0)
+        last_data      = max(n + 1, 49)
+        sec_title_row  = last_data + 1 + 3 + nv + 2  # tr + vfirst-offset + nv + gap
+        sec_hdr_row    = sec_title_row + 1
+        sec_data_start = sec_hdr_row + 1
+        sec_data_end   = sec_data_start + 89
+        return {
+            "sec_title_row":  sec_title_row,
+            "sec_hdr_row":    sec_hdr_row,
+            "sec_data_start": sec_data_start,
+            "sec_data_end":   sec_data_end,
+        }
+    except Exception as e:
+        logger.warning(f"gsheets: _compute_nov_section_pos {mayorista}/{semana}: {e}")
+        return None
+
+
+def sync_novedades_to_sheet(mayorista: str, semana: str):
+    """Sincroniza sección NOVEDADES del MOD sheet con la DB.
+
+    Preserva precios manuales de col M usando col S (oculta) como tracking de ID.
+    """
+    try:
+        gc = _auth()
+        if not gc:
+            return
+        spreadsheet = _get_spreadsheet(gc, mayorista)
+        if not spreadsheet:
+            return
+
+        import gspread as _gs
+        tab_name = f"MOD {semana}"[:100]
+        try:
+            ws = spreadsheet.worksheet(tab_name)
+        except _gs.WorksheetNotFound:
+            logger.info(f"gsheets: tab '{tab_name}' no existe, sync novedades omitido")
+            return
+
+        pos = _compute_nov_section_pos(mayorista, semana)
+        if pos is None:
+            return
+        sec_data_start = pos["sec_data_start"]
+        sec_data_end   = pos["sec_data_end"]
+        is_yaguar      = mayorista == "yaguar"
+
+        # Leer precios manuales (col M) y IDs (col S) para preservar precios
+        try:
+            m_vals = ws.get(f"M{sec_data_start}:M{sec_data_end}")
+            s_vals = ws.get(f"S{sec_data_start}:S{sec_data_end}")
+        except Exception:
+            m_vals, s_vals = [], []
+
+        from itertools import zip_longest
+        id_to_price = {}
+        for m_row, s_row in zip_longest(m_vals, s_vals, fillvalue=[]):
+            price  = m_row[0] if m_row else ""
+            nov_id = s_row[0] if s_row else ""
+            if nov_id and price:
+                try:
+                    id_to_price[int(float(str(nov_id)))] = price
+                except (ValueError, TypeError):
+                    pass
+
+        from app.db.database import get_db
+        with get_db() as cur:
+            cur.execute("""
+                SELECT n.id, n.cod_art, n.descrip, n.cliente, n.cliente_nombre,
+                       n.tipo, n.observaciones, n.unidades, n.bultos, n.uxb, n.created_at,
+                       COALESCE(cy.es_factura_a, false) AS es_factura_a
+                FROM novedades n
+                LEFT JOIN clientes_yaguar cy
+                    ON cy.id_yaguar = n.cliente AND cy.mayorista = n.mayorista
+                WHERE n.mayorista = %s AND n.semana = %s
+                ORDER BY n.created_at ASC LIMIT 90
+            """, (mayorista, semana))
+            novs = [dict(r) for r in cur.fetchall()]
+
+        rows_90 = []
+        for i in range(90):
+            r_num     = sec_data_start + i
+            formula_n = f'=IF(L{r_num}*M{r_num}<>0,L{r_num}*M{r_num},"")'
+            if i < len(novs):
+                nv_row  = novs[i]
+                uxb_val = nv_row["uxb"] or 0
+                uni_tot = (nv_row["bultos"] or 0) * uxb_val + (nv_row["unidades"] or 0)
+                fecha   = nv_row["created_at"].strftime("%d/%m/%Y") if nv_row["created_at"] else ""
+                es_fa   = nv_row.get("es_factura_a", False)
+                zona_v  = ("A" if es_fa else "CF") if is_yaguar else ("53" if es_fa else "52")
+                rows_90.append([
+                    fecha,
+                    nv_row["cliente"] or "",
+                    "",
+                    nv_row["cod_art"] or "",
+                    nv_row["descrip"] or "",
+                    uni_tot if uni_tot > 0 else "",
+                    id_to_price.get(nv_row["id"], ""),
+                    formula_n,
+                    (nv_row["tipo"] or "").upper(),
+                    nv_row["observaciones"] or "",
+                    nv_row["cliente_nombre"] or "",
+                    zona_v,
+                    nv_row["id"],
+                ])
+            else:
+                rows_90.append([""] * 7 + [formula_n] + [""] * 4 + [""])
+
+        ws.update(
+            f"G{sec_data_start}:S{sec_data_end}",
+            rows_90,
+            value_input_option="USER_ENTERED",
+        )
+        logger.info(f"gsheets: novedades sync OK — {mayorista}/{semana} ({len(novs)} items)")
+
+    except Exception as e:
+        logger.error(f"gsheets: error sync novedades {mayorista}/{semana}: {e}")
+
+
+def sync_novedades_to_sheet_bg(mayorista: str, semana: str):
+    threading.Thread(
+        target=sync_novedades_to_sheet,
+        args=(mayorista, semana),
+        daemon=True,
+    ).start()
 
 
 # ── MOD upload ────────────────────────────────────────────────────────────────
@@ -451,20 +596,48 @@ def _upload_mod_bg(semana: str, mayorista: str):
         is_yaguar  = mayorista == "yaguar"
         cod_label  = "COD YAG"      if is_yaguar else "COD DRCO"
         tot_label  = "TOTAL YAGUAR" if is_yaguar else "TOTAL DRCO"
+        zona_label = "CF/A"         if is_yaguar else "ZONA"
 
+        # Calcular posiciones temprano — necesarias para fórmulas SUMIF en tabla principal
+        unique_vendors = list(dict.fromkeys([r["vendedor"] for r in rows if r.get("vendedor")]))
         n          = len(rows)
         first_data = 2
-        last_data  = max(n + 1, 49)   # tabla siempre llega a fila 49 como mínimo
+        last_data  = max(n + 1, 49)
         tr         = last_data + 1
-        vfirst     = tr + 3        # header vendedores en tr+2, datos desde tr+3
+        vfirst     = tr + 3
+        nv_count   = len(unique_vendors)
+        sec_title_row  = vfirst + nv_count + 2
+        sec_hdr_row    = sec_title_row + 1
+        sec_data_start = sec_hdr_row + 1
+        sec_data_end   = sec_data_start + 89
+        sec_total_row  = sec_data_end + 1
 
+        # Novedades existentes para pre-rellenar la sección al subir
+        with get_db() as cur:
+            cur.execute("""
+                SELECT n.id, n.cod_art, n.descrip, n.cliente, n.cliente_nombre,
+                       n.tipo, n.observaciones, n.unidades, n.bultos, n.uxb, n.created_at,
+                       COALESCE(cy.es_factura_a, false) AS es_factura_a
+                FROM novedades n
+                LEFT JOIN clientes_yaguar cy
+                    ON cy.id_yaguar = n.cliente AND cy.mayorista = n.mayorista
+                WHERE n.mayorista = %s AND n.semana = %s
+                ORDER BY n.created_at ASC LIMIT 90
+            """, (mayorista, semana))
+            novedades_rows = [dict(r) for r in cur.fetchall()]
+
+        # ── Tabla principal (A:P = 16 cols) ────────────────────────────────────
         headers = ["FECHA", cod_label, "COD SIS", "NOMBRE", "TELEFONO", "LOCALIDAD",
                    tot_label, "%", "COMISION EBD", "ALIMENTOS", "TOTAL",
-                   "FT", "BCO", "SALDO", "VENDEDOR"]
+                   "FT", "BCO", "NOVEDADES", "SALDO", "VENDEDOR"]
         data = [headers]
 
         for i, r in enumerate(rows):
             rn = first_data + i
+            nov_formula = (
+                f'=IFERROR(SUMIF($H${sec_data_start}:$H${sec_data_end},'
+                f'B{rn},$N${sec_data_start}:$N${sec_data_end}),"")'
+            )
             data.append([
                 semana,
                 r["cod"] or "",
@@ -479,11 +652,11 @@ def _upload_mod_bg(semana: str, mayorista: str):
                 f'=IFERROR(I{rn}+G{rn}+J{rn},"")',
                 "",
                 "",
-                f'=K{rn}-L{rn}-M{rn}',
+                nov_formula,
+                f'=K{rn}-L{rn}-M{rn}-N{rn}',
                 (r["vendedor"] or "").strip(),
             ])
 
-        # Rellenar con filas vacías hasta completar last_data
         for _ in range(last_data - (n + 1)):
             data.append([""] * len(headers))
 
@@ -494,27 +667,27 @@ def _upload_mod_bg(semana: str, mayorista: str):
                      f'=IFERROR(I{tr}+G{tr}+J{tr},"")',
                      f"=SUM(L{first_data}:L{last_data})",
                      f"=SUM(M{first_data}:M{last_data})",
-                     f"=SUM(N{first_data}:N{last_data})", ""])
+                     f"=SUM(N{first_data}:N{last_data})",
+                     f"=SUM(O{first_data}:O{last_data})",
+                     ""])
         data.append([])
         data.append(["VENDEDORES", "", "TOTAL", "", "%", "", "COMI 0.5%"])
 
-        unique_vendors = list(dict.fromkeys([r["vendedor"] for r in rows if r.get("vendedor")]))
         for vi, vendor in enumerate(unique_vendors):
             vrow = vfirst + vi
             data.append([
                 vendor, "",
-                f'=SUMIF($O${first_data}:$O${last_data},"{vendor}",$G${first_data}:$G${last_data})',
+                f'=SUMIF($P${first_data}:$P${last_data},"{vendor}",$G${first_data}:$G${last_data})',
                 "", f'=C{vrow}/G{tr}', "", f'=C{vrow}*0.005',
             ])
 
         ws.update("A1", data, value_input_option="USER_ENTERED")
         _apply_table_format(spreadsheet, ws, last_data - 1, len(headers), _MOD_COL_FORMATS)
 
-        # Formato para la sección VENDEDORES (fuera del rango de la tabla principal)
         if unique_vendors:
-            sid = ws.id
-            v0   = vfirst - 1                   # 0-indexed, inicio datos vendedores
-            vend = v0 + len(unique_vendors)      # 0-indexed exclusivo
+            sid  = ws.id
+            v0   = vfirst - 1
+            vend = v0 + len(unique_vendors)
 
             def _col_fmt(col, pattern, ftype):
                 return {"repeatCell": {
@@ -528,23 +701,12 @@ def _upload_mod_bg(semana: str, mayorista: str):
                 }}
 
             spreadsheet.batch_update({"requests": [
-                _col_fmt(2, "$#,##0.00", "CURRENCY"),  # col C: TOTAL vendedor
-                _col_fmt(4, "0.0%",      "PERCENT"),   # col E: % por vendedor
-                _col_fmt(6, "$#,##0.00", "CURRENCY"),  # col G: COMI 0.5%
+                _col_fmt(2, "$#,##0.00", "CURRENCY"),
+                _col_fmt(4, "0.0%",      "PERCENT"),
+                _col_fmt(6, "$#,##0.00", "CURRENCY"),
             ]})
 
-        # ── Secciones COMPROBANTES + NOVEDADES (ambos mayoristas) ───────────────
-        nv = len(unique_vendors)
-        sec_title_row  = vfirst + nv + 2       # 1-indexed, 2 filas de separación
-        sec_hdr_row    = sec_title_row + 1
-        sec_data_start = sec_hdr_row + 1
-        sec_data_end   = sec_data_start + 89   # 90 filas de datos
-        sec_total_row  = sec_data_end + 1
-
-        # En Yaguar col D/col R se llaman "CF/A" (tipo factura cliente)
-        zona_label = "CF/A" if mayorista == "yaguar" else "ZONA"
-
-        # COMPROBANTES (cols A-E)
+        # ── Secciones COMPROBANTES + NOVEDADES ─────────────────────────────────
         nov_data = (
             [["COMPROBANTES", "", "", "", ""]]
             + [["FECHA", "CLIENTE", "CUIT DEPOSITO", zona_label, "MONTO"]]
@@ -552,20 +714,43 @@ def _upload_mod_bg(semana: str, mayorista: str):
             + [["TOTAL", "", "", "", f"=SUM(E{sec_data_start}:E{sec_data_end})"]]
         )
 
-        # NOVEDADES (cols G-R, 12 cols): col N lleva fórmula TOTAL = UNID × precio
+        # NOVEDADES (cols G:S = 13 cols): col N = fórmula TOTAL, col S = ID oculto
         dev_rows = []
         for i in range(90):
-            r_num = sec_data_start + i
-            row = [""] * 12
-            row[7] = f'=IF(L{r_num}*M{r_num}<>0,L{r_num}*M{r_num},"")'
-            dev_rows.append(row)
-        dev_total = [""] * 12
+            r_num     = sec_data_start + i
+            formula_n = f'=IF(L{r_num}*M{r_num}<>0,L{r_num}*M{r_num},"")'
+            if i < len(novedades_rows):
+                nv_row  = novedades_rows[i]
+                uxb_val = nv_row["uxb"] or 0
+                uni_tot = (nv_row["bultos"] or 0) * uxb_val + (nv_row["unidades"] or 0)
+                fecha   = nv_row["created_at"].strftime("%d/%m/%Y") if nv_row["created_at"] else ""
+                es_fa   = nv_row.get("es_factura_a", False)
+                zona_v  = ("A" if es_fa else "CF") if is_yaguar else ("53" if es_fa else "52")
+                dev_rows.append([
+                    fecha,
+                    nv_row["cliente"] or "",
+                    "",
+                    nv_row["cod_art"] or "",
+                    nv_row["descrip"] or "",
+                    uni_tot if uni_tot > 0 else "",
+                    "",
+                    formula_n,
+                    (nv_row["tipo"] or "").upper(),
+                    nv_row["observaciones"] or "",
+                    nv_row["cliente_nombre"] or "",
+                    zona_v,
+                    nv_row["id"],
+                ])
+            else:
+                dev_rows.append([""] * 7 + [formula_n] + [""] * 4 + [""])
+
+        dev_total = [""] * 12 + [""]
         dev_total[7] = f"=SUM(N{sec_data_start}:N{sec_data_end})"
         dev_data = (
-            [["NOVEDADES"] + [""] * 11]
+            [["NOVEDADES"] + [""] * 12]
             + [["FECHA", "CLIENTE", "FACTURA", "COD", "DESCRIPCION",
                 "UNID.", "$ x UNID", "TOTAL", "ESTADO", "ACCION",
-                "NOMBRE CLIENTE", zona_label]]
+                "NOMBRE CLIENTE", zona_label, ""]]
             + dev_rows
             + [dev_total]
         )

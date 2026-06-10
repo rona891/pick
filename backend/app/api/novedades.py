@@ -1,4 +1,5 @@
 import io
+import threading
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment
 from openpyxl.utils import get_column_letter
@@ -74,17 +75,27 @@ def _add(mayorista: str, data: NovedadIn):
             max(0, data.uxb),
             data.precio if data.precio and data.precio > 0 else None,
         ))
-        return dict(cur.fetchone())
+        row = dict(cur.fetchone())
+    from app.api.gsheets import sync_novedades_to_sheet_bg
+    threading.Thread(target=sync_novedades_to_sheet_bg,
+                     args=(mayorista, data.semana), daemon=True).start()
+    return row
 
 
 def _delete(mayorista: str, item_id: int):
+    deleted_semana = None
     with get_db() as cur:
         cur.execute(
-            "DELETE FROM novedades WHERE id = %s AND mayorista = %s RETURNING id",
+            "DELETE FROM novedades WHERE id = %s AND mayorista = %s RETURNING id, semana",
             (item_id, mayorista)
         )
-        if not cur.fetchone():
+        deleted = cur.fetchone()
+        if not deleted:
             raise HTTPException(404, "Novedad no encontrada")
+        deleted_semana = deleted["semana"]
+    from app.api.gsheets import sync_novedades_to_sheet_bg
+    threading.Thread(target=sync_novedades_to_sheet_bg,
+                     args=(mayorista, deleted_semana), daemon=True).start()
     return {"ok": True}
 
 
