@@ -1874,17 +1874,22 @@ function renderClientes() {
   });
 
   tbody.innerHTML = data.map((c) => {
-    const flete = c.flete != null ? (Math.round(c.flete * 10000) / 100) + '%' : '—';
+    const sinFlete = c.flete == null || c.flete === 0;
+    const fleteVal = c.flete != null ? (Math.round(c.flete * 10000) / 100) + '%' : '—';
+    const fleteCell = sinFlete
+      ? `<span class="badge-sin-flete">${fleteVal}</span>`
+      : fleteVal;
     const tipoCell = c.es_factura_a
       ? '<span class="badge-fa">A</span>'
       : '<span class="badge-cf">CF</span>';
     const hidden = q && !_clienteMatch(q, c.nombre) && !_clienteMatch(q, c.id_yaguar ?? '') && !_clienteMatch(q, c.localidad ?? '') ? 'style="display:none"' : '';
-    return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})" ${hidden}>
+    const rowClass = sinFlete ? 'class="cliente-sin-flete"' : '';
+    return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})" ${rowClass} ${hidden}>
       <td class="td-full td-cod">${c.id_yaguar ?? '—'}</td>
       <td style="text-align:center;width:52px">${tipoCell}</td>
       <td class="td-full">${c.nombre ?? ''}</td>
       <td>${c.localidad ?? '—'}</td>
-      <td>${flete}</td>
+      <td>${fleteCell}</td>
       <td onclick="event.stopPropagation()"><div class="td-actions">
         <button class="btn-edit" onclick="openClienteForm(${c.id})">Editar</button>
         <button class="btn-del" onclick="deleteCliente(${c.id})">Eliminar</button>

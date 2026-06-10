@@ -684,6 +684,25 @@ def _upload_mod_bg(semana: str, mayorista: str):
         ws.update("A1", data, value_input_option="USER_ENTERED")
         _apply_table_format(spreadsheet, ws, last_data - 1, len(headers), _MOD_COL_FORMATS)
 
+        # Resaltar en rojo las filas de clientes con flete = 0%
+        zero_flete_rows = [
+            first_data + i
+            for i, r in enumerate(rows)
+            if not r.get("pct_flete")
+        ]
+        if zero_flete_rows:
+            _RED_BG = {"red": 1.0, "green": 0.800, "blue": 0.800}  # #FFCCCC
+            spreadsheet.batch_update({"requests": [
+                {"repeatCell": {
+                    "range": {"sheetId": ws.id,
+                              "startRowIndex": rn - 1, "endRowIndex": rn,
+                              "startColumnIndex": 0, "endColumnIndex": len(headers)},
+                    "cell": {"userEnteredFormat": {"backgroundColor": _RED_BG}},
+                    "fields": "userEnteredFormat.backgroundColor",
+                }}
+                for rn in zero_flete_rows
+            ]})
+
         if unique_vendors:
             sid  = ws.id
             v0   = vfirst - 1
