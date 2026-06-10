@@ -401,7 +401,7 @@ def _upload_mod_bg(semana: str, mayorista: str):
 
         n          = len(rows)
         first_data = 2
-        last_data  = n + 1
+        last_data  = max(n + 1, 49)   # tabla siempre llega a fila 49 como mínimo
         tr         = last_data + 1
         vfirst     = tr + 3        # header vendedores en tr+2, datos desde tr+3
 
@@ -430,6 +430,10 @@ def _upload_mod_bg(semana: str, mayorista: str):
                 (r["vendedor"] or "").strip(),
             ])
 
+        # Rellenar con filas vacías hasta completar last_data
+        for _ in range(last_data - (n + 1)):
+            data.append([""] * len(headers))
+
         data.append(["", "", "", "", "", "TOTAL",
                      f"=SUM(G{first_data}:G{last_data})", "",
                      f"=SUM(I{first_data}:I{last_data})",
@@ -451,7 +455,7 @@ def _upload_mod_bg(semana: str, mayorista: str):
             ])
 
         ws.update("A1", data, value_input_option="USER_ENTERED")
-        _apply_table_format(spreadsheet, ws, n, len(headers), _MOD_COL_FORMATS)
+        _apply_table_format(spreadsheet, ws, last_data - 1, len(headers), _MOD_COL_FORMATS)
 
         # Formato para la sección VENDEDORES (fuera del rango de la tabla principal)
         if unique_vendors:
