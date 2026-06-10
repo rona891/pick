@@ -4,6 +4,14 @@ import threading
 
 logger = logging.getLogger(__name__)
 
+# ── Paleta de colores ──────────────────────────────────────────────────────────
+# Header: azul oscuro  #1d4ed8 (blue-700)
+_HDR_BG   = {"red": 0.114, "green": 0.306, "blue": 0.847}
+_HDR_FG   = {"red": 1.0,   "green": 1.0,   "blue": 1.0}    # blanco
+# Bandas: blanco / azul muy claro  #eff6ff (blue-50)
+_BAND1    = {"red": 1.0,   "green": 1.0,   "blue": 1.0}
+_BAND2    = {"red": 0.937, "green": 0.965, "blue": 1.0}
+
 
 def _get_spreadsheet(gc, mayorista: str):
     sheet_id = os.environ.get(f"GSHEET_ID_{mayorista.upper()}")
@@ -23,8 +31,31 @@ def _get_or_clear_sheet(spreadsheet, tab_name: str, rows: int, cols: int):
         return spreadsheet.add_worksheet(title=tab_name, rows=str(rows), cols=str(cols))
 
 
+def _delete_banded_ranges(spreadsheet, sheet_id: int):
+    """Elimina todos los banded ranges del sheet para evitar duplicados al re-subir."""
+    try:
+        resp = spreadsheet.client.request(
+            "GET",
+            f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet.id}",
+            params={"fields": "sheets(properties/sheetId,bandedRanges/bandedRangeId)"},
+        )
+        data = resp.json()
+        for sheet in data.get("sheets", []):
+            if sheet.get("properties", {}).get("sheetId") == sheet_id:
+                banded = sheet.get("bandedRanges", [])
+                if banded:
+                    spreadsheet.batch_update({"requests": [
+                        {"deleteBanding": {"bandedRangeId": br["bandedRangeId"]}}
+                        for br in banded
+                    ]})
+                return
+    except Exception as e:
+        logger.warning(f"gsheets: no se pudieron eliminar banded ranges: {e}")
+
+
 def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int, col_formats: dict = None):
-    """Filtro básico, freeze, bold en headers, auto-ajuste de ancho y formatos por columna.
+    """
+    Filtro básico, freeze, header destacado, filas alternadas y auto-ajuste de ancho.
 
     col_formats: {0-indexed_col: format_pattern} para filas de datos (excluye header).
     Patrones con $ → CURRENCY, con % → PERCENT, resto → NUMBER.
@@ -32,30 +63,60 @@ def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int, col_
     sid = ws.id
     end_row = num_data_rows + 1  # 0-indexed exclusivo: header + datos
 
+    # Limpiar banded ranges anteriores antes de agregar uno nuevo
+    _delete_banded_ranges(spreadsheet, sid)
+
     requests = [
+        # Filtro básico sobre la tabla
         {"setBasicFilter": {"filter": {"range": {
             "sheetId": sid,
             "startRowIndex": 0, "endRowIndex": end_row,
             "startColumnIndex": 0, "endColumnIndex": num_cols,
         }}}},
+        # Congelar fila de header
         {"updateSheetProperties": {"properties": {
             "sheetId": sid,
             "gridProperties": {"frozenRowCount": 1},
         }, "fields": "gridProperties.frozenRowCount"}},
+        # Header: azul oscuro, texto blanco, negrita, fuente 11
         {"repeatCell": {
             "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1,
                       "startColumnIndex": 0, "endColumnIndex": num_cols},
-            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
-            "fields": "userEnteredFormat.textFormat.bold",
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": _HDR_BG,
+                "textFormat": {
+                    "bold": True,
+                    "fontSize": 11,
+                    "foregroundColor": _HDR_FG,
+                },
+                "horizontalAlignment": "CENTER",
+            }},
+            "fields": "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)",
         }},
+        # Auto-ajuste de ancho de columnas
         {"autoResizeDimensions": {"dimensions": {
             "sheetId": sid,
             "dimension": "COLUMNS",
             "startIndex": 0,
             "endIndex": num_cols,
         }}},
+        # Filas alternadas (banded range — los colores siguen la posición visual,
+        # no los datos, así que sobreviven el ordenamiento)
+        {"addBanding": {"bandedRange": {
+            "range": {
+                "sheetId": sid,
+                "startRowIndex": 0, "endRowIndex": end_row,
+                "startColumnIndex": 0, "endColumnIndex": num_cols,
+            },
+            "rowProperties": {
+                "headerColor":     _HDR_BG,
+                "firstBandColor":  _BAND1,
+                "secondBandColor": _BAND2,
+            },
+        }}},
     ]
 
+    # Formatos numéricos por columna (solo filas de datos, sin header)
     if col_formats:
         for col_idx, pattern in col_formats.items():
             if "%" in pattern:
