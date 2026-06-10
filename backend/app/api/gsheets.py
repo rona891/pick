@@ -24,7 +24,7 @@ def _get_or_clear_sheet(spreadsheet, tab_name: str, rows: int, cols: int):
 
 
 def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int):
-    """Agrega filtro básico (sort/filter por columna), freeze del header y bold."""
+    """Filtro básico, freeze, bold en headers y auto-ajuste de ancho de columnas."""
     sid = ws.id
     end_row = num_data_rows + 1  # 0-indexed exclusivo: header + datos
     spreadsheet.batch_update({"requests": [
@@ -43,6 +43,12 @@ def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int):
             "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
             "fields": "userEnteredFormat.textFormat.bold",
         }},
+        {"autoResizeDimensions": {"dimensions": {
+            "sheetId": sid,
+            "dimension": "COLUMNS",
+            "startIndex": 0,
+            "endIndex": num_cols,
+        }}},
     ]})
 
 
