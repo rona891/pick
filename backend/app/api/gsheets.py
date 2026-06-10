@@ -164,7 +164,7 @@ def _apply_table_format(spreadsheet, ws, num_data_rows: int, num_cols: int, col_
     spreadsheet.batch_update({"requests": requests})
 
 
-def _apply_diarco_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
+def _apply_mod_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
                                    data_start: int, data_end: int, total_row: int):
     """Aplica formato a las secciones COMPROBANTES y NOVEDADES del MOD DIARCO.
 
@@ -392,7 +392,7 @@ def _upload_mod_bg(semana: str, mayorista: str):
             return
 
         tab_name   = f"MOD {semana}"[:100]
-        sheet_rows = len(rows) + 200 if mayorista == "diarco" else len(rows) + 60
+        sheet_rows = len(rows) + 200
         ws = _get_or_clear_sheet(spreadsheet, tab_name, sheet_rows, 20)
 
         is_yaguar  = mayorista == "yaguar"
@@ -476,48 +476,49 @@ def _upload_mod_bg(semana: str, mayorista: str):
                 _col_fmt(6, "$#,##0.00", "CURRENCY"),  # col G: COMI 0.5%
             ]})
 
-        # ── Secciones NOVEDADES + DEVOLUCIONES (solo DIARCO) ──────────────────
-        if mayorista == "diarco":
-            nv = len(unique_vendors)
-            sec_title_row  = vfirst + nv + 2       # 1-indexed, 2 filas de separación
-            sec_hdr_row    = sec_title_row + 1
-            sec_data_start = sec_hdr_row + 1
-            sec_data_end   = sec_data_start + 89   # 90 filas de datos
-            sec_total_row  = sec_data_end + 1
+        # ── Secciones COMPROBANTES + NOVEDADES (ambos mayoristas) ───────────────
+        nv = len(unique_vendors)
+        sec_title_row  = vfirst + nv + 2       # 1-indexed, 2 filas de separación
+        sec_hdr_row    = sec_title_row + 1
+        sec_data_start = sec_hdr_row + 1
+        sec_data_end   = sec_data_start + 89   # 90 filas de datos
+        sec_total_row  = sec_data_end + 1
 
-            # COMPROBANTES (cols A-E): título + headers + 90 filas vacías + total
-            nov_data = (
-                [["COMPROBANTES", "", "", "", ""]]
-                + [["FECHA", "CLIENTE", "CUIT DEPOSITO", "ZONA", "MONTO"]]
-                + [["", "", "", "", ""] for _ in range(90)]
-                + [["TOTAL", "", "", "", f"=SUM(E{sec_data_start}:E{sec_data_end})"]]
-            )
+        # En Yaguar col D/col R se llaman "CF/A" (tipo factura cliente)
+        zona_label = "CF/A" if mayorista == "yaguar" else "ZONA"
 
-            # NOVEDADES/DEVOLUCIONES (cols G-R, 12 cols): título + headers + 90 filas + total
-            # Col N (índice 7 en la submatriz G-R) lleva fórmula TOTAL = UNID × precio
-            dev_rows = []
-            for i in range(90):
-                r_num = sec_data_start + i
-                row = [""] * 12
-                row[7] = f'=IF(L{r_num}*M{r_num}<>0,L{r_num}*M{r_num},"")'
-                dev_rows.append(row)
-            dev_total = [""] * 12
-            dev_total[7] = f"=SUM(N{sec_data_start}:N{sec_data_end})"
-            dev_data = (
-                [["NOVEDADES"] + [""] * 11]
-                + [["FECHA", "CLIENTE", "FACTURA", "COD", "DESCRIPCION",
-                    "UNID.", "$ x UNID", "TOTAL", "ESTADO", "ACCION",
-                    "NOMBRE CLIENTE", "ZONA"]]
-                + dev_rows
-                + [dev_total]
-            )
+        # COMPROBANTES (cols A-E)
+        nov_data = (
+            [["COMPROBANTES", "", "", "", ""]]
+            + [["FECHA", "CLIENTE", "CUIT DEPOSITO", zona_label, "MONTO"]]
+            + [["", "", "", "", ""] for _ in range(90)]
+            + [["TOTAL", "", "", "", f"=SUM(E{sec_data_start}:E{sec_data_end})"]]
+        )
 
-            ws.update(f"A{sec_title_row}", nov_data, value_input_option="USER_ENTERED")
-            ws.update(f"G{sec_title_row}", dev_data, value_input_option="USER_ENTERED")
-            _apply_diarco_sections_format(
-                spreadsheet, ws,
-                sec_title_row, sec_hdr_row, sec_data_start, sec_data_end, sec_total_row,
-            )
+        # NOVEDADES (cols G-R, 12 cols): col N lleva fórmula TOTAL = UNID × precio
+        dev_rows = []
+        for i in range(90):
+            r_num = sec_data_start + i
+            row = [""] * 12
+            row[7] = f'=IF(L{r_num}*M{r_num}<>0,L{r_num}*M{r_num},"")'
+            dev_rows.append(row)
+        dev_total = [""] * 12
+        dev_total[7] = f"=SUM(N{sec_data_start}:N{sec_data_end})"
+        dev_data = (
+            [["NOVEDADES"] + [""] * 11]
+            + [["FECHA", "CLIENTE", "FACTURA", "COD", "DESCRIPCION",
+                "UNID.", "$ x UNID", "TOTAL", "ESTADO", "ACCION",
+                "NOMBRE CLIENTE", zona_label]]
+            + dev_rows
+            + [dev_total]
+        )
+
+        ws.update(f"A{sec_title_row}", nov_data, value_input_option="USER_ENTERED")
+        ws.update(f"G{sec_title_row}", dev_data, value_input_option="USER_ENTERED")
+        _apply_mod_sections_format(
+            spreadsheet, ws,
+            sec_title_row, sec_hdr_row, sec_data_start, sec_data_end, sec_total_row,
+        )
 
         logger.info(f"gsheets: MOD {mayorista} subido — {tab_name} ({n} clientes)")
 
