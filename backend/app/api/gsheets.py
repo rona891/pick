@@ -1,4 +1,5 @@
 import os
+import time
 import logging
 import threading
 
@@ -326,6 +327,13 @@ def _apply_mod_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
             "top": _brd(), "bottom": _brd(), "left": _brd(), "right": _brd(),
             "innerHorizontal": _brd(), "innerVertical": _brd(),
         }},
+        # Filter view CLIENTES — tabla principal (permite volver desde NOVEDADES/COMPROBANTES)
+        {"addFilterView": {"filter": {
+            "title": "CLIENTES",
+            "range": {"sheetId": sid,
+                      "startRowIndex": 0, "endRowIndex": title_row - 12,
+                      "startColumnIndex": 0, "endColumnIndex": 16},
+        }}},
         # Filter view COMPROBANTES (ordenar/filtrar: Ver → Vistas de filtro → COMPROBANTES)
         {"addFilterView": {"filter": {
             "title": "COMPROBANTES",
@@ -444,9 +452,7 @@ def _compute_nov_section_pos(mayorista: str, semana: str):
         from app.db.database import get_db
         with get_db() as cur:
             cur.execute("""
-                SELECT COUNT(DISTINCT p.cliente) AS n,
-                       COUNT(DISTINCT CASE WHEN cy.vendedor IS NOT NULL AND cy.vendedor <> ''
-                                           THEN cy.vendedor END) AS nv
+                SELECT COUNT(DISTINCT p.cliente) AS n
                 FROM pick p
                 JOIN clientes_yaguar cy ON cy.id_yaguar = p.cliente AND cy.mayorista = %s
                 WHERE p.semana = %s AND p.mayorista = %s
@@ -454,9 +460,8 @@ def _compute_nov_section_pos(mayorista: str, semana: str):
             """, (mayorista, semana, mayorista))
             counts = dict(cur.fetchone())
         n  = int(counts.get("n") or 0)
-        nv = int(counts.get("nv") or 0)
         last_data      = max(n + 1, 49)
-        sec_title_row  = last_data + 1 + 3 + nv + 2  # tr + vfirst-offset + nv + gap
+        sec_title_row  = last_data + 12   # tr(+1) + bloque TOTALES/VENDEDORES(8) + gap(1) + 1
         sec_hdr_row    = sec_title_row + 1
         sec_data_start = sec_hdr_row + 1
         sec_data_end   = sec_data_start + 89
@@ -669,9 +674,7 @@ def _upload_mod_bg(semana: str, mayorista: str):
         first_data = 2
         last_data  = max(n + 1, 49)
         tr         = last_data + 1
-        vfirst     = tr + 3
-        nv_count   = len(unique_vendors)
-        sec_title_row  = vfirst + nv_count + 2
+        sec_title_row  = tr + 11   # bloque TOTALES/VENDEDORES(8 filas) + gap(1) + título = +10, luego +1
         sec_hdr_row    = sec_title_row + 1
         sec_data_start = sec_hdr_row + 1
         sec_data_end   = sec_data_start + 89
@@ -736,18 +739,50 @@ def _upload_mod_bg(semana: str, mayorista: str):
                      f"=SUM(N{first_data}:N{last_data})",
                      f"=SUM(O{first_data}:O{last_data})",
                      ""])
-        data.append([])
-        data.append(["VENDEDORES", "", "TOTAL", "", "%", "", "COMI 0.5%"])
-
-        for vi, vendor in enumerate(unique_vendors):
-            vrow = vfirst + vi
-            data.append([
-                vendor, "",
-                f'=SUMIF($P${first_data}:$P${last_data},"{vendor}",$G${first_data}:$G${last_data})',
-                "", f'=C{vrow}/G{tr}', "", f'=C{vrow}*0.005',
-            ])
-
         ws.update("A1", data, value_input_option="USER_ENTERED")
+
+        # ── Bloque TOTALES (A:E) + VENDEDORES (G:J) — side-by-side ──────────────
+        def _vrow(vi):
+            if vi >= len(unique_vendors):
+                return ["", "", "", ""]
+            v = unique_vendors[vi]
+            r = tr + 3 + vi
+            return [
+                v,
+                f'=SUMIF($P${first_data}:$P${last_data},"{v}",$G${first_data}:$G${last_data})',
+                f'=H{r}/G{tr}',
+                f'=H{r}*0.005',
+            ]
+
+        tot_label_str = "TOTAL YAGUAR" if is_yaguar else "TOTAL DIARCO"
+        dev_tot_formula = (
+            f'=IFERROR(SUMIF($O${sec_data_start}:$O${sec_data_end},"DEVOLUCION",'
+            f'$N${sec_data_start}:$N${sec_data_end}),"")'
+        )
+        saldo_c = f'=IFERROR(C{tr+3}-C{tr+4}-C{tr+5}-C{tr+6}-C{tr+7},"")'
+        saldo_e = f'=IFERROR(E{tr+6}-E{tr+7},"")'
+
+        block = [
+            # tr+2: TOTALES title (A:E) | VENDEDORES header (G:J)
+            ["TOTALES", "", "", "", "", "", "VENDEDORES", "", "", "COMI x VTA 0.5%"],
+            # tr+3: TOTAL MAYORISTA | vendor[0] (G:J)
+            [tot_label_str, "", f"=G{tr}", "", "", ""] + _vrow(0),
+            # tr+4: COMPROBANTES | vendor[1] (G:J)
+            ["COMPROBANTES",   "", f"=M{tr}",         "", "", ""] + _vrow(1),
+            # tr+5: DEVOLUCIONES | vendor[2] (G:J)
+            ["DEVOLUCIONES",   "", dev_tot_formula,   "", "FT", ""] + _vrow(2),
+            # tr+6: FT A DEPOSITAR — C=valor, E=ref banco | vendor[3] (G:J)
+            ["FT A DEPOSITAR", "", f"=L{tr}",         "", f"=L{tr}", ""] + _vrow(3),
+            # tr+7: CREDITO (entrada manual) | vendor[4] (G:J)
+            ["CREDITO",        "", "",                "", "", ""] + _vrow(4),
+            # tr+8: SALDO (C=general, E=FT balance) | VENDEDORES TOTAL (G:J)
+            ["", "SALDO", saldo_c, "", saldo_e, "",
+             "TOTAL",
+             f'=IFERROR(SUM(H{tr+3}:H{tr+7}),"")' ,
+             f'=IFERROR(SUM(I{tr+3}:I{tr+7}),"")',
+             f'=IFERROR(SUM(J{tr+3}:J{tr+7}),"")'],
+        ]
+        ws.update(f"A{tr+2}", block, value_input_option="USER_ENTERED")
         _apply_table_format(spreadsheet, ws, last_data - 1, len(headers), _MOD_COL_FORMATS)
 
         # Resaltar en rojo las filas de clientes con flete = 0%
@@ -769,27 +804,89 @@ def _upload_mod_bg(semana: str, mayorista: str):
                 for rn in zero_flete_rows
             ]})
 
-        if unique_vendors:
-            sid  = ws.id
-            v0   = vfirst - 1
-            vend = v0 + len(unique_vendors)
+        # ── Formateo visual bloque TOTALES + VENDEDORES ─────────────────────────
+        sid = ws.id
 
-            def _col_fmt(col, pattern, ftype):
-                return {"repeatCell": {
-                    "range": {"sheetId": sid,
-                              "startRowIndex": v0, "endRowIndex": vend,
-                              "startColumnIndex": col, "endColumnIndex": col + 1},
-                    "cell": {"userEnteredFormat": {
-                        "numberFormat": {"type": ftype, "pattern": pattern}
-                    }},
-                    "fields": "userEnteredFormat.numberFormat",
-                }}
+        def _rc(r1, r2, c1, c2, fmt, fields):
+            """repeatCell helper (r1/r2 son 1-indexed, r2 es inclusivo)."""
+            return {"repeatCell": {
+                "range": {"sheetId": sid,
+                          "startRowIndex": r1 - 1, "endRowIndex": r2,
+                          "startColumnIndex": c1,  "endColumnIndex": c2},
+                "cell": {"userEnteredFormat": fmt},
+                "fields": fields,
+            }}
 
-            spreadsheet.batch_update({"requests": [
-                _col_fmt(2, "$#,##0.00", "CURRENCY"),
-                _col_fmt(4, "0.0%",      "PERCENT"),
-                _col_fmt(6, "$#,##0.00", "CURRENCY"),
-            ]})
+        def _num(r1, r2, col, pattern, ftype):
+            return _rc(r1, r2, col, col + 1,
+                       {"numberFormat": {"type": ftype, "pattern": pattern}},
+                       "userEnteredFormat.numberFormat")
+
+        blk_reqs = [
+            # Limpiar formato residual (fondo + texto + alineación) hasta col R
+            _rc(tr+2, tr+10, 0, 18,
+                {"backgroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0},
+                 "textFormat": {"foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0},
+                                "bold": False, "fontSize": 10},
+                 "horizontalAlignment": "LEFT"},
+                "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"),
+            # ── TOTALES ────────────────────────────────────────────────────────
+            # Título "TOTALES" (tr+2, A:C) — mismo navy que header VENDEDORES
+            _rc(tr+2, tr+2, 0, 3,
+                {"backgroundColor": _HDR_BG,
+                 "textFormat": {"bold": True, "fontSize": 10, "foregroundColor": _HDR_FG}},
+                "userEnteredFormat(backgroundColor,textFormat)"),
+            # Bandas alternadas datos TOTALES (tr+3:tr+7, A:C)
+            *[_rc(r, r, 0, 3, {"backgroundColor": _BAND1 if i % 2 == 0 else _BAND2},
+                  "userEnteredFormat.backgroundColor")
+              for i, r in enumerate(range(tr+3, tr+8))],
+            # Labels col A (tr+3:tr+7) — negrita
+            _rc(tr+3, tr+7, 0, 1,
+                {"textFormat": {"bold": True}},
+                "userEnteredFormat.textFormat"),
+            # Fila SALDO (tr+8, A:C) — gold, negrita
+            _rc(tr+8, tr+8, 0, 3,
+                {"backgroundColor": _TOT_BG, "textFormat": {"bold": True}},
+                "userEnteredFormat(backgroundColor,textFormat)"),
+            # ── Col E: mini-sección FT ─────────────────────────────────────────
+            # Header "FT" (tr+5, E) — mismo navy que A52
+            _rc(tr+5, tr+5, 4, 5,
+                {"backgroundColor": _HDR_BG,
+                 "textFormat": {"bold": True, "foregroundColor": _HDR_FG}},
+                "userEnteredFormat(backgroundColor,textFormat)"),
+            # FT A DEPOSITAR (tr+6, E) — misma banda que A56
+            _rc(tr+6, tr+6, 4, 5, {"backgroundColor": _BAND2},
+                "userEnteredFormat.backgroundColor"),
+            # CREDITO (tr+7, E) — misma banda que A57
+            _rc(tr+7, tr+7, 4, 5, {"backgroundColor": _BAND1},
+                "userEnteredFormat.backgroundColor"),
+            # SALDO (tr+8, E) — gold igual que A58
+            _rc(tr+8, tr+8, 4, 5,
+                {"backgroundColor": _TOT_BG, "textFormat": {"bold": True}},
+                "userEnteredFormat(backgroundColor,textFormat)"),
+            # ── VENDEDORES ────────────────────────────────────────────────────
+            # Header VENDEDORES (tr+2, G:J) — navy, blanco, negrita, centrado
+            _rc(tr+2, tr+2, 6, 10,
+                {"backgroundColor": _HDR_BG,
+                 "textFormat": {"bold": True, "fontSize": 10, "foregroundColor": _HDR_FG},
+                 "horizontalAlignment": "CENTER"},
+                "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"),
+            # Bandas alternadas datos VENDEDORES (tr+3:tr+7, G:J)
+            *[_rc(r, r, 6, 10, {"backgroundColor": _BAND1 if i % 2 == 0 else _BAND2},
+                  "userEnteredFormat.backgroundColor")
+              for i, r in enumerate(range(tr+3, tr+8))],
+            # Fila TOTAL vendedores (tr+8, G:J) — gold, negrita (misma fila que SALDO)
+            _rc(tr+8, tr+8, 6, 10,
+                {"backgroundColor": _TOT_BG, "textFormat": {"bold": True}},
+                "userEnteredFormat(backgroundColor,textFormat)"),
+            # ── Formatos numéricos ─────────────────────────────────────────────
+            _num(tr+3, tr+8, 2, "$#,##0.00", "CURRENCY"),  # TOTALES col C
+            _num(tr+6, tr+8, 4, "$#,##0.00", "CURRENCY"),  # TOTALES col E (FT/SALDO)
+            _num(tr+3, tr+8, 7, "$#,##0.00", "CURRENCY"),  # VENDEDORES col H
+            _num(tr+3, tr+8, 8, "0.0%",      "PERCENT"),   # VENDEDORES col I
+            _num(tr+3, tr+8, 9, "$#,##0.00", "CURRENCY"),  # VENDEDORES col J
+        ]
+        spreadsheet.batch_update({"requests": blk_reqs})
 
         # ── Secciones COMPROBANTES + NOVEDADES ─────────────────────────────────
         nov_data = (
@@ -854,6 +951,24 @@ def _upload_mod_bg(semana: str, mayorista: str):
             "properties": {"hiddenByUser": True},
             "fields": "hiddenByUser",
         }}]})
+
+        # Formato numérico para la fila TOTAL (tr) + auto-resize completo (A:S)
+        final_reqs = []
+        for col_idx, pattern in _MOD_COL_FORMATS.items():
+            fmt_type = "PERCENT" if "%" in pattern else ("CURRENCY" if "$" in pattern else "NUMBER")
+            final_reqs.append({"repeatCell": {
+                "range": {"sheetId": ws.id,
+                          "startRowIndex": tr - 1, "endRowIndex": tr,
+                          "startColumnIndex": col_idx, "endColumnIndex": col_idx + 1},
+                "cell": {"userEnteredFormat": {
+                    "numberFormat": {"type": fmt_type, "pattern": pattern}
+                }},
+                "fields": "userEnteredFormat.numberFormat",
+            }})
+        final_reqs.append({"autoResizeDimensions": {"dimensions": {
+            "sheetId": ws.id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 19,
+        }}})
+        spreadsheet.batch_update({"requests": final_reqs})
 
         _update_tab_colors(spreadsheet, semana)
         logger.info(f"gsheets: MOD {mayorista} subido — {tab_name} ({n} clientes)")
@@ -927,6 +1042,9 @@ def _upload_pick_bg(semana: str, mayorista: str):
 
         ws.update("A1", data, value_input_option="USER_ENTERED")
         _apply_table_format(spreadsheet, ws, len(rows), len(headers), _PICK_COL_FORMATS)
+        spreadsheet.batch_update({"requests": [{"autoResizeDimensions": {"dimensions": {
+            "sheetId": ws.id, "dimension": "COLUMNS", "startIndex": 0, "endIndex": 14,
+        }}}]})
         _update_tab_colors(spreadsheet, semana)
         logger.info(f"gsheets: PICK {mayorista} subido — {tab_name} ({len(rows)} filas)")
 
@@ -942,6 +1060,29 @@ def trigger_mod_upload(semana: str, mayorista: str):
 
 def trigger_pick_upload(semana: str, mayorista: str):
     threading.Thread(target=_upload_pick_bg, args=(semana, mayorista), daemon=True).start()
+
+
+def trigger_client_update(id_yaguar: str, mayorista: str):
+    """Re-sube MOD y PICK únicamente de la última semana donde existe este cliente."""
+    def _run():
+        try:
+            from app.db.database import get_db
+            with get_db() as cur:
+                cur.execute(
+                    "SELECT p.semana FROM pick p "
+                    "JOIN semanas s ON s.nombre = p.semana AND s.mayorista = p.mayorista "
+                    "WHERE p.cliente = %s AND p.mayorista = %s ORDER BY s.id DESC LIMIT 1",
+                    (id_yaguar, mayorista),
+                )
+                row = cur.fetchone()
+            if not row:
+                return
+            semana = row["semana"]
+            _upload_mod_bg(semana, mayorista)
+            _upload_pick_bg(semana, mayorista)
+        except Exception as e:
+            logger.error(f"gsheets: error actualizando sheets cliente {id_yaguar}: {e}")
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _delete_sheets_bg(semana: str, mayorista: str):

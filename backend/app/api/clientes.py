@@ -109,7 +109,9 @@ def _update(id: int, data: ClienteCreate, mayorista: str = 'yaguar'):
                        WHERE cliente = %s AND mayorista = %s""",
                     (data.nombre, data.localidad, data.id_yaguar, mayorista),
                 )
-            return result
+        from app.api.gsheets import trigger_client_update
+        trigger_client_update(result["id_yaguar"], mayorista)
+        return result
     except psycopg2.errors.UniqueViolation:
         raise HTTPException(status_code=409, detail=f"Ya existe un cliente con el código '{data.id_yaguar}'")
 
