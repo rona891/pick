@@ -559,7 +559,9 @@ def sync_novedades_to_sheet(mayorista: str, semana: str):
                     continue
                 except (ValueError, TypeError):
                     pass
-            if any(str(v).strip() for v in row[:12]):
+            # Excluir índice 7 (col N = TOTAL, siempre fórmula automática):
+            # filas "vacías" tienen esa fórmula y serían mal-clasificadas como "manual"
+            if any(str(v).strip() for idx, v in enumerate(row[:12]) if idx != 7):
                 statuses.append(("manual", None))
             else:
                 statuses.append(("free", None))
