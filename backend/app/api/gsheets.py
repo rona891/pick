@@ -26,9 +26,33 @@ def _get_or_clear_sheet(spreadsheet, tab_name: str, rows: int, cols: int):
     try:
         ws = spreadsheet.worksheet(tab_name)
         ws.clear()
-        return ws
     except gspread.WorksheetNotFound:
-        return spreadsheet.add_worksheet(title=tab_name, rows=str(rows), cols=str(cols))
+        ws = spreadsheet.add_worksheet(title=tab_name, rows=str(rows), cols=str(cols))
+    # Mover siempre al índice 0 (pestaña más a la izquierda)
+    spreadsheet.batch_update({"requests": [{"updateSheetProperties": {
+        "properties": {"sheetId": ws.id, "index": 0},
+        "fields": "index",
+    }}]})
+    return ws
+
+
+def _update_tab_colors(spreadsheet, semana: str):
+    """Pinta verde las pestañas del semana activo, rojo las demás."""
+    _GREEN = {"red": 0.204, "green": 0.659, "blue": 0.325}
+    _RED   = {"red": 0.800, "green": 0.267, "blue": 0.267}
+    try:
+        requests = []
+        for ws in spreadsheet.worksheets():
+            color = _GREEN if semana in ws.title else _RED
+            requests.append({"updateSheetProperties": {
+                "properties": {"sheetId": ws.id,
+                               "tabColorStyle": {"rgbColor": color}},
+                "fields": "tabColorStyle",
+            }})
+        if requests:
+            spreadsheet.batch_update({"requests": requests})
+    except Exception as e:
+        logger.warning(f"gsheets: no se pudieron actualizar colores de pestañas: {e}")
 
 
 def _delete_filter_views(spreadsheet, sheet_id: int):
@@ -789,6 +813,7 @@ def _upload_mod_bg(semana: str, mayorista: str):
             "fields": "hiddenByUser",
         }}]})
 
+        _update_tab_colors(spreadsheet, semana)
         logger.info(f"gsheets: MOD {mayorista} subido — {tab_name} ({n} clientes)")
 
     except Exception as e:
@@ -860,6 +885,7 @@ def _upload_pick_bg(semana: str, mayorista: str):
 
         ws.update("A1", data, value_input_option="USER_ENTERED")
         _apply_table_format(spreadsheet, ws, len(rows), len(headers), _PICK_COL_FORMATS)
+        _update_tab_colors(spreadsheet, semana)
         logger.info(f"gsheets: PICK {mayorista} subido — {tab_name} ({len(rows)} filas)")
 
     except Exception as e:
