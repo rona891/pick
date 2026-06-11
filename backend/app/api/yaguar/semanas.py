@@ -352,6 +352,10 @@ async def importar_semana(
             """, (list(codigos_no_cf),))
             marcados_no_apto = cur.rowcount
 
+    from app.api.gsheets import trigger_mod_upload, trigger_pick_upload
+    trigger_mod_upload(nombre, "yaguar")
+    trigger_pick_upload(nombre, "yaguar")
+
     return {
         "picks_importados": inserted,
         "semana": nombre,
@@ -368,4 +372,6 @@ def delete_semana(id: int):
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Semana no encontrada")
+    from app.api.gsheets import trigger_delete_sheets
+    trigger_delete_sheets(row["nombre"], "yaguar")
     return {"message": "Semana eliminada", "nombre": row["nombre"]}

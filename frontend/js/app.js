@@ -1874,17 +1874,22 @@ function renderClientes() {
   });
 
   tbody.innerHTML = data.map((c) => {
-    const flete = c.flete != null ? (Math.round(c.flete * 10000) / 100) + '%' : '—';
+    const sinFlete = c.flete == null || c.flete === 0;
+    const fleteVal = c.flete != null ? (Math.round(c.flete * 10000) / 100) + '%' : '—';
+    const fleteCell = sinFlete
+      ? `<span class="badge-sin-flete">${fleteVal}</span>`
+      : fleteVal;
     const tipoCell = c.es_factura_a
       ? '<span class="badge-fa">A</span>'
       : '<span class="badge-cf">CF</span>';
     const hidden = q && !_clienteMatch(q, c.nombre) && !_clienteMatch(q, c.id_yaguar ?? '') && !_clienteMatch(q, c.localidad ?? '') ? 'style="display:none"' : '';
-    return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})" ${hidden}>
+    const rowClass = sinFlete ? 'class="cliente-sin-flete"' : '';
+    return `<tr data-id="${c.id}" onclick="openClienteForm(${c.id})" ${rowClass} ${hidden}>
       <td class="td-full td-cod">${c.id_yaguar ?? '—'}</td>
       <td style="text-align:center;width:52px">${tipoCell}</td>
       <td class="td-full">${c.nombre ?? ''}</td>
       <td>${c.localidad ?? '—'}</td>
-      <td>${flete}</td>
+      <td>${fleteCell}</td>
       <td onclick="event.stopPropagation()"><div class="td-actions">
         <button class="btn-edit" onclick="openClienteForm(${c.id})">Editar</button>
         <button class="btn-del" onclick="deleteCliente(${c.id})">Eliminar</button>
@@ -2194,7 +2199,7 @@ async function loadSemanasAdmin() {
             ${visible ? 'Visible' : 'Oculta'}
           </button>
           <a class="btn-export" href="${api.exportPicksUrl(s.nombre)}" download>↓ Pick</a>
-          ${m === 'yaguar' ? `<a class="btn-export btn-export-mod" href="${api.exportModUrl(s.nombre)}" download>↓ Mod</a>` : ''}
+          <a class="btn-export btn-export-mod" href="${api.exportModUrl(s.nombre)}" download>↓ Mod</a>
           <button class="btn-del" onclick="deleteSemana(${s.id}, '${s.nombre.replace(/'/g, "\\'")}')">Eliminar</button>
         </div>
       `;
@@ -2215,7 +2220,7 @@ async function toggleSemanaVisible(id, visible) {
 }
 
 async function deleteSemana(id, nombre) {
-  if (!await confirmar(`¿Eliminar "${nombre}" del selector? Los picks quedan guardados para análisis futuro.`, 'Sí, eliminar')) return;
+  if (!await confirmar(`¿Eliminar "${nombre}"? Los picks quedan guardados en la base de datos, pero las hojas MOD y PICK del sheet se eliminarán automáticamente.`, 'Sí, eliminar')) return;
   try {
     await api.deleteSemana(id);
     showToast(`Semana ${nombre} eliminada`, 'info');
@@ -2470,13 +2475,15 @@ document.getElementById('db-file-input').addEventListener('change', (e) => {
 });
 
 document.getElementById('btn-importar-semana').addEventListener('click', async () => {
-  const nombre = document.getElementById('semana-nombre').value.trim();
-  const fechaDesde = document.getElementById('semana-fecha-desde').value.replace(/-/g, '');
-  const fechaHasta = document.getElementById('semana-fecha-hasta').value.replace(/-/g, '');
+  const fechaDesdeRaw = document.getElementById('semana-fecha-desde').value;
+  const fechaHastaRaw = document.getElementById('semana-fecha-hasta').value;
   const files = document.getElementById('db-file-input').files;
 
-  if (!nombre) { showToast('Ingresá un nombre para el pick', 'error'); return; }
-  if (!fechaDesde || !fechaHasta) { showToast('Seleccioná las fechas', 'error'); return; }
+  if (!fechaDesdeRaw || !fechaHastaRaw) { showToast('Seleccioná las fechas', 'error'); return; }
+  const [y, m, d] = fechaHastaRaw.split('-');
+  const nombre = `YAGUAR ${d}-${m}-${y}`;
+  const fechaDesde = fechaDesdeRaw.replace(/-/g, '');
+  const fechaHasta = fechaHastaRaw.replace(/-/g, '');
   if (files.length === 0) { showToast('Seleccioná al menos un archivo .db', 'error'); return; }
 
   const semanas = await api.getSemanas();
@@ -2548,13 +2555,15 @@ document.getElementById('diarco-file-input').addEventListener('change', (e) => {
 });
 
 document.getElementById('btn-importar-diarco').addEventListener('click', async () => {
-  const nombre = document.getElementById('diarco-semana-nombre').value.trim();
-  const fechaDesde = document.getElementById('diarco-fecha-desde').value.replace(/-/g, '');
-  const fechaHasta = document.getElementById('diarco-fecha-hasta').value.replace(/-/g, '');
+  const fechaDesdeRaw = document.getElementById('diarco-fecha-desde').value;
+  const fechaHastaRaw = document.getElementById('diarco-fecha-hasta').value;
   const files = document.getElementById('diarco-file-input').files;
 
-  if (!nombre) { showToast('Ingresá un nombre para el pick', 'error'); return; }
-  if (!fechaDesde || !fechaHasta) { showToast('Seleccioná las fechas', 'error'); return; }
+  if (!fechaDesdeRaw || !fechaHastaRaw) { showToast('Seleccioná las fechas', 'error'); return; }
+  const [y, m, d] = fechaHastaRaw.split('-');
+  const nombre = `DIARCO ${d}-${m}-${y}`;
+  const fechaDesde = fechaDesdeRaw.replace(/-/g, '');
+  const fechaHasta = fechaHastaRaw.replace(/-/g, '');
   if (files.length === 0) { showToast('Seleccioná al menos un archivo MobileAssistantBU.db', 'error'); return; }
 
   const semanas = await api.getSemanas();
@@ -3731,8 +3740,8 @@ document.getElementById('nov-descrip-input').addEventListener('input', (e) => {
   if (q.length < 2) { results.classList.add('hidden'); return; }
   _novDescripTimer = setTimeout(async () => {
     try {
-      const items = _pickDescripCache.length
-        ? _pickDescripCache.filter(i =>
+      const items = _catalogoCache.length
+        ? _catalogoCache.filter(i =>
             _clienteMatch(q, i.descrip ?? '') || _clienteMatch(q, i.cod_art ?? ''))
           .slice(0, 25)
         : await api.novSearch(_normQuery(q), _novSemana);

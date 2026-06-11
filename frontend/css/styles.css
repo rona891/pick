@@ -1101,6 +1101,9 @@ input:focus, select:focus { border-color: var(--accent); }
 
 .badge-fa { background: var(--accent); color: #0d0d0d; font-size: 10px; font-weight: 700; border-radius: 4px; padding: 1px 5px; vertical-align: middle; }
 .badge-cf { background: #3d7eff; color: #fff; font-size: 10px; font-weight: 700; border-radius: 4px; padding: 1px 5px; vertical-align: middle; }
+.badge-sin-flete { background: #e53e3e; color: #fff; font-size: 10px; font-weight: 700; border-radius: 4px; padding: 1px 5px; vertical-align: middle; }
+tr.cliente-sin-flete { background: rgba(229, 62, 62, 0.18) !important; }
+tr.cliente-sin-flete:hover { background: rgba(229, 62, 62, 0.28) !important; }
 
 input[readonly] { opacity: .55; cursor: default; }
 

@@ -109,10 +109,10 @@ def _export_picks(semana: str, mayorista: str):
             if fmt:
                 cell.number_format = fmt
 
-    # ── Auto-filtro nativo (compatible con todas las versiones y plataformas) ──
     last_col = get_column_letter(len(PICK_HEADERS))
     last_row = len(rows) + 1
-    ws.auto_filter.ref = f"A1:{last_col}{last_row}"
+    if rows:
+        make_table(ws, f"A1:{last_col}{last_row}", "TablaPickDetalle")
 
     ws.freeze_panes = "A2"
 
@@ -422,10 +422,267 @@ def _export_mod_yaguar(semana: str):  # noqa: C901
         cell.alignment = Alignment(horizontal="right", vertical="center")
         cell.fill = rfill
 
+    make_table(ws, f"A{CH}:D{CDL}", "TablaComprobantes")
+    make_table(ws, f"F{CH}:L{CDL}", "TablaDevoluciones")
+
     ws.freeze_panes = f"A{D1}"
     ws.row_dimensions[H].height = 28
 
     fname = build_filename("Mod Yaguar", semana)
+    return stream_wb(wb, fname)
+
+
+# ── Mod Diarco export ──────────────────────────────────────────────────────────
+
+def _export_mod_diarco(semana: str):  # noqa: C901
+    with get_db() as cur:
+        cur.execute("""
+            SELECT cd.id_yaguar AS cod_drco, cd.cod_sis, cd.nombre,
+                   cd.telefono, cd.localidad,
+                   MAX(p.importe_total) AS total_diarco,
+                   COALESCE(cd.flete, 0) AS pct_flete, cd.vendedor,
+                   cd.cuit_deposito
+            FROM pick p
+            JOIN clientes_yaguar cd
+                ON cd.id_yaguar = p.cliente AND cd.mayorista = 'diarco'
+            WHERE p.semana = %s AND p.mayorista = 'diarco'
+              AND cd.nombre IS NOT NULL AND cd.nombre <> ''
+            GROUP BY cd.id_yaguar, cd.cod_sis, cd.nombre,
+                     cd.telefono, cd.localidad, cd.flete, cd.vendedor, cd.cuit_deposito
+            ORDER BY cd.nombre
+        """, (semana,))
+        rows = [dict(r) for r in cur.fetchall()]
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "MODELO IA"
+
+    # ── Column widths ─────────────────────────────────────────────────────────
+    set_col_widths(ws, {
+        1:14, 2:12, 3:10, 4:24, 5:14, 6:14,
+        7:16, 8:8,  9:14, 10:14, 11:14, 12:10, 13:10, 14:14, 15:18,
+        16:20, 17:8, 18:8, 19:16, 20:16, 22:12,
+        # devoluciones
+        25:20, 26:10, 27:12, 28:16, 29:18, 30:10, 31:10, 32:10,
+    })
+
+    # ── Row layout ────────────────────────────────────────────────────────────
+    n     = len(rows)
+    EXTRA = 10
+    H  = 1
+    D1 = 2
+    DL = D1 + max(n - 1, 0)
+    DL_EXT = DL + EXTRA
+    TR = DL_EXT + 1
+    TS = TR + 2
+    TS1 = TS + 1; TS2 = TS + 2; TS3 = TS + 3; TS4 = TS + 4
+    TS5 = TS + 5; TS6 = TS + 6; TS7 = TS + 7; TS8 = TS + 8; TS9 = TS + 9
+    CS  = TS + 11; CT = CS + 1; CH = CS + 2
+    CD1 = CH + 1;  CDL = CD1 + 89
+
+    # ════════════════════════════════════════════════════════════════════
+    # TABLA PRINCIPAL — encabezados
+    # ════════════════════════════════════════════════════════════════════
+    HDR_MAIN = ["FECHA","COD DRCO","COD SIS","NOMBRE","TELEFONO","LOCALIDAD",
+                "TOTAL DRCO","%","COMISION EBD","ALIMENTOS","TOTAL",
+                "FT","BCO","SALDO","VENDEDOR","OBSERVACIONES","Mes","Año","Semana"]
+    for ci, label in enumerate(HDR_MAIN, 1):
+        hdr_cell(ws, H, ci, label)
+    hdr_cell(ws, H, 22, "CLIENTE")
+    ws.row_dimensions[H].height = 28
+
+    # ── Datos ─────────────────────────────────────────────────────────────────
+    for i, r in enumerate(rows):
+        row = D1 + i
+        vals = [
+            (1,  semana,                                    "left",   None),
+            (2,  r["cod_drco"],                             "left",   None),
+            (3,  r["cod_sis"],                              "left",   None),
+            (4,  (r["nombre"]    or "").strip(),            "left",   None),
+            (5,  (r["telefono"]  or "").strip(),            "left",   None),
+            (6,  (r["localidad"] or "").strip(),            "left",   None),
+            (7,  float(r["total_diarco"] or 0),             "right",  MONEY),
+            (8,  float(r["pct_flete"]    or 0),             "center", PCT_INT),
+            (9,  f'=IFERROR(G{row}*H{row},"")',             "right",  MONEY),
+            (10, None,                                      "right",  MONEY),
+            (11, f'=IFERROR(I{row}+G{row}+J{row},"")',     "right",  MONEY),
+            (12, None,                                      "right",  MONEY),
+            (13, None,                                      "right",  MONEY),
+            (14, f"=+K{row}-L{row}-M{row}",                "right",  MONEY),
+            (15, (r["vendedor"] or "").strip(),             "left",   None),
+            (19, semana,                                    "left",   None),
+        ]
+        for col, val, align, fmt in vals:
+            data_cell(ws, row, col, val, align=align, fmt=fmt)
+        data_cell(ws, row, 22, f"=IF(M{row}>0,B{row},)", align="center")
+
+    # ── 10 filas vacías extra
+    for row in range(DL + 1, DL_EXT + 1):
+        data_cell(ws, row, 9,  f'=IFERROR(G{row}*H{row},"")',         align="right", fmt=MONEY)
+        data_cell(ws, row, 11, f'=IFERROR(I{row}+G{row}+J{row},"")',  align="right", fmt=MONEY)
+        data_cell(ws, row, 14, f"=+K{row}-L{row}-M{row}",             align="right", fmt=MONEY)
+        data_cell(ws, row, 22, f"=IF(M{row}>0,B{row},)", align="center")
+        ws.cell(row=row, column=8).number_format = PCT_INT
+
+    # ── Fila TOTAL ────────────────────────────────────────────────────────────
+    if n > 0:
+        ws.cell(row=TR, column=6, value="TOTAL")
+        ws.cell(row=TR, column=6).font = Font(bold=True, size=10, color=TEXT)
+        ws.cell(row=TR, column=6).fill = PatternFill("solid", fgColor=GOLD)
+        ws.cell(row=TR, column=6).border = top_brd()
+        for col, formula in [
+            (7, f"=SUM(G{D1}:G{DL_EXT})"), (9,  f"=SUM(I{D1}:I{DL_EXT})"),
+            (10, f"=SUM(J{D1}:J{DL_EXT})"), (11, f'=IFERROR(I{TR}+G{TR}+J{TR},"")'),
+            (12, f"=SUM(L{D1}:L{DL_EXT})"), (13, f"=SUM(M{D1}:M{DL_EXT})"),
+            (14, f"=SUM(N{D1}:N{DL_EXT})"),
+        ]:
+            tot_cell(ws, TR, col, formula, fmt=MONEY)
+
+    # ── Excel Table (A:S = cols 1-19, excluye vacías 20-21 y CLIENTE en 22)
+    if n > 0:
+        ws.auto_filter.ref = f"A{H}:S{DL_EXT}"
+        make_table(ws, f"A{H}:S{DL_EXT}", "TablaModClientes")
+
+    # ════════════════════════════════════════════════════════════════════
+    # TOTALES + VENDEDORES
+    # ════════════════════════════════════════════════════════════════════
+    cell = ws.cell(row=TS, column=1, value="TOTALES")
+    cell.font = Font(bold=True, size=12, color=WHITE)
+    cell.fill = PatternFill("solid", fgColor=NAVY)
+
+    def _tot_lbl(row, a_label, b_label=None):
+        ws.cell(row=row, column=1, value=a_label).font = Font(bold=True, size=10, color=TEXT)
+        if b_label:
+            ws.cell(row=row, column=2, value=b_label).font = Font(bold=True, size=10, color=TEXT)
+
+    def _tot_val(row, col, formula, fmt=MONEY):
+        cell = ws.cell(row=row, column=col, value=formula)
+        cell.font = Font(bold=True, size=10, color=TEXT)
+        cell.number_format = fmt
+        cell.alignment = Alignment(horizontal="right", vertical="center")
+
+    _tot_lbl(TS1, "TOTAL DIARCO");         _tot_val(TS1, 3, f"=G{TR}")
+    _tot_lbl(TS2, "NOVEDADES");            _tot_val(TS2, 3, f"=E{CT}")
+    _tot_lbl(TS3, "DEVOLUCIONES");         _tot_val(TS3, 3, f"=I{CT}")
+    _tot_lbl(TS4, "FT A DEPOSITAR");       _tot_val(TS4, 3, f"=L{TR}")
+    _tot_lbl(TS5, "CREDITO")
+    _tot_lbl(TS6, None, "SALDO")
+    cell = ws.cell(row=TS6, column=3, value=f"=C{TS1}-C{TS2}-C{TS3}-C{TS4}-C{TS5}")
+    cell.font = Font(bold=True, size=10, color="CC0000")
+    cell.number_format = MONEY
+    cell.alignment = Alignment(horizontal="right", vertical="center")
+
+    # VENDEDORES + COMI x VTA 0.5%
+    cell = ws.cell(row=TS1, column=6, value="VENDEDORES")
+    cell.font = Font(bold=True, size=10, color=WHITE)
+    cell.fill = PatternFill("solid", fgColor=NAVY)
+    cell = ws.cell(row=TS1, column=9, value="COMI x VTA 0.5%")
+    cell.font = Font(bold=True, size=10, color=WHITE)
+    cell.fill = PatternFill("solid", fgColor=NAVY)
+
+    unique_vendors = list(dict.fromkeys([r["vendedor"] for r in rows if r.get("vendedor")]))
+    for vi, vendor in enumerate(unique_vendors):
+        vrow = TS2 + vi
+        ws.cell(row=vrow, column=6, value=vendor).font = Font(bold=True, size=10)
+        cell = ws.cell(row=vrow, column=7,
+            value=f'=SUMIF($O${D1}:$O${DL_EXT},"{vendor}",$G${D1}:$G${DL_EXT})')
+        cell.font = Font(bold=True, size=10)
+        cell.number_format = MONEY
+        cell.alignment = Alignment(horizontal="right", vertical="center")
+        cell = ws.cell(row=vrow, column=8, value=f'=G{vrow}/G{TR}')
+        cell.font = Font(bold=True, size=10)
+        cell.number_format = PCT_INT
+        cell.alignment = Alignment(horizontal="right", vertical="center")
+        cell = ws.cell(row=vrow, column=9, value=f'=G{vrow}*0.005')
+        cell.font = Font(bold=True, size=10)
+        cell.number_format = MONEY
+        cell.alignment = Alignment(horizontal="right", vertical="center")
+
+    cell = ws.cell(row=TS8, column=6, value="TOTAL")
+    cell.font = Font(bold=True, size=10)
+    if n > 0:
+        cell = ws.cell(row=TS8, column=7, value=f"=G{TR}")
+        cell.font = Font(bold=True, size=10)
+        cell.number_format = MONEY
+        cell.alignment = Alignment(horizontal="right", vertical="center")
+        cell = ws.cell(row=TS8, column=8, value="100%")
+        cell.font = Font(bold=True, size=10)
+        cell = ws.cell(row=TS9, column=7, value=f"=I{TR}/G{TR}")
+        cell.number_format = "0.00%"
+        cell.alignment = Alignment(horizontal="right", vertical="center")
+
+    # ════════════════════════════════════════════════════════════════════
+    # NOVEDADES + DEVOLUCIONES (lado a lado)
+    # ════════════════════════════════════════════════════════════════════
+    # Row CS: headers de sección
+    sec_hdr(ws, CS, 1, 4, "NOVEDADES", level=1)
+    cell = ws.cell(row=CS, column=5, value="TOTAL")
+    cell.font = Font(bold=True, size=10, color=WHITE)
+    cell.fill = PatternFill("solid", fgColor=BLUE_MD)
+    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    sec_hdr(ws, CS, 7, 8, "DEVOLUCIONES", level=1)
+    ws.merge_cells(f"I{CS}:J{CS}")
+    cell = ws.cell(row=CS, column=9, value="TOTAL")
+    cell.font = Font(bold=True, size=10, color=WHITE)
+    cell.fill = PatternFill("solid", fgColor=BLUE_MD)
+    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    cell = ws.cell(row=CS, column=20, value="ESTADOS")
+    cell.font = Font(bold=True, size=10, color=WHITE)
+    cell.fill = PatternFill("solid", fgColor=NAVY)
+    cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Row CT: totales
+    cell = ws.cell(row=CT, column=5, value=f"=SUM(E{CD1}:E{CDL})")
+    cell.font = Font(bold=True, size=10)
+    cell.number_format = MONEY
+    cell.alignment = Alignment(horizontal="right", vertical="center")
+    cell.fill = PatternFill("solid", fgColor=GOLD)
+
+    ws.merge_cells(f"I{CT}:J{CT}")
+    cell = ws.cell(row=CT, column=9, value=f"=SUM(N{CD1}:N{CDL})")
+    cell.font = Font(bold=True, size=10)
+    cell.number_format = MONEY
+    cell.alignment = Alignment(horizontal="right", vertical="center")
+    cell.fill = PatternFill("solid", fgColor=GOLD)
+
+    # Row CH: column headers
+    for col, label in [(1,"FECHA"),(2,"CLIENTE"),(3,"CUIT DEPOSITO"),(4,"ZONA"),(5,"MONTO")]:
+        hdr_cell(ws, CH, col, label)
+    for col, label in [(7,"FECHA"),(8,"CLIENTE"),(9,"FACTURA"),(10,"COD"),
+                       (11,"DESCRIPCION"),(12,"UNID."),(13,"$ x UNID"),(14,"TOTAL"),
+                       (15,"ESTADO"),(16,"ACCION"),(17,"NOMBRE CLIENTE"),(18,"ZONA")]:
+        hdr_cell(ws, CH, col, label)
+    hdr_cell(ws, CH, 20, "ESTADOS")
+    ws.row_dimensions[CH].height = 22
+
+    # Rows CD1:CDL — fills intercalados + fórmula TOTAL en col N (UNID. × $ x UNID)
+    FILL_ODD  = PatternFill("solid", fgColor=WHITE)
+    FILL_EVEN = PatternFill("solid", fgColor=ROW_ALT)
+    estados_ref = ["DEVOLUCION", "CREDITO", "CAMBIO", "FALTANTE"]
+    for idx, row in enumerate(range(CD1, CDL + 1)):
+        rfill = FILL_EVEN if row % 2 == 0 else FILL_ODD
+        for col in range(1, 6):      # COMPROBANTES: A-E
+            ws.cell(row=row, column=col).fill = rfill
+        for col in range(7, 19):     # DEVOLUCIONES: G-R
+            ws.cell(row=row, column=col).fill = rfill
+        cell = ws.cell(row=row, column=14,
+                       value=f'=IF(L{row}*M{row}<>0,L{row}*M{row},"")')
+        cell.number_format = MONEY
+        cell.alignment = Alignment(horizontal="right", vertical="center")
+        cell.fill = rfill
+        if idx < len(estados_ref):
+            cell = ws.cell(row=row, column=20, value=estados_ref[idx])
+            cell.font = Font(bold=True, size=10, color=TEXT)
+
+    make_table(ws, f"A{CH}:E{CDL}", "TablaNovedades")
+    make_table(ws, f"G{CH}:R{CDL}", "TablaDevoluciones")
+
+    ws.freeze_panes = f"A{D1}"
+    ws.row_dimensions[H].height = 28
+
+    fname = build_filename("Mod Diarco", semana)
     return stream_wb(wb, fname)
 
 
@@ -536,6 +793,10 @@ def yaguar_export_clientes():
 @router_diarco.get("/picks")
 def diarco_export(semana: str = Query(...)):
     return _export_picks(semana, "diarco")
+
+@router_diarco.get("/mod")
+def diarco_export_mod(semana: str = Query(...)):
+    return _export_mod_diarco(semana)
 
 @router_diarco.get("/clientes")
 def diarco_export_clientes():
