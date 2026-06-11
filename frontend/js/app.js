@@ -2204,6 +2204,11 @@ async function loadSemanasAdmin() {
         </div>
       `;
     }).join('');
+    const lastNombre = semanas[0]?.nombre;
+    if (lastNombre) {
+      const inputId = m === 'diarco' ? 'diarco-semana-nombre' : 'semana-nombre';
+      document.getElementById(inputId).placeholder = lastNombre;
+    }
   } catch (err) {
     list.innerHTML = `<p class="error-msg">${err.message}</p>`;
   }
