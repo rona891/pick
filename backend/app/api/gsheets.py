@@ -528,9 +528,9 @@ def sync_novedades_to_sheet(mayorista: str, semana: str):
                     id_to_price.get(nv_row["id"], ""),
                     formula_n,
                     (nv_row["tipo"] or "").upper(),
-                    nv_row["observaciones"] or "",
                     nv_row["cliente_nombre"] or "",
                     zona_v,
+                    nv_row["observaciones"] or "",
                     nv_row["id"],
                 ])
             else:
@@ -755,9 +755,9 @@ def _upload_mod_bg(semana: str, mayorista: str):
                     "",
                     formula_n,
                     (nv_row["tipo"] or "").upper(),
-                    nv_row["observaciones"] or "",
                     nv_row["cliente_nombre"] or "",
                     zona_v,
+                    nv_row["observaciones"] or "",
                     nv_row["id"],
                 ])
             else:
@@ -768,8 +768,8 @@ def _upload_mod_bg(semana: str, mayorista: str):
         dev_data = (
             [["NOVEDADES"] + [""] * 12]
             + [["FECHA", "CLIENTE", "FACTURA", "COD", "DESCRIPCION",
-                "UNID.", "$ x UNID", "TOTAL", "ESTADO", "ACCION",
-                "NOMBRE CLIENTE", zona_label, ""]]
+                "UNID.", "$ x UNID", "TOTAL", "ESTADO",
+                "NOMBRE CLIENTE", zona_label, "OBSERVACIONES", ""]]
             + dev_rows
             + [dev_total]
         )
