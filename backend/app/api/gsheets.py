@@ -471,10 +471,38 @@ def _compute_nov_section_pos(mayorista: str, semana: str):
         return None
 
 
+def _build_nov_row(nv_row: dict, r_num: int, id_to_price: dict, is_yaguar: bool) -> list:
+    """Construye la lista de 13 valores (G:S) para una fila de novedad."""
+    uxb_val   = nv_row["uxb"] or 0
+    uni_tot   = (nv_row["bultos"] or 0) * uxb_val + (nv_row["unidades"] or 0)
+    fecha     = nv_row["created_at"].strftime("%d/%m/%Y") if nv_row["created_at"] else ""
+    es_fa     = nv_row.get("es_factura_a", False)
+    zona_v    = ("A" if es_fa else "CF") if is_yaguar else ("53" if es_fa else "52")
+    formula_n = f'=IF(L{r_num}*M{r_num}<>0,L{r_num}*M{r_num},"")'
+    return [
+        fecha,
+        nv_row["cliente"] or "",
+        "",
+        nv_row["cod_art"] or "",
+        nv_row["descrip"] or "",
+        uni_tot if uni_tot > 0 else "",
+        id_to_price.get(nv_row["id"], ""),
+        formula_n,
+        (nv_row["tipo"] or "").upper(),
+        nv_row["cliente_nombre"] or "",
+        zona_v,
+        nv_row["observaciones"] or "",
+        nv_row["id"],
+    ]
+
+
 def sync_novedades_to_sheet(mayorista: str, semana: str):
     """Sincroniza sección NOVEDADES del MOD sheet con la DB.
 
-    Preserva precios manuales de col M usando col S (oculta) como tracking de ID.
+    Usa col S (oculta) como discriminador:
+    - Fila con ID en col S  → propiedad de la app → actualizar libremente
+    - Fila con datos sin ID → entrada manual     → no tocar nunca
+    - Fila completamente vacía                   → slot libre para nuevas novedades
     """
     try:
         gc = _auth()
@@ -499,24 +527,44 @@ def sync_novedades_to_sheet(mayorista: str, semana: str):
         sec_data_end   = pos["sec_data_end"]
         is_yaguar      = mayorista == "yaguar"
 
-        # Leer precios manuales (col M) y IDs (col S) para preservar precios
+        # Leer estado actual completo (G:S = 13 cols) con fórmulas para preservarlas
         try:
-            m_vals = ws.get(f"M{sec_data_start}:M{sec_data_end}")
-            s_vals = ws.get(f"S{sec_data_start}:S{sec_data_end}")
+            raw = ws.get(
+                f"G{sec_data_start}:S{sec_data_end}",
+                value_render_option="FORMULA",
+            )
         except Exception:
-            m_vals, s_vals = [], []
+            raw = []
 
-        from itertools import zip_longest
+        def _norm(r):
+            r = list(r) if r else []
+            while len(r) < 13:
+                r.append("")
+            return r[:13]
+
+        current = [_norm(raw[i] if i < len(raw) else []) for i in range(90)]
+
+        # Clasificar cada fila y extraer precios preservados (col M = índice 6)
         id_to_price = {}
-        for m_row, s_row in zip_longest(m_vals, s_vals, fillvalue=[]):
-            price  = m_row[0] if m_row else ""
-            nov_id = s_row[0] if s_row else ""
-            if nov_id and price:
+        statuses = []
+        for row in current:
+            col_s = str(row[12]).strip()
+            if col_s:
                 try:
-                    id_to_price[int(float(str(nov_id)))] = price
+                    app_id = int(float(col_s))
+                    price  = str(row[6]).strip()
+                    if price:
+                        id_to_price[app_id] = price
+                    statuses.append(("app", app_id))
+                    continue
                 except (ValueError, TypeError):
                     pass
+            if any(str(v).strip() for v in row[:12]):
+                statuses.append(("manual", None))
+            else:
+                statuses.append(("free", None))
 
+        # Novedades de DB
         from app.db.database import get_db
         with get_db() as cur:
             cur.execute("""
@@ -531,34 +579,25 @@ def sync_novedades_to_sheet(mayorista: str, semana: str):
             """, (mayorista, semana))
             novs = [dict(r) for r in cur.fetchall()]
 
+        db_ids   = {nv["id"]: nv for nv in novs}
+        placed   = {app_id for kind, app_id in statuses if kind == "app" and app_id in db_ids}
+        unplaced = [nv for nv in novs if nv["id"] not in placed]
+
         rows_90 = []
-        for i in range(90):
+        for i, (kind, app_id) in enumerate(statuses):
             r_num     = sec_data_start + i
             formula_n = f'=IF(L{r_num}*M{r_num}<>0,L{r_num}*M{r_num},"")'
-            if i < len(novs):
-                nv_row  = novs[i]
-                uxb_val = nv_row["uxb"] or 0
-                uni_tot = (nv_row["bultos"] or 0) * uxb_val + (nv_row["unidades"] or 0)
-                fecha   = nv_row["created_at"].strftime("%d/%m/%Y") if nv_row["created_at"] else ""
-                es_fa   = nv_row.get("es_factura_a", False)
-                zona_v  = ("A" if es_fa else "CF") if is_yaguar else ("53" if es_fa else "52")
-                rows_90.append([
-                    fecha,
-                    nv_row["cliente"] or "",
-                    "",
-                    nv_row["cod_art"] or "",
-                    nv_row["descrip"] or "",
-                    uni_tot if uni_tot > 0 else "",
-                    id_to_price.get(nv_row["id"], ""),
-                    formula_n,
-                    (nv_row["tipo"] or "").upper(),
-                    nv_row["cliente_nombre"] or "",
-                    zona_v,
-                    nv_row["observaciones"] or "",
-                    nv_row["id"],
-                ])
+
+            if kind == "manual":
+                rows_90.append(current[i])
+            elif kind == "app" and app_id in db_ids:
+                rows_90.append(_build_nov_row(db_ids[app_id], r_num, id_to_price, is_yaguar))
             else:
-                rows_90.append([""] * 7 + [formula_n] + [""] * 4 + [""])
+                # Slot liberado (novedad eliminada) o slot libre
+                if unplaced:
+                    rows_90.append(_build_nov_row(unplaced.pop(0), r_num, id_to_price, is_yaguar))
+                else:
+                    rows_90.append([""] * 7 + [formula_n] + [""] * 4 + [""])
 
         ws.update(
             f"G{sec_data_start}:S{sec_data_end}",
