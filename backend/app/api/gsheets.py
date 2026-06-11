@@ -700,8 +700,9 @@ def _upload_mod_bg(semana: str, mayorista: str):
         for i, r in enumerate(rows):
             rn = first_data + i
             nov_formula = (
-                f'=IFERROR(SUMIF($H${sec_data_start}:$H${sec_data_end},'
-                f'B{rn},$N${sec_data_start}:$N${sec_data_end}),"")'
+                f'=IFERROR(SUMIFS($N${sec_data_start}:$N${sec_data_end},'
+                f'$H${sec_data_start}:$H${sec_data_end},B{rn},'
+                f'$O${sec_data_start}:$O${sec_data_end},"<>CAMBIO"),"")'
             )
             data.append([
                 semana,
@@ -958,17 +959,18 @@ def _delete_sheets_bg(semana: str, mayorista: str):
                 spreadsheet.del_worksheet(ws)
             except _gs.WorksheetNotFound:
                 pass
-        # Recolorear: la pestaña que quedó más a la izquierda pasa a verde
+        # Recolorear: detectar la semana más reciente (primer tab) y colorear
+        # verde todos sus tabs (MOD + PICK) con _update_tab_colors
         remaining = spreadsheet.worksheets()
         if remaining:
-            spreadsheet.batch_update({"requests": [
-                {"updateSheetProperties": {
-                    "properties": {"sheetId": ws.id,
-                                   "tabColorStyle": {"rgbColor": _GREEN if i == 0 else _RED}},
-                    "fields": "tabColorStyle",
-                }}
-                for i, ws in enumerate(remaining)
-            ]})
+            first_title = remaining[0].title
+            if first_title.startswith("MOD "):
+                new_semana = first_title[4:]
+            elif first_title.startswith("PICK "):
+                new_semana = first_title[5:]
+            else:
+                new_semana = first_title
+            _update_tab_colors(spreadsheet, new_semana)
         logger.info(f"gsheets: hojas eliminadas — {mayorista}/{semana}")
     except Exception as e:
         logger.error(f"gsheets: error eliminando sheets {mayorista}/{semana}: {e}")
