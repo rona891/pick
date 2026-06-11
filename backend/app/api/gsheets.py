@@ -781,6 +781,14 @@ def _upload_mod_bg(semana: str, mayorista: str):
             sec_title_row, sec_hdr_row, sec_data_start, sec_data_end, sec_total_row,
         )
 
+        # Ocultar col S (índice 18) — tracking de IDs, no debe verse
+        spreadsheet.batch_update({"requests": [{"updateDimensionProperties": {
+            "range": {"sheetId": ws.id, "dimension": "COLUMNS",
+                      "startIndex": 18, "endIndex": 19},
+            "properties": {"hiddenByUser": True},
+            "fields": "hiddenByUser",
+        }}]})
+
         logger.info(f"gsheets: MOD {mayorista} subido — {tab_name} ({n} clientes)")
 
     except Exception as e:
