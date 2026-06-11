@@ -2204,11 +2204,6 @@ async function loadSemanasAdmin() {
         </div>
       `;
     }).join('');
-    const lastNombre = semanas[0]?.nombre;
-    if (lastNombre) {
-      const inputId = m === 'diarco' ? 'diarco-semana-nombre' : 'semana-nombre';
-      document.getElementById(inputId).placeholder = lastNombre;
-    }
   } catch (err) {
     list.innerHTML = `<p class="error-msg">${err.message}</p>`;
   }
@@ -2225,7 +2220,7 @@ async function toggleSemanaVisible(id, visible) {
 }
 
 async function deleteSemana(id, nombre) {
-  if (!await confirmar(`¿Eliminar "${nombre}" del selector? Los picks quedan guardados para análisis futuro.`, 'Sí, eliminar')) return;
+  if (!await confirmar(`¿Eliminar "${nombre}"? Los picks quedan guardados en la base de datos, pero las hojas MOD y PICK del sheet se eliminarán automáticamente.`, 'Sí, eliminar')) return;
   try {
     await api.deleteSemana(id);
     showToast(`Semana ${nombre} eliminada`, 'info');
@@ -2480,13 +2475,15 @@ document.getElementById('db-file-input').addEventListener('change', (e) => {
 });
 
 document.getElementById('btn-importar-semana').addEventListener('click', async () => {
-  const nombre = document.getElementById('semana-nombre').value.trim();
-  const fechaDesde = document.getElementById('semana-fecha-desde').value.replace(/-/g, '');
-  const fechaHasta = document.getElementById('semana-fecha-hasta').value.replace(/-/g, '');
+  const fechaDesdeRaw = document.getElementById('semana-fecha-desde').value;
+  const fechaHastaRaw = document.getElementById('semana-fecha-hasta').value;
   const files = document.getElementById('db-file-input').files;
 
-  if (!nombre) { showToast('Ingresá un nombre para el pick', 'error'); return; }
-  if (!fechaDesde || !fechaHasta) { showToast('Seleccioná las fechas', 'error'); return; }
+  if (!fechaDesdeRaw || !fechaHastaRaw) { showToast('Seleccioná las fechas', 'error'); return; }
+  const [y, m, d] = fechaHastaRaw.split('-');
+  const nombre = `YAGUAR ${d}-${m}-${y}`;
+  const fechaDesde = fechaDesdeRaw.replace(/-/g, '');
+  const fechaHasta = fechaHastaRaw.replace(/-/g, '');
   if (files.length === 0) { showToast('Seleccioná al menos un archivo .db', 'error'); return; }
 
   const semanas = await api.getSemanas();
@@ -2558,13 +2555,15 @@ document.getElementById('diarco-file-input').addEventListener('change', (e) => {
 });
 
 document.getElementById('btn-importar-diarco').addEventListener('click', async () => {
-  const nombre = document.getElementById('diarco-semana-nombre').value.trim();
-  const fechaDesde = document.getElementById('diarco-fecha-desde').value.replace(/-/g, '');
-  const fechaHasta = document.getElementById('diarco-fecha-hasta').value.replace(/-/g, '');
+  const fechaDesdeRaw = document.getElementById('diarco-fecha-desde').value;
+  const fechaHastaRaw = document.getElementById('diarco-fecha-hasta').value;
   const files = document.getElementById('diarco-file-input').files;
 
-  if (!nombre) { showToast('Ingresá un nombre para el pick', 'error'); return; }
-  if (!fechaDesde || !fechaHasta) { showToast('Seleccioná las fechas', 'error'); return; }
+  if (!fechaDesdeRaw || !fechaHastaRaw) { showToast('Seleccioná las fechas', 'error'); return; }
+  const [y, m, d] = fechaHastaRaw.split('-');
+  const nombre = `DIARCO ${d}-${m}-${y}`;
+  const fechaDesde = fechaDesdeRaw.replace(/-/g, '');
+  const fechaHasta = fechaHastaRaw.replace(/-/g, '');
   if (files.length === 0) { showToast('Seleccioná al menos un archivo MobileAssistantBU.db', 'error'); return; }
 
   const semanas = await api.getSemanas();

@@ -372,4 +372,6 @@ def delete_semana(id: int):
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Semana no encontrada")
+    from app.api.gsheets import trigger_delete_sheets
+    trigger_delete_sheets(row["nombre"], "yaguar")
     return {"message": "Semana eliminada", "nombre": row["nombre"]}

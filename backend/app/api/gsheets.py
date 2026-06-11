@@ -11,6 +11,8 @@ _SEC_BG = {"red": 0.180, "green": 0.459, "blue": 0.714}  # #2E75B6 BLUE_MD (tít
 _TOT_BG = {"red": 1.0,   "green": 0.976, "blue": 0.769}  # #FFF9C4 GOLD (filas TOTAL)
 _BAND1  = {"red": 1.0,   "green": 1.0,   "blue": 1.0}    # #FFFFFF blanco
 _BAND2  = {"red": 0.776, "green": 0.851, "blue": 0.945}  # #C6D9F1 ROW_ALT
+_GREEN  = {"red": 0.204, "green": 0.659, "blue": 0.325}  # pestaña activa (verde)
+_RED    = {"red": 0.800, "green": 0.267, "blue": 0.267}  # pestañas viejas (rojo)
 
 
 def _get_spreadsheet(gc, mayorista: str):
@@ -38,8 +40,6 @@ def _get_or_clear_sheet(spreadsheet, tab_name: str, rows: int, cols: int):
 
 def _update_tab_colors(spreadsheet, semana: str):
     """Pinta verde las pestañas del semana activo, rojo las demás."""
-    _GREEN = {"red": 0.204, "green": 0.659, "blue": 0.325}
-    _RED   = {"red": 0.800, "green": 0.267, "blue": 0.267}
     try:
         requests = []
         for ws in spreadsheet.worksheets():
@@ -939,3 +939,38 @@ def trigger_mod_upload(semana: str, mayorista: str):
 
 def trigger_pick_upload(semana: str, mayorista: str):
     threading.Thread(target=_upload_pick_bg, args=(semana, mayorista), daemon=True).start()
+
+
+def _delete_sheets_bg(semana: str, mayorista: str):
+    try:
+        gc = _auth()
+        if not gc:
+            return
+        spreadsheet = _get_spreadsheet(gc, mayorista)
+        if not spreadsheet:
+            return
+        import gspread as _gs
+        for prefix in ("MOD", "PICK"):
+            try:
+                ws = spreadsheet.worksheet(f"{prefix} {semana}"[:100])
+                spreadsheet.del_worksheet(ws)
+            except _gs.WorksheetNotFound:
+                pass
+        # Recolorear: la pestaña que quedó más a la izquierda pasa a verde
+        remaining = spreadsheet.worksheets()
+        if remaining:
+            spreadsheet.batch_update({"requests": [
+                {"updateSheetProperties": {
+                    "properties": {"sheetId": ws.id,
+                                   "tabColorStyle": {"rgbColor": _GREEN if i == 0 else _RED}},
+                    "fields": "tabColorStyle",
+                }}
+                for i, ws in enumerate(remaining)
+            ]})
+        logger.info(f"gsheets: hojas eliminadas — {mayorista}/{semana}")
+    except Exception as e:
+        logger.error(f"gsheets: error eliminando sheets {mayorista}/{semana}: {e}")
+
+
+def trigger_delete_sheets(semana: str, mayorista: str):
+    threading.Thread(target=_delete_sheets_bg, args=(semana, mayorista), daemon=True).start()
