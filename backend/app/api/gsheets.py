@@ -420,7 +420,7 @@ def _compute_nov_section_pos(mayorista: str, semana: str):
         from app.db.database import get_db
         with get_db() as cur:
             cur.execute("""
-                SELECT COUNT(*) AS n,
+                SELECT COUNT(DISTINCT p.cliente) AS n,
                        COUNT(DISTINCT CASE WHEN cy.vendedor IS NOT NULL AND cy.vendedor <> ''
                                            THEN cy.vendedor END) AS nv
                 FROM pick p
