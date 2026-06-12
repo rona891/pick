@@ -606,6 +606,10 @@ async def importar_semana_diarco(
 
     clientes_sin_datos = [{"id": cod, "nombre": obs} for cod, obs in sin_datos.items()]
 
+    from app.api.gsheets import trigger_mod_upload, trigger_pick_upload
+    trigger_mod_upload(nombre, MAYORISTA)
+    trigger_pick_upload(nombre, MAYORISTA)
+
     return {
         "picks_importados": inserted,
         "semana": nombre,
@@ -625,4 +629,6 @@ def delete_semana_diarco(id: int):
         row = cur.fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Semana DIARCO no encontrada")
+    from app.api.gsheets import trigger_delete_sheets
+    trigger_delete_sheets(row["nombre"], MAYORISTA)
     return {"message": "Semana eliminada", "nombre": row["nombre"]}
