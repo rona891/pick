@@ -26,9 +26,17 @@ Operators scan product barcodes from their phones, track progress per customer a
 
 ## Screenshots
 
-| Hub | Pick workflow | Barcode scan | Admin panel |
-|-----|--------------|--------------|-------------|
-| ![Hub](docs/screenshots/hub.png) | ![Picks](docs/screenshots/picks.png) | ![Scan](docs/screenshots/scan.png) | ![Admin](docs/screenshots/admin.png) |
+**Mobile workflow**
+
+| Main hub | Picking (Yaguar) | Picking (DIARCO) | Customer view |
+|----------|-----------------|-----------------|---------------|
+| ![Hub](docs/screenshots/mobile-hub.jpeg) | ![Yaguar](docs/screenshots/mobile-picking-yaguar.jpeg) | ![DIARCO](docs/screenshots/mobile-picking-diarco.jpeg) | ![Customers](docs/screenshots/mobile-customer-view.jpeg) |
+
+**Features & integrations**
+
+| Exceptions | Surplus | Week import | Google Sheets report |
+|------------|---------|-------------|----------------------|
+| ![Exceptions](docs/screenshots/mobile-exceptions.jpeg) | ![Surplus](docs/screenshots/mobile-surplus.jpeg) | ![Import](docs/screenshots/pc-week-import.png) | ![Sheets](docs/screenshots/google-sheets-mod.png) |
 
 ## Features
 
@@ -54,9 +62,9 @@ Operators scan product barcodes from their phones, track progress per customer a
 
 ### Reporting & Integrations
 - **Google Sheets auto-generation** on every weekly import: MOD sheet (commissions model) + PICK sheet (full pick list), with color-coded active week tabs
-- **Live novedades sync**: product changes (returns, shortages, substitutions) are written to Sheets in background threads without blocking the UI
+- **Live exceptions sync**: product changes (returns, shortages, substitutions) are written to Sheets in background threads without blocking the UI
 - **Excel exports** with professional styling (openpyxl): pick lists, MOD sales models, customer lists, product catalogs
-- Surplus inventory (sobrantes) management: named lists, barcode lookup, Excel export
+- **Surplus management**: named surplus lists with barcode lookup and Excel export
 
 ### Mobile-First UX
 - PWA-capable — add to home screen on Android/iOS
