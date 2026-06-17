@@ -1,4 +1,5 @@
-# Env files de entornos no-dev (tienen credenciales reales)
+# Env files (all contain credentials — copy from .env.example)
+backend/.env
 backend/.env.qa
 backend/.env.prod
 
@@ -8,8 +9,9 @@ __pycache__/
 *.pyo
 .venv/
 venv/
-.env
-!backend/.env
+
+# Real database seed (contains production data — generate your own or use the sample)
+database/seed.sql
 
 # macOS
 .DS_Store
