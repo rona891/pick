@@ -227,18 +227,18 @@ def _apply_mod_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
         return {"style": "NONE"}
 
     requests = [
-        # Borrar bordes viejos en toda la zona de secciones (filas 50-300)
+        # Borrar bordes viejos en toda la zona de secciones (desde el fin real de la tabla de clientes)
         # ws.clear() no borra formateo, así que bordes de subidas anteriores persisten
         {"updateBorders": {
             "range": {"sheetId": sid,
-                      "startRowIndex": 49, "endRowIndex": 300,
+                      "startRowIndex": title_row - 12, "endRowIndex": 300,
                       "startColumnIndex": 0, "endColumnIndex": 5},
             "top": _no_brd(), "bottom": _no_brd(), "left": _no_brd(),
             "right": _no_brd(), "innerHorizontal": _no_brd(), "innerVertical": _no_brd(),
         }},
         {"updateBorders": {
             "range": {"sheetId": sid,
-                      "startRowIndex": 49, "endRowIndex": 300,
+                      "startRowIndex": title_row - 12, "endRowIndex": 300,
                       "startColumnIndex": 6, "endColumnIndex": 18},
             "top": _no_brd(), "bottom": _no_brd(), "left": _no_brd(),
             "right": _no_brd(), "innerHorizontal": _no_brd(), "innerVertical": _no_brd(),
@@ -332,7 +332,7 @@ def _apply_mod_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
             "title": "CLIENTES",
             "range": {"sheetId": sid,
                       "startRowIndex": 0, "endRowIndex": title_row - 12,
-                      "startColumnIndex": 0, "endColumnIndex": 16},
+                      "startColumnIndex": 0, "endColumnIndex": 18},
         }}},
         # Filter view COMPROBANTES (ordenar/filtrar: Ver → Vistas de filtro → COMPROBANTES)
         {"addFilterView": {"filter": {
@@ -398,10 +398,10 @@ def _apply_mod_sections_format(spreadsheet, ws, title_row: int, hdr_row: int,
             }},
             "fields": "userEnteredFormat(backgroundColor,textFormat)",
         }},
-        # Auto-ajuste ancho A:R
+        # Auto-ajuste ancho A:T
         {"autoResizeDimensions": {"dimensions": {
             "sheetId": sid, "dimension": "COLUMNS",
-            "startIndex": 0, "endIndex": 18,
+            "startIndex": 0, "endIndex": 20,
         }}},
     ]
     spreadsheet.batch_update({"requests": requests})
@@ -417,18 +417,20 @@ def _auth():
 
 
 # Formatos de columna para MOD (0-indexed)
-# 6=TOTAL YAG/DRCO, 7=%, 8=COMISION EBD, 9=ALIMENTOS, 10=TOTAL, 11=FT, 12=BCO,
-# 13=NOVEDADES, 14=SALDO  (VENDEDOR movió a col P = 15)
+# 6=TOTAL YAG/DRCO, 7=%, 8=COMISION EBD, 9=ALIMENTOS,
+# 10=FERNET, 11=TABACO, 12=TOTAL, 13=FT, 14=BCO, 15=NOVEDADES, 16=SALDO, 17=VENDEDOR
 _MOD_COL_FORMATS = {
-    6:  "$#,##0.00",
-    7:  "0%",
-    8:  "$#,##0.00",
-    9:  "$#,##0.00",
-    10: "$#,##0.00",
-    11: "$#,##0.00",
-    12: "$#,##0.00",
-    13: "$#,##0.00",  # NOVEDADES (nuevo)
-    14: "$#,##0.00",  # SALDO (movido de 13)
+    6:  "$#,##0.00",  # TOTAL YAG/DRCO
+    7:  "0%",         # %
+    8:  "$#,##0.00",  # COMISION EBD
+    9:  "$#,##0.00",  # ALIMENTOS
+    10: "$#,##0.00",  # FERNET
+    11: "$#,##0.00",  # TABACO
+    12: "$#,##0.00",  # TOTAL
+    13: "$#,##0.00",  # FT
+    14: "$#,##0.00",  # BCO
+    15: "$#,##0.00",  # NOVEDADES
+    16: "$#,##0.00",  # SALDO
 }
 
 # Formatos de columna para PICK (0-indexed)
@@ -460,8 +462,8 @@ def _compute_nov_section_pos(mayorista: str, semana: str):
             """, (mayorista, semana, mayorista))
             counts = dict(cur.fetchone())
         n  = int(counts.get("n") or 0)
-        last_data      = max(n + 1, 49)
-        sec_title_row  = last_data + 12   # tr(+1) + bloque TOTALES/VENDEDORES(8) + gap(1) + 1
+        last_data      = max(n + 11, 49)  # debe coincidir con _upload_mod_bg (10 filas extra)
+        sec_title_row  = last_data + 12   # tr(+1) + bloque TOTALES/VENDEDORES(min 8) + gap + 1
         sec_hdr_row    = sec_title_row + 1
         sec_data_start = sec_hdr_row + 1
         sec_data_end   = sec_data_start + 89
@@ -671,10 +673,13 @@ def _upload_mod_bg(semana: str, mayorista: str):
         # Calcular posiciones temprano — necesarias para fórmulas SUMIF en tabla principal
         unique_vendors = list(dict.fromkeys([r["vendedor"] for r in rows if r.get("vendedor")]))
         n          = len(rows)
+        nv         = len(unique_vendors)
+        nv_block   = max(nv, 5)          # mínimo 5 filas para el bloque de vendedores
         first_data = 2
-        last_data  = max(n + 1, 49)
+        last_data  = max(n + 11, 49)     # siempre 10 filas extra para ingreso manual
         tr         = last_data + 1
-        sec_title_row  = tr + 11   # bloque TOTALES/VENDEDORES(8 filas) + gap(1) + título = +10, luego +1
+        saldo_row  = tr + nv_block + 3   # fila SALDO / TOTAL vendedores
+        sec_title_row  = max(saldo_row + 3, tr + 11)
         sec_hdr_row    = sec_title_row + 1
         sec_data_start = sec_hdr_row + 1
         sec_data_end   = sec_data_start + 89
@@ -694,19 +699,21 @@ def _upload_mod_bg(semana: str, mayorista: str):
             """, (mayorista, semana))
             novedades_rows = [dict(r) for r in cur.fetchall()]
 
-        # ── Tabla principal (A:P = 16 cols) ────────────────────────────────────
+        # ── Tabla principal (A:R = 18 cols) ────────────────────────────────────
         headers = ["FECHA", cod_label, "COD SIS", "NOMBRE", "TELEFONO", "LOCALIDAD",
-                   tot_label, "%", "COMISION EBD", "ALIMENTOS", "TOTAL",
+                   tot_label, "%", "COMISION EBD", "ALIMENTOS", "FERNET", "TABACO", "TOTAL",
                    "FT", "BCO", "NOVEDADES", "SALDO", "VENDEDOR"]
         data = [headers]
 
-        for i, r in enumerate(rows):
-            rn = first_data + i
-            nov_formula = (
-                f'=IFERROR(SUMIFS($N${sec_data_start}:$N${sec_data_end},'
+        def _nov_formula(rn):
+            return (
+                f'=IFERROR(SUMIFS($P${sec_data_start}:$P${sec_data_end},'
                 f'$H${sec_data_start}:$H${sec_data_end},B{rn},'
                 f'$O${sec_data_start}:$O${sec_data_end},"<>CAMBIO"),"")'
             )
+
+        for i, r in enumerate(rows):
+            rn = first_data + i
             data.append([
                 semana,
                 r["cod"] or "",
@@ -714,42 +721,58 @@ def _upload_mod_bg(semana: str, mayorista: str):
                 (r["nombre"]    or "").strip(),
                 (r["telefono"]  or "").strip(),
                 (r["localidad"] or "").strip(),
-                float(r["total"]     or 0),
-                float(r["pct_flete"] or 0),
-                f'=IFERROR(G{rn}*H{rn},"")',
-                "",
-                f'=IFERROR(I{rn}+G{rn}+J{rn},"")',
-                "",
-                "",
-                nov_formula,
-                f'=K{rn}-L{rn}-M{rn}-N{rn}',
-                (r["vendedor"] or "").strip(),
+                float(r["total"]     or 0),          # G: TOTAL YAG/DRCO
+                float(r["pct_flete"] or 0),          # H: %
+                f'=IFERROR(G{rn}*H{rn},"")',        # I: COMISION EBD
+                "",                                   # J: ALIMENTOS
+                "",                                   # K: FERNET
+                "",                                   # L: TABACO
+                f'=IFERROR(I{rn}+G{rn}+J{rn}+K{rn}+L{rn},"")',  # M: TOTAL
+                "",                                   # N: FT
+                "",                                   # O: BCO
+                _nov_formula(rn),                    # P: NOVEDADES
+                f'=M{rn}-N{rn}-O{rn}-P{rn}',       # Q: SALDO
+                (r["vendedor"] or "").strip(),       # R: VENDEDOR
             ])
 
-        for _ in range(last_data - (n + 1)):
-            data.append([""] * len(headers))
+        for j in range(last_data - (n + 1)):
+            rn = first_data + n + j
+            data.append([
+                "", "", "", "", "", "",
+                "",                                   # G: TOTAL (usuario rellena)
+                "",                                   # H: %
+                f'=IFERROR(G{rn}*H{rn},"")',        # I: COMISION EBD
+                "", "", "",                           # J-L: ALIMENTOS, FERNET, TABACO
+                f'=IFERROR(I{rn}+G{rn}+J{rn}+K{rn}+L{rn},"")',  # M: TOTAL
+                "", "",                               # N-O: FT, BCO
+                _nov_formula(rn),                    # P: NOVEDADES
+                f'=M{rn}-N{rn}-O{rn}-P{rn}',       # Q: SALDO
+                "",                                   # R: VENDEDOR
+            ])
 
         data.append(["", "", "", "", "", "TOTAL",
                      f"=SUM(G{first_data}:G{last_data})", "",
                      f"=SUM(I{first_data}:I{last_data})",
                      f"=SUM(J{first_data}:J{last_data})",
-                     f'=IFERROR(I{tr}+G{tr}+J{tr},"")',
+                     f"=SUM(K{first_data}:K{last_data})",
                      f"=SUM(L{first_data}:L{last_data})",
-                     f"=SUM(M{first_data}:M{last_data})",
+                     f'=IFERROR(I{tr}+G{tr}+J{tr}+K{tr}+L{tr},"")',
                      f"=SUM(N{first_data}:N{last_data})",
                      f"=SUM(O{first_data}:O{last_data})",
+                     f"=SUM(P{first_data}:P{last_data})",
+                     f"=SUM(Q{first_data}:Q{last_data})",
                      ""])
         ws.update("A1", data, value_input_option="USER_ENTERED")
 
-        # ── Bloque TOTALES (A:E) + VENDEDORES (G:J) — side-by-side ──────────────
+        # ── Bloque TOTALES (A:F) + VENDEDORES (G:J) — side-by-side ──────────────
         def _vrow(vi):
-            if vi >= len(unique_vendors):
+            if vi >= nv:
                 return ["", "", "", ""]
             v = unique_vendors[vi]
             r = tr + 3 + vi
             return [
                 v,
-                f'=SUMIF($P${first_data}:$P${last_data},"{v}",$G${first_data}:$G${last_data})',
+                f'=SUMIF($R${first_data}:$R${last_data},"{v}",$G${first_data}:$G${last_data})',
                 f'=H{r}/G{tr}',
                 f'=H{r}*0.005',
             ]
@@ -762,26 +785,27 @@ def _upload_mod_bg(semana: str, mayorista: str):
         saldo_c = f'=IFERROR(C{tr+3}-C{tr+4}-C{tr+5}-C{tr+6}-C{tr+7},"")'
         saldo_e = f'=IFERROR(E{tr+6}-E{tr+7},"")'
 
-        block = [
-            # tr+2: TOTALES title (A:E) | VENDEDORES header (G:J)
-            ["TOTALES", "", "", "", "", "", "VENDEDORES", "", "", "COMI x VTA 0.5%"],
-            # tr+3: TOTAL MAYORISTA | vendor[0] (G:J)
-            [tot_label_str, "", f"=G{tr}", "", "", ""] + _vrow(0),
-            # tr+4: COMPROBANTES | vendor[1] (G:J)
-            ["COMPROBANTES",   "", f"=M{tr}",         "", "", ""] + _vrow(1),
-            # tr+5: DEVOLUCIONES | vendor[2] (G:J)
-            ["DEVOLUCIONES",   "", dev_tot_formula,   "", "FT", ""] + _vrow(2),
-            # tr+6: FT A DEPOSITAR — C=valor, E=ref banco | vendor[3] (G:J)
-            ["FT A DEPOSITAR", "", f"=L{tr}",         "", f"=L{tr}", ""] + _vrow(3),
-            # tr+7: CREDITO (entrada manual) | vendor[4] (G:J)
-            ["CREDITO",        "", "",                "", "", ""] + _vrow(4),
-            # tr+8: SALDO (C=general, E=FT balance) | VENDEDORES TOTAL (G:J)
-            ["", "SALDO", saldo_c, "", saldo_e, "",
-             "TOTAL",
-             f'=IFERROR(SUM(H{tr+3}:H{tr+7}),"")' ,
-             f'=IFERROR(SUM(I{tr+3}:I{tr+7}),"")',
-             f'=IFERROR(SUM(J{tr+3}:J{tr+7}),"")'],
+        # Lado TOTALES (A:F): siempre 5 filas fijas; se rellena con vacíos si hay más vendedores
+        totales_rows = [
+            [tot_label_str,   "", f"=G{tr}",          "", "",        ""],
+            ["COMPROBANTES",  "", f"=O{tr}",           "", "",        ""],
+            ["DEVOLUCIONES",  "", dev_tot_formula,     "", "FT",      ""],
+            ["FT A DEPOSITAR","", f"=E{tr+7}",         "", f"=N{tr}", ""],
+            ["CREDITO",       "", "",                   "", "",        ""],
         ]
+        while len(totales_rows) < nv_block:
+            totales_rows.append(["", "", "", "", "", ""])
+
+        block = (
+            [["TOTALES", "", "", "", "", "", "VENDEDORES", "", "", "COMI x VTA 0.5%"]]
+            + [totales_rows[i] + _vrow(i) for i in range(nv_block)]
+            + [["", "SALDO", saldo_c, "", saldo_e, "",
+                "TOTAL",
+                f'=IFERROR(SUM(H{tr+3}:H{tr+2+nv}),"")',
+                f'=IFERROR(SUM(I{tr+3}:I{tr+2+nv}),"")',
+                f'=IFERROR(SUM(J{tr+3}:J{tr+2+nv}),"")']
+            ]
+        )
         ws.update(f"A{tr+2}", block, value_input_option="USER_ENTERED")
         _apply_table_format(spreadsheet, ws, last_data - 1, len(headers), _MOD_COL_FORMATS)
 
@@ -823,20 +847,20 @@ def _upload_mod_bg(semana: str, mayorista: str):
                        "userEnteredFormat.numberFormat")
 
         blk_reqs = [
-            # Limpiar formato residual (fondo + texto + alineación) hasta col R
-            _rc(tr+2, tr+10, 0, 18,
+            # Limpiar formato residual (fondo + texto + alineación) — cubre todo el bloque
+            _rc(tr+2, saldo_row+1, 0, 20,
                 {"backgroundColor": {"red": 1.0, "green": 1.0, "blue": 1.0},
                  "textFormat": {"foregroundColor": {"red": 0.0, "green": 0.0, "blue": 0.0},
                                 "bold": False, "fontSize": 10},
                  "horizontalAlignment": "LEFT"},
                 "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"),
             # ── TOTALES ────────────────────────────────────────────────────────
-            # Título "TOTALES" (tr+2, A:C) — mismo navy que header VENDEDORES
+            # Título "TOTALES" (tr+2, A:C) — navy
             _rc(tr+2, tr+2, 0, 3,
                 {"backgroundColor": _HDR_BG,
                  "textFormat": {"bold": True, "fontSize": 10, "foregroundColor": _HDR_FG}},
                 "userEnteredFormat(backgroundColor,textFormat)"),
-            # Bandas alternadas datos TOTALES (tr+3:tr+7, A:C)
+            # Bandas alternadas datos TOTALES (tr+3:tr+7, A:C) — siempre 5 filas fijas
             *[_rc(r, r, 0, 3, {"backgroundColor": _BAND1 if i % 2 == 0 else _BAND2},
                   "userEnteredFormat.backgroundColor")
               for i, r in enumerate(range(tr+3, tr+8))],
@@ -844,24 +868,24 @@ def _upload_mod_bg(semana: str, mayorista: str):
             _rc(tr+3, tr+7, 0, 1,
                 {"textFormat": {"bold": True}},
                 "userEnteredFormat.textFormat"),
-            # Fila SALDO (tr+8, A:C) — gold, negrita
-            _rc(tr+8, tr+8, 0, 3,
+            # Fila SALDO (saldo_row, A:C) — gold, negrita
+            _rc(saldo_row, saldo_row, 0, 3,
                 {"backgroundColor": _TOT_BG, "textFormat": {"bold": True}},
                 "userEnteredFormat(backgroundColor,textFormat)"),
             # ── Col E: mini-sección FT ─────────────────────────────────────────
-            # Header "FT" (tr+5, E) — mismo navy que A52
+            # Header "FT" (tr+5, E) — navy
             _rc(tr+5, tr+5, 4, 5,
                 {"backgroundColor": _HDR_BG,
                  "textFormat": {"bold": True, "foregroundColor": _HDR_FG}},
                 "userEnteredFormat(backgroundColor,textFormat)"),
-            # FT A DEPOSITAR (tr+6, E) — misma banda que A56
+            # FT COBRADO (tr+6, E) — banda
             _rc(tr+6, tr+6, 4, 5, {"backgroundColor": _BAND2},
                 "userEnteredFormat.backgroundColor"),
-            # CREDITO (tr+7, E) — misma banda que A57
+            # CREDITO (tr+7, E) — banda
             _rc(tr+7, tr+7, 4, 5, {"backgroundColor": _BAND1},
                 "userEnteredFormat.backgroundColor"),
-            # SALDO (tr+8, E) — gold igual que A58
-            _rc(tr+8, tr+8, 4, 5,
+            # SALDO (saldo_row, E) — gold
+            _rc(saldo_row, saldo_row, 4, 5,
                 {"backgroundColor": _TOT_BG, "textFormat": {"bold": True}},
                 "userEnteredFormat(backgroundColor,textFormat)"),
             # ── VENDEDORES ────────────────────────────────────────────────────
@@ -871,20 +895,20 @@ def _upload_mod_bg(semana: str, mayorista: str):
                  "textFormat": {"bold": True, "fontSize": 10, "foregroundColor": _HDR_FG},
                  "horizontalAlignment": "CENTER"},
                 "userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)"),
-            # Bandas alternadas datos VENDEDORES (tr+3:tr+7, G:J)
+            # Bandas alternadas datos VENDEDORES (dinámico según nv_block)
             *[_rc(r, r, 6, 10, {"backgroundColor": _BAND1 if i % 2 == 0 else _BAND2},
                   "userEnteredFormat.backgroundColor")
-              for i, r in enumerate(range(tr+3, tr+8))],
-            # Fila TOTAL vendedores (tr+8, G:J) — gold, negrita (misma fila que SALDO)
-            _rc(tr+8, tr+8, 6, 10,
+              for i, r in enumerate(range(tr+3, tr+3+nv_block))],
+            # Fila TOTAL vendedores (saldo_row, G:J) — gold, negrita
+            _rc(saldo_row, saldo_row, 6, 10,
                 {"backgroundColor": _TOT_BG, "textFormat": {"bold": True}},
                 "userEnteredFormat(backgroundColor,textFormat)"),
             # ── Formatos numéricos ─────────────────────────────────────────────
-            _num(tr+3, tr+8, 2, "$#,##0.00", "CURRENCY"),  # TOTALES col C
-            _num(tr+6, tr+8, 4, "$#,##0.00", "CURRENCY"),  # TOTALES col E (FT/SALDO)
-            _num(tr+3, tr+8, 7, "$#,##0.00", "CURRENCY"),  # VENDEDORES col H
-            _num(tr+3, tr+8, 8, "0.0%",      "PERCENT"),   # VENDEDORES col I
-            _num(tr+3, tr+8, 9, "$#,##0.00", "CURRENCY"),  # VENDEDORES col J
+            _num(tr+3, saldo_row, 2, "$#,##0.00", "CURRENCY"),  # TOTALES col C
+            _num(tr+6, saldo_row, 4, "$#,##0.00", "CURRENCY"),  # TOTALES col E (FT/SALDO)
+            _num(tr+3, saldo_row, 7, "$#,##0.00", "CURRENCY"),  # VENDEDORES col H
+            _num(tr+3, saldo_row, 8, "0.0%",      "PERCENT"),   # VENDEDORES col I
+            _num(tr+3, saldo_row, 9, "$#,##0.00", "CURRENCY"),  # VENDEDORES col J
         ]
         spreadsheet.batch_update({"requests": blk_reqs})
 
