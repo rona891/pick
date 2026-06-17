@@ -3741,11 +3741,7 @@ document.getElementById('nov-descrip-input').addEventListener('input', (e) => {
   if (q.length < 2) { results.classList.add('hidden'); return; }
   _novDescripTimer = setTimeout(async () => {
     try {
-      const items = _catalogoCache.length
-        ? _catalogoCache.filter(i =>
-            _clienteMatch(q, i.descrip ?? '') || _clienteMatch(q, i.cod_art ?? ''))
-          .slice(0, 25)
-        : await api.novSearch(_normQuery(q), _novSemana);
+      const items = await api.novSearch(_normQuery(q), _novSemana);
       if (!items.length) {
         results.innerHTML = '<div class="descrip-item-empty">Sin resultados</div>';
       } else {
