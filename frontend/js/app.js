@@ -108,6 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
       _saveAdminTab(target);
       if (target === 'usuarios') loadUsers();
       if (target === 'nueva-semana') loadSemanasAdmin();
+      if (target === 'clientes') loadClientes();
       if (target === 'zonas') loadZonas();
       if (target === 'reparto') loadAsignaciones();
       if (target === 'historial') loadHistorial();
