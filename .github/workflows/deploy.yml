@@ -9,25 +9,61 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH (git pull + rebuild)
+      - name: Deploy via SSH (paramiko)
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
         run: |
-          sudo apt-get install -y sshpass -q
-          sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no -o ConnectTimeout=30 "$VPS_USER@$VPS_HOST" "
-            set -e
-            cd /srv/picking
-            GIT_TERMINAL_PROMPT=0 git fetch origin
-            git reset --hard origin/main
-            docker compose -f docker-compose.vps.yml up --build -d --remove-orphans
-            docker image prune -f
-            for i in \$(seq 1 6); do
-              if curl -sf http://localhost:8080/health > /dev/null; then
-                echo 'Health check passed'; exit 0
-              fi
-              echo \"Waiting (\$i/6)...\"; sleep 5
-            done
-            echo 'Health check failed' && exit 1
-          "
+          pip install paramiko -q
+          python3 << 'PYEOF'
+          import paramiko, os, sys, time
+
+          client = paramiko.SSHClient()
+          client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+          client.connect(
+              os.environ['VPS_HOST'],
+              username=os.environ['VPS_USER'],
+              password=os.environ['VPS_PASSWORD'],
+              timeout=30
+          )
+
+          deploy_script = """
+          set -e
+          cd /srv/picking
+          GIT_TERMINAL_PROMPT=0 git fetch origin
+          git reset --hard origin/main
+          docker compose -f docker-compose.vps.yml up --build -d --remove-orphans
+          docker image prune -f
+          for i in $(seq 1 6); do
+            if curl -sf http://localhost:8080/health > /dev/null; then
+              echo "Health check passed"
+              exit 0
+            fi
+            echo "Waiting ($i/6)..."
+            sleep 5
+          done
+          echo "Health check failed"
+          exit 1
+          """
+
+          chan = client.get_transport().open_session()
+          chan.exec_command(deploy_script)
+
+          while True:
+              if chan.recv_ready():
+                  print(chan.recv(4096).decode('utf-8', errors='replace'), end='', flush=True)
+              if chan.recv_stderr_ready():
+                  print(chan.recv_stderr(4096).decode('utf-8', errors='replace'), end='', file=sys.stderr, flush=True)
+              if chan.exit_status_ready():
+                  while chan.recv_ready():
+                      print(chan.recv(4096).decode('utf-8', errors='replace'), end='', flush=True)
+                  while chan.recv_stderr_ready():
+                      print(chan.recv_stderr(4096).decode('utf-8', errors='replace'), end='', file=sys.stderr, flush=True)
+                  break
+              time.sleep(0.1)
+
+          exit_code = chan.recv_exit_status()
+          client.close()
+          sys.exit(exit_code)
+          PYEOF
