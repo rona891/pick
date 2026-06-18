@@ -19,14 +19,14 @@ jobs:
           python3 << 'PYEOF'
           import paramiko, os, sys, time
 
-          client = paramiko.SSHClient()
-          client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-          client.connect(
-              os.environ['VPS_HOST'],
-              username=os.environ['VPS_USER'],
-              password=os.environ['VPS_PASSWORD'],
-              timeout=30
-          )
+          host = os.environ['VPS_HOST']
+          user = os.environ['VPS_USER']
+          password = os.environ['VPS_PASSWORD']
+
+          # Use keyboard-interactive auth — works when PasswordAuthentication is disabled in sshd
+          transport = paramiko.Transport((host, 22))
+          transport.connect()
+          transport.auth_interactive(user, lambda t, i, p: [password] * len(p))
 
           deploy_script = """
           set -e
@@ -47,7 +47,7 @@ jobs:
           exit 1
           """
 
-          chan = client.get_transport().open_session()
+          chan = transport.open_session()
           chan.exec_command(deploy_script)
 
           while True:
@@ -64,6 +64,6 @@ jobs:
               time.sleep(0.1)
 
           exit_code = chan.recv_exit_status()
-          client.close()
+          transport.close()
           sys.exit(exit_code)
           PYEOF
