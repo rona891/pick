@@ -1945,7 +1945,7 @@ async function openClienteForm(id, codigoPreverificado = null, nombrePre = null,
   fields.forEach((f) => { document.getElementById(`cf-${f}`).value = ''; });
   document.getElementById('cf-vendedor').value = '';
   document.getElementById('cf-vendedor').disabled = false;
-  document.getElementById('cf-flete').value = '';
+  document.getElementById('cf-flete').value = id ? '' : '8';
   document.getElementById('cf-cuit_deposito').value = '';
   if (nombrePre) document.getElementById('cf-nombre').value = nombrePre;
 
@@ -2045,7 +2045,7 @@ document.getElementById('cliente-form').addEventListener('submit', async (e) => 
   });
   data.id_yaguar = document.getElementById('cf-id_yaguar').value.trim() || null;
   const fleteVal = document.getElementById('cf-flete').value.trim();
-  data.flete = fleteVal !== '' ? parseFloat(fleteVal) / 100 : null;
+  data.flete = fleteVal !== '' ? parseFloat(fleteVal) / 100 : (editingClienteId ? null : 0.08);
   data.cod_sis = document.getElementById('cf-cod_sis').value.trim() || null;
   data.cuit_deposito = document.getElementById('cf-cuit_deposito').value.trim() || null;
   if (!editingClienteId) data.es_factura_a = _clienteEsFA;

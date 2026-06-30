@@ -6,5 +6,18 @@
       "PowerShell(wsl --list *)",
       "PowerShell(Get-WindowsOptionalFeature *)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\": \"Obsidian: actualizaste C:\\\\Claude\\\\obsidian-vault si hubo cambios importantes?\"}'",
+            "shell": "powershell"
+          }
+        ]
+      }
+    ]
   }
 }

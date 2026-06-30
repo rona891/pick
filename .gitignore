@@ -18,3 +18,11 @@ database/seed.sql
 
 # Docker
 .docker/
+
+# Node
+node_modules/
+package-lock.json
+
+# Playwright
+playwright-report/
+test-results/

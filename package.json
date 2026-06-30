@@ -1,0 +1,16 @@
+{
+  "name": "pick",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint frontend/js/",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.49.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0"
+  }
+}
