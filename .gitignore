@@ -26,3 +26,6 @@ package-lock.json
 # Playwright
 playwright-report/
 test-results/
+
+# Test fixtures (datos reales — nunca commitear)
+backend/tests/fixtures/
